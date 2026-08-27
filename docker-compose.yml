@@ -2,10 +2,8 @@ version: '3.8'
 
 services:
   # ==========================================
-  # 1. ИНФРАСТРУКТУРА БАЗ ДАННЫХ (PostgreSQL)
+  # 1. БАЗЫ ДАННЫХ (PostgreSQL - Database-per-Service)
   # ==========================================
-
-  # PostgreSQL для Сервиса Каталога (работает с Hibernate)
   postgres-catalog:
     image: postgres:16-alpine
     container_name: postgres-catalog
@@ -14,7 +12,7 @@ services:
       POSTGRES_USER: catalog_user
       POSTGRES_PASSWORD: catalog_password
     ports:
-      - "5432:5432" # Стандартный порт PostgreSQL
+      - "5432:5432"
     volumes:
       - pg_catalog_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +21,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # PostgreSQL для Сервиса Заказов (работает со Spring Data JDBC)
   postgres-order:
     image: postgres:16-alpine
     container_name: postgres-order
@@ -32,7 +29,7 @@ services:
       POSTGRES_USER: order_user
       POSTGRES_PASSWORD: order_password
     ports:
-      - "5433:5432" # Внешний порт 5433, чтобы избежать конфликта с первой БД
+      - "5433:5432"
     volumes:
       - pg_order_data:/var/lib/postgresql/data
     healthcheck:
@@ -42,53 +39,61 @@ services:
       retries: 5
 
   # ==========================================
-  # 2. БРОКЕР СООБЩЕНИЙ (Apache Kafka)
+  # 2. APACHE KAFKA (KRaft Mode без ZooKeeper)
   # ==========================================
-
-  # Zookeeper (необходим для координации брокера Kafka)
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
-    container_name: zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Брокер Apache Kafka
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: kafka
     ports:
-      - "9092:9092" # Порт для ваших Java-приложений, запущенных локально (вне Docker)
-    depends_on:
-      zookeeper:
-        condition: service_healthy
+      - "9092:9092"
     environment:
+      # Уникальный целочисленный идентификатор брокера в кластере
       KAFKA_BROKER_ID: 1
+
+      # Строка подключения к координатору ZooKeeper (хост и клиентский порт)
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      # Конфигурация двух слушателей:
-      # - PLAINTEXT (29092) для связи между контейнерами внутри сети Docker
-      # - PLAINTEXT_HOST (9092) для связи с вашими сервисами, запущенными в IDE (локально)
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+
+      # Сопоставление протоколов безопасности для слушателей (PLAINTEXT — открытый трафик без SSL)
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+
+      # Внешние адреса, которые брокер отдает клиентам для подключения:
+      # - PLAINTEXT://kafka:29092 (для других docker-контейнеров)
+      # - PLAINTEXT_HOST://localhost:9092 (для Java-приложений на хосте)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+
+      # Слушатель, используемый для передачи данных между брокерами Kafka
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Число реплик системного топика __consumer_offsets (для 1 брокера = 1)
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      # Настройки для поддержки транзакционности (важно для финтеха и точного учета билетов)
+
+      # Число реплик топика координатора транзакций (для 1 брокера = 1)
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+      # Минимальное число реплик в синхроне для подтверждения транзакций продюсера (acks=all)
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
     healthcheck:
       test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 15s
       timeout: 10s
       retries: 5
 
-# ==========================================
-# 3. ПОСТОЯННОЕ ХРАНИЛИЩЕ ДАННЫХ (Volumes)
-# ==========================================
+  # ==========================================
+  # 3. KAFKA UI (Визуализатор топиков и сообщений)
+  # ==========================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: ticketcraft-kafka
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
 volumes:
   pg_catalog_data:
     name: ticketcraft_pg_catalog_data
