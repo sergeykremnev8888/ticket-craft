@@ -9,8 +9,9 @@
 * **Язык & Платформа:** Java 21 (LTS)
 * **Фреймворк:** Spring Boot (Spring Web, Spring Data JPA, Spring Data JDBC, Spring Kafka)
 * **Базы данных:** PostgreSQL 16 (изолированные БД `catalog_db` и `order_db` по паттерну *Database-per-Service*)
+* **Веб-интерфейсы управления:** **pgAdmin 4** (UI для PostgreSQL), **Kafka UI** (веб-панель Apache Kafka)
 * **Брокер сообщений:** Apache Kafka (KRaft mode без ZooKeeper)
-* **Инструменты & Сборка:** Apache Maven, Docker & Docker Compose, Kafka UI
+* **Инструменты & Сборка:** Apache Maven, Docker & Docker Compose
 
 ---
 
@@ -31,23 +32,34 @@
 │ Spring Data JPA/Hibernate │   Lock / REST)  │ Spring Data JDBC          │
 │ PostgreSQL (Port 5432)    │                 │ PostgreSQL (Port 5433)    │
 │ DB: catalog_db            │                 │ DB: order_db              │
-└───────────────────────────┘                 └─────────────┬─────────────┘
-                                                            │
-                                                            │ Kafka Producer
-                                                            │ Topic: order-events
-                                                            ▼
-                                              ┌───────────────────────────┐
-                                              │   Apache Kafka (KRaft)    │
-                                              │        (Port 9092)        │
-                                              └─────────────┬─────────────┘
-                                                            │
-                                                            │ Kafka Consumer
-                                                            ▼
-                                              ┌───────────────────────────┐
-                                              │   notification-service    │
-                                              │        (Port 8083)        │
-                                              │  Идемпотентный консьюмер  │
-                                              └───────────────────────────┘
+└─────────────┬─────────────┘                 └─────────────┬─────────────┘
+              │                                             │
+              │                                             │ Kafka Producer
+              │                                             │ Topic: order-events
+              │                                             ▼
+              │                               ┌───────────────────────────┐
+              │                               │   Apache Kafka (KRaft)    │
+              │                               │        (Port 9092)        │
+              │                               └─────────────┬─────────────┘
+              │                                             │
+              │                                             │ Kafka Consumer
+              │                                             ▼
+              │                               ┌───────────────────────────┐
+              │                               │   notification-service    │
+              │                               │        (Port 8083)        │
+              │                               │  Идемпотентный консьюмер  │
+              │                               └───────────────────────────┘
+              ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│               Инфраструктурные Web UI (Docker Compose)                  │
+│                                                                         │
+│    pgAdmin 4 (PostgreSQL Web UI): http://localhost:5050                 │
+│     ├─ Подключение к Catalog DB (порт 5432, db: catalog_db)             │
+│     └─ Подключение к Order DB (порт 5433, db: order_db)                 │
+│                                                                         │
+│    Kafka UI (Web Management):    http://localhost:8080                 │
+│     └─ Просмотр топиков (order-events), сообщений и партиций            │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -86,11 +98,30 @@ docker compose up -d
 * `postgres-catalog` (порт `5432`) — база данных `catalog_db`
 * `postgres-order` (порт `5433`) — база данных `order_db`
 * `kafka` (порт `9092`) — брокер Kafka в режиме KRaft
-* `kafka-ui` (порт `8080`) — веб-панель управления: [http://localhost:8080](http://localhost:8080)
+* `kafka-ui` (порт `8080`) — веб-панель управления Kafka: [http://localhost:8080](http://localhost:8080)
+* `pgadmin` (порт `5050`) — веб-панель управления PostgreSQL: [http://localhost:5050](http://localhost:5050)
 
 ---
 
-### 3. Сборка Maven-модулей
+### 3. Работа с базами данных через pgAdmin 4
+
+В `docker-compose.yml` встроен веб-интерфейс **pgAdmin 4** для визуализации таблиц и запросов к `catalog_db` и `order_db`.
+
+1. Откройте в браузере: **[http://localhost:5050](http://localhost:5050)**
+2. Данные для входа в pgAdmin:
+   - **Email:** `admin@ticketcraft.ru`
+   - **Password:** `admin`
+3. В левой панели **Servers -> TicketCraft Servers** предварительно настроены подключения:
+   - **Catalog DB (`catalog_db`):** Host `postgres-catalog`, Port `5432`, User `catalog_user`, Password `catalog_password`
+   - **Order DB (`order_db`):** Host `postgres-order`, Port `5432`, User `order_user`, Password `order_password`
+
+#### Подключение через внешние клиенты (DBeaver, DataGrip, IntelliJ IDEA):
+* **Catalog Service DB:** `localhost:5432`, база: `catalog_db`, пользователь: `catalog_user`, пароль: `catalog_password`
+* **Order Service DB:** `localhost:5433` *(внешний порт 5433)*, база: `order_db`, пользователь: `order_user`, пароль: `order_password`
+
+---
+
+### 4. Сборка Maven-модулей
 
 Соберите весь многомодульный проект и установите `common-dto` в локальный репозиторий `.m2`:
 
@@ -100,7 +131,7 @@ mvn clean install -DskipTests
 
 ---
 
-### 4. Запуск микросервисов
+### 5. Запуск микросервисов
 
 Запустите каждый сервис в отдельном терминале (или через Run Configuration в вашей IDE):
 
@@ -121,6 +152,21 @@ mvn spring-boot:run -pl order-service
 mvn spring-boot:run -pl notification-service
 ```
 *Подключается к брокеру Kafka и слушает топик `order-events`.*
+
+---
+
+## Сводная таблица портов и Web UI
+
+| Сервис / UI | URL / Порт | Назначение / Описание |
+| :--- | :--- | :--- |
+| **pgAdmin 4 UI** | [http://localhost:5050](http://localhost:5050) | Веб-интерфейс администрирования баз данных PostgreSQL |
+| **Kafka UI** | [http://localhost:8080](http://localhost:8080) | Веб-интерфейс мониторинга сообщений и топиков Kafka |
+| **Catalog Service API** | `http://localhost:8081` | REST API каталога мероприятий и пессимистического резерва |
+| **Order Service API** | `http://localhost:8082` | REST API создания и процессинга заказов |
+| **Notification Service** | `http://localhost:8083` | Служба фоновой обработки и нотификаций |
+| **Catalog PostgreSQL DB** | `localhost:5432` | СУБД каталога (`catalog_db`, пользователь `catalog_user`) |
+| **Order PostgreSQL DB** | `localhost:5433` | СУБД заказов (`order_db`, пользователь `order_user`) |
+| **Apache Kafka Broker** | `localhost:9092` | Брокер сообщений KRaft (топик `order-events`) |
 
 ---
 

@@ -7,9 +7,9 @@ spring:
 
   # Активируем Виртуальные потоки (Virtual Threads)
   # В Spring Boot 4 это переводит сервер Tomcat на легковесные потоки Java 21+
-  threads:
-    virtual:
-      enabled: true
+#  threads:
+#    virtual:
+#      enabled: true
 
   # Настройка пула и подключения к PostgreSQL (контейнер "postgres-catalog" из docker-compose)
   datasource:
@@ -31,12 +31,17 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       # create-drop: удаляет и создает таблицы заново при каждом запуске (идеально для тестов N+1)
-      ddl-auto: create-drop 
+      ddl-auto: create-drop
+    show-sql: true
     properties:
       hibernate:
         # Форматирование SQL в консоли для удобного чтения запросов
         "[format_sql]": true
         "[use_sql_comments]": true
+
+  sql:
+    init:
+      mode: always
 
 # Включаем логирование SQL-запросов, чтобы увидеть проблему N+1 своими глазами
 logging:
@@ -44,3 +49,4 @@ logging:
     root: INFO
     "[org.hibernate.SQL]": DEBUG # Показывает сами генерируемые SQL-запросы
     "[org.hibernate.orm.results]": TRACE # Показывает, как Hibernate маппит строки в Java-объекты
+

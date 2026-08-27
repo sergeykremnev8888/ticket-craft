@@ -22,6 +22,10 @@ spring:
       minimum-idle: 5
       idle-timeout: 30000
       connection-timeout: 20000
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
 
   # Конфигурация Apache Kafka (Отправитель / Producer)
   kafka:

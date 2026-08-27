@@ -36,14 +36,26 @@
             <artifactId>spring-boot-starter-kafka</artifactId>
         </dependency>
 
-        <!-- Подключение нашего общего модуля с DTO событий через ${project.version} -->
+		<!-- Добавьте эту зависимость для JSON-десериализации в Kafka -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+		</dependency>
+
+		<!-- Модуль для поддержки сериализации Java 8+ Date/Time API (Instant) -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
+		</dependency>
+
+		<!-- Подключение нашего общего модуля с DTO событий через ${project.version} -->
         <dependency>
             <groupId>ru.ticketcraft</groupId>
             <artifactId>common-dto</artifactId>
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Стартер для тестирования -->
+		<!-- Стартер для тестирования -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -58,7 +70,7 @@
 
     <build>
         <plugins>
-            <!-- Плагин для сборки исполняемого fat-jar -->
+			<!-- Плагин для сборки исполняемого fat-jar -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

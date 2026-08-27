@@ -45,7 +45,7 @@ public class OrderService {
         }
 		
         // 2. Сохраняем заказ в локальную базу order_db
-        Order order = new Order(null, userId, eventId, price, OrderState.CREATED, Instant.now());
+        Order order = new Order(null, userId, eventId, ticketId, price, OrderState.CREATED, Instant.now());
         Order savedOrder = orderRepository.save(order);
 
         // 3. Отправляем событие в Kafka

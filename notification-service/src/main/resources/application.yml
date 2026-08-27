@@ -29,7 +29,7 @@ spring:
       
       properties:
         # Доверяем нашему пакету для десериализации JSON в Java-объект
-        "[spring.json.trusted.packages]": "ru.ticketcraft.dto"
+        "[spring.json.trusted.packages]": "ru.ticketcraft.dto,ru.ticketcraft.*"
         # Экранированный маппинг типов (соответствует настройке в order-service)
         "[spring.json.typemapping]": "orderEvent:ru.ticketcraft.dto.OrderEvent"
 

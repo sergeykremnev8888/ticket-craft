@@ -36,34 +36,39 @@
             <artifactId>spring-boot-starter-data-jdbc</artifactId>
         </dependency>
 
-        <!-- Драйвер Oracle DB (совместимый с Java 21+ / Jakarta EE 11) -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
+		</dependency>
+
+		<!-- Драйвер Oracle DB (совместимый с Java 21+ / Jakarta EE 11) -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Официальный стартер автоконфигурации Kafka для Spring Boot 4 -->
+		<!-- Официальный стартер автоконфигурации Kafka для Spring Boot 4 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-kafka</artifactId>
         </dependency>
 
-        <!-- Подключаем наш общий модуль с общими DTO и событиями -->
+		<!-- Подключаем наш общий модуль с общими DTO и событиями -->
         <dependency>
             <groupId>ru.ticketcraft</groupId>
             <artifactId>common-dto</artifactId>
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Стартер для тестирования -->
+		<!-- Стартер для тестирования -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- Дополнительный модуль тестирования Kafka (Embedded Kafka для интеграционных тестов) -->
+		<!-- Дополнительный модуль тестирования Kafka (Embedded Kafka для интеграционных тестов) -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka-test</artifactId>

@@ -2,23 +2,25 @@ package ru.ticketcraft.controller;
 
 import java.util.List;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import ru.ticketcraft.dto.EventDto;
 import ru.ticketcraft.dto.EventResponse;
 import ru.ticketcraft.dto.TicketResponse;
 import ru.ticketcraft.model.Event;
-import ru.ticketcraft.repository.EventRepository;
+import ru.ticketcraft.service.EventCatalogService;
 
 @RestController
 @RequestMapping("/api/v1/catalog")
 public class CatalogController {
 
-    private final EventRepository eventRepository;
+    private final EventCatalogService eventCatalogService;
 
-    public CatalogController(EventRepository eventRepository) {
-        this.eventRepository = eventRepository;
+    public CatalogController(EventCatalogService eventCatalogService) {
+        this.eventCatalogService = eventCatalogService;
     }
     
     /**
@@ -26,9 +28,8 @@ public class CatalogController {
      * Вызов этого метода сгенерирует в консоли 1 запрос для мероприятий + N запросов для билетов.
      */
     @GetMapping("/events-lazy")
-    public List<EventResponse> getEventsLazy() {
-        List<Event> events = eventRepository.findAll();
-        return convertToDto(events);
+    public ResponseEntity<List<EventDto>> getEventsLazy() {
+        return ResponseEntity.ok(eventCatalogService.getEventsLazy());
     }
 
     /**
@@ -37,7 +38,7 @@ public class CatalogController {
      */
     @GetMapping("/events-optimized")
     public List<EventResponse> getEventsOptimized() {
-        List<Event> events = eventRepository.findAllWithTicketsGraph();
+    	List<Event> events = eventCatalogService.getEventsWithTicketsGraph();
         return convertToDto(events);
     }
 

@@ -21,6 +21,9 @@ public class Order {
 	@Column("event_id")
 	private Long eventId;
 
+	@Column("ticket_id")
+	private Long ticketId;
+
 	@Column("total_price")
 	private BigDecimal totalPrice;
 
@@ -34,10 +37,11 @@ public class Order {
 	public Order() {
 	}
 
-	public Order(Long id, Long userId, Long eventId, BigDecimal totalPrice, OrderState status, Instant createdAt) {
+	public Order(Long id, Long userId, Long eventId, Long ticketId, BigDecimal totalPrice, OrderState status, Instant createdAt) {
 		this.id = id;
 		this.userId = userId;
 		this.eventId = eventId;
+		this.ticketId = ticketId;
 		this.totalPrice = totalPrice;
 		this.status = status;
 		this.createdAt = createdAt;
@@ -65,6 +69,14 @@ public class Order {
 
 	public void setEventId(Long eventId) {
 		this.eventId = eventId;
+	}
+
+	public Long getTicketId() {
+		return ticketId;
+	}
+
+	public void setTicketId(Long ticketId) {
+		this.ticketId = ticketId;
 	}
 
 	public BigDecimal getTotalPrice() {

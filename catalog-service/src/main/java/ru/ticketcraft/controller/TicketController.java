@@ -20,7 +20,7 @@ public class TicketController {
     }
 
     @PostMapping("/{ticketId}/reserve")
-    public ResponseEntity<Void> reserveTicket(@PathVariable Long ticketId) {
+    public ResponseEntity<Void> reserveTicket(@PathVariable("ticketId") Long ticketId) {
         boolean reserved = reservationService.reserveTicket(ticketId);
         if (reserved) {
             return ResponseEntity.ok().build(); // 200 OK

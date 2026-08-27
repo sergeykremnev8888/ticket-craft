@@ -85,9 +85,32 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+  
+  # ==========================================
+  # 4. ВЕБ-ИНТЕРФЕЙС ДЛЯ POSTGRESQL (pgAdmin 4)
+  # ==========================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    ports:
+      - "5050:80" # Открывать в браузере по адресу http://localhost:5050
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ticketcraft.ru
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres-catalog:
+        condition: service_healthy
+      postgres-order:
+        condition: service_healthy
 
 volumes:
   pg_catalog_data:
     name: ticketcraft_pg_catalog_data
   pg_order_data:
     name: ticketcraft_pg_order_data
+  pgadmin_data:
+    name: ticketcraft_pgadmin_data
