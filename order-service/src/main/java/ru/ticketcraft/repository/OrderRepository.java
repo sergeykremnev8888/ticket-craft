@@ -12,16 +12,6 @@ import ru.ticketcraft.model.Order;
 public interface OrderRepository extends CrudRepository<Order, Long> {
 
 	/**
-	 * Важнейший метод для Highload секции на собеседовании. Мы запрашиваем статус
-	 * билета из базы данных catalog_db (или нашей текущей схемы) и жестко блокируем
-	 * строку с помощью FOR UPDATE. Если прилетит второй параллельный запрос на
-	 * покупку этого же билета, PostgreSQL заставит его ждать, пока текущая
-	 * транзакция не завершится (commit/rollback).
-	 */
-	@Query("SELECT is_available FROM tickets WHERE id = :ticketId FOR UPDATE")
-	Boolean checkAvailabilityAndLock(@Param("ticketId") Long ticketId);
-
-	/**
 	 * Прямое обновление статуса билета через нативный SQL
 	 */
 	@Modifying

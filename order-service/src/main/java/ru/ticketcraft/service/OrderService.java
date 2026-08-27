@@ -18,13 +18,16 @@ import ru.ticketcraft.repository.OrderRepository;
 public class OrderService {
 
 	private final OrderRepository orderRepository;
+	private final CatalogClient catalogClient;
 	private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
 
 	// Имя топика Kafka, в который отправляем события
 	private static final String TOPIC = "order-events";
 
-	public OrderService(OrderRepository orderRepository, KafkaTemplate<String, OrderEvent> kafkaTemplate) {
+	public OrderService(OrderRepository orderRepository, CatalogClient catalogClient,
+			KafkaTemplate<String, OrderEvent> kafkaTemplate) {
 		this.orderRepository = orderRepository;
+		this.catalogClient = catalogClient;
 		this.kafkaTemplate = kafkaTemplate;
 	}
 
@@ -35,37 +38,29 @@ public class OrderService {
 	 */
 	@Transactional
 	public Order createOrder(Long userId, Long eventId, Long ticketId, BigDecimal price) {
+		// 1. Делегируем блокировку и проверку владельцу данных — catalog-service
+        boolean reserved = catalogClient.reserveTicket(ticketId);
+        if (!reserved) {
+            throw new IllegalStateException("Извините, данное место уже забронировано!");
+        }
+		
+        // 2. Сохраняем заказ в локальную базу order_db
+        Order order = new Order(null, userId, eventId, price, OrderState.CREATED, Instant.now());
+        Order savedOrder = orderRepository.save(order);
 
-		// ШАГ 1: Пессимистическая блокировка строки билета в БД.
-		// Метод выполнит: SELECT is_available FROM tickets WHERE id = ? FOR UPDATE
-		Boolean isAvailable = orderRepository.checkAvailabilityAndLock(ticketId);
+        // 3. Отправляем событие в Kafka
+        OrderEvent event = new OrderEvent(
+                UUID.randomUUID().toString(),
+                savedOrder.getId(),
+                savedOrder.getUserId(),
+                savedOrder.getEventId(),
+                List.of(ticketId),
+                savedOrder.getTotalPrice(),
+                savedOrder.getStatus(),
+                savedOrder.getCreatedAt()
+        );
 
-		// Если билет не найден или уже продан (is_available = false)
-		if (isAvailable == null || !isAvailable) {
-			throw new IllegalStateException("Извините, данное место уже забронировано или недоступно!");
-		}
-
-		// ШАГ 2: Меняем статус билета на "занято" (is_available = false)
-		orderRepository.updateTicketStatus(ticketId, false);
-
-		// ШАГ 3: Создаем и сохраняем сам заказ в таблицу orders
-		Order order = new Order(null, // ID сгенерируется базой данных (Postgres) автоматически
-				userId, eventId, price, OrderState.CREATED, Instant.now());
-		Order savedOrder = orderRepository.save(order);
-
-		// ШАГ 4: Формируем иммутабельный OrderEvent для отправки в Kafka
-		OrderEvent event = new OrderEvent(
-	            UUID.randomUUID().toString(), // messageId
-	            savedOrder.getId(),           // orderId
-	            savedOrder.getUserId(),         // userId
-	            savedOrder.getEventId(),        // eventId
-	            List.of(ticketId),            // ticketIds
-	            savedOrder.getTotalPrice(),   // totalPrice
-	            savedOrder.getStatus(),       // state
-	            savedOrder.getCreatedAt()     // createdAt
-	        );
-
-		// ШАГ 5: Асинхронно отправляем событие в брокер Kafka.
+		// 4: Асинхронно отправляем событие в брокер Kafka.
 		// В качестве Message Key передаем userId в виде строки.
 		// Это железно гарантирует, что все события данного пользователя попадут в ОДНУ
 		// партицию Kafka.
