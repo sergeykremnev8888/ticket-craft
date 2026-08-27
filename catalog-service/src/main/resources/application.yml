@@ -26,8 +26,8 @@ spring:
 
   # Конфигурация JPA / Hibernate (под стандарты Jakarta EE 11)
   jpa:
-    # Важно: Выключаем Open-In-View для защиты пула соединений при высоких нагрузках
-    open-in-view: false 
+    open-in-view: false # Важно: Выключаем Open-In-View для защиты пула соединений при высоких нагрузках
+    defer-datasource-initialization: true # Гарантирует запуск data.sql ПОСЛЕ создания таблиц Hibernate
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       # create-drop: удаляет и создает таблицы заново при каждом запуске (идеально для тестов N+1)
@@ -35,12 +35,12 @@ spring:
     properties:
       hibernate:
         # Форматирование SQL в консоли для удобного чтения запросов
-        format_sql: true
-        use_sql_comments: true
+        "[format_sql]": true
+        "[use_sql_comments]": true
 
 # Включаем логирование SQL-запросов, чтобы увидеть проблему N+1 своими глазами
 logging:
   level:
     root: INFO
-    org.hibernate.SQL: DEBUG # Показывает сами генерируемые SQL-запросы
-    org.hibernate.orm.results: TRACE # Показывает, как Hibernate маппит строки в Java-объекты
+    "[org.hibernate.SQL]": DEBUG # Показывает сами генерируемые SQL-запросы
+    "[org.hibernate.orm.results]": TRACE # Показывает, как Hibernate маппит строки в Java-объекты
