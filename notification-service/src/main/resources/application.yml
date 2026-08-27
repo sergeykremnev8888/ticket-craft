@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: notification-service
+
+  # Включаем виртуальные потоки Java 21+
+  # Слушатели Kafka будут обрабатывать сообщения в легковесных потоках
+  threads:
+    virtual:
+      enabled: true
+
+  # Конфигурация Apache Kafka (Приемник / Consumer)
+  kafka:
+    bootstrap-servers: localhost:9092
+    
+    consumer:
+      # Уникальное имя группы потребителей
+      group-id: notification-group
+      
+      # Что делать, если сохраненный offset в Kafka отсутствует (read с начала топика)
+      auto-offset-reset: earliest
+      
+      # Отключаем авто-коммит оффсетов. Мы будем подтверждать прочтение вручную (AckMode.MANUAL)
+      # Это стандарт надежности: коммитим offset только ПОСЛЕ успешной отправки уведомления
+      enable-auto-commit: false
+      
+      # Классы-десериализаторы (наоборот по сравнению с продюсером)
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      
+      properties:
+        # Доверяем нашему пакету для десериализации JSON в Java-объект
+        "[spring.json.trusted.packages]": "ru.ticketcraft.dto"
+        # Экранированный маппинг типов (соответствует настройке в order-service)
+        "[spring.json.typemapping]": "orderEvent:ru.ticketcraft.dto.OrderEvent"
+
+    listener:
+      # Ручное подтверждение смещения (Manual Acknowledgment)
+      ack-mode: manual_immediate
+
+logging:
+  level:
+    root: INFO
+    "[ru.ticketcraft]": DEBUG # Будем логировать получение сообщений в DEBUG режиме

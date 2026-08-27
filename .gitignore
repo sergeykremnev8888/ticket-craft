@@ -1,0 +1,46 @@
+# === Build outputs ===
+target/
+build/
+out/
+.gradle/
+.bin/
+
+# === IDE-specific ===
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Eclipse
+.metadata/
+.classpath
+.project
+.settings/
+*.launch
+*.factorypath
+
+# VS Code
+.vscode/
+
+# NetBeans
+nbproject/
+nbprocess/
+nbbuild/
+
+# === Logs, cache and temp files ===
+*.log
+*.log.*
+tmp/
+temp/
+.spring-boot-devtools.properties
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Important exceptions ===
+# Allow committing wrappers of builders (Wrappers)
+!/.mvn/wrapper/maven-wrapper.jar
+!/gradle/wrapper/gradle-wrapper.jar

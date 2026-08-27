@@ -1,0 +1,55 @@
+server:
+  port: 8082 # Сервис заказов работает на отдельном порту 8082
+
+spring:
+  application:
+    name: order-service
+
+  # Активируем Виртуальные потоки (Virtual Threads) из Java 21 / Spring Boot 4
+  # Теперь отправка сообщений в Kafka не будет блокировать потоки ОС
+  threads:
+    virtual:
+      enabled: true
+
+  # Настройка подключения Spring Data JDBC к PostgreSQL (контейнер "postgres-order")
+  datasource:
+    url: jdbc:postgresql://localhost:5433/order_db
+    username: order_user
+    password: order_password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 15 # Чуть больше пул для транзакционной логики заказов
+      minimum-idle: 5
+      idle-timeout: 30000
+      connection-timeout: 20000
+
+  # Конфигурация Apache Kafka (Отправитель / Producer)
+  kafka:
+    bootstrap-servers: localhost:9092 # Адрес локального брокера из docker-compose
+    
+    producer:
+      # Гарантия доставки сообщений (acks)
+      # acks=all (или -1) означает, что брокер подтвердит получение только после
+      # того, как сообщение запишется во все реплики. Самый надежный режим (стандарт финтеха).
+      acks: all
+      
+      # Координаты классов-сериализаторов
+      # Ключ сообщения (userId) отправляем как String, а само событие — как JSON
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      
+      properties:
+        # Настройка вложенного сериализатора Jackson 2 внутри Spring Kafka
+        # Включает корректную сериализацию Java 8+ Date/Time API (нашего Instant)
+        "[spring.json.typemapping]": orderEvent:ru.ticketcraft.dto.OrderEvent
+        
+        # Защита от дубликатов на стороне продюсера (Идемпотентный отправитель)
+        "[enable.idempotence]": true
+        retries: 5 # Количество попыток переотправки при сетевых сбоях
+
+# Настройка логирования для отслеживания отправки событий и работы JDBC
+logging:
+  level:
+    root: INFO
+    "[org.springframework.jdbc.core.JdbcTemplate]": DEBUG # Показывает сырой SQL, который улетает в базу
+    "[org.springframework.kafka]": INFO

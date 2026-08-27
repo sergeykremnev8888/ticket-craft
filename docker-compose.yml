@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # 1. ИНФРАСТРУКТУРА БАЗ ДАННЫХ (PostgreSQL)
+  # ==========================================
+
+  # PostgreSQL для Сервиса Каталога (работает с Hibernate)
+  postgres-catalog:
+    image: postgres:16-alpine
+    container_name: postgres-catalog
+    environment:
+      POSTGRES_DB: catalog_db
+      POSTGRES_USER: catalog_user
+      POSTGRES_PASSWORD: catalog_password
+    ports:
+      - "5432:5432" # Стандартный порт PostgreSQL
+    volumes:
+      - pg_catalog_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog_user -d catalog_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL для Сервиса Заказов (работает со Spring Data JDBC)
+  postgres-order:
+    image: postgres:16-alpine
+    container_name: postgres-order
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: order_user
+      POSTGRES_PASSWORD: order_password
+    ports:
+      - "5433:5432" # Внешний порт 5433, чтобы избежать конфликта с первой БД
+    volumes:
+      - pg_order_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U order_user -d order_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 2. БРОКЕР СООБЩЕНИЙ (Apache Kafka)
+  # ==========================================
+
+  # Zookeeper (необходим для координации брокера Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Брокер Apache Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    ports:
+      - "9092:9092" # Порт для ваших Java-приложений, запущенных локально (вне Docker)
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Конфигурация двух слушателей:
+      # - PLAINTEXT (29092) для связи между контейнерами внутри сети Docker
+      # - PLAINTEXT_HOST (9092) для связи с вашими сервисами, запущенными в IDE (локально)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # Настройки для поддержки транзакционности (важно для финтеха и точного учета билетов)
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+# ==========================================
+# 3. ПОСТОЯННОЕ ХРАНИЛИЩЕ ДАННЫХ (Volumes)
+# ==========================================
+volumes:
+  pg_catalog_data:
+    name: ticketcraft_pg_catalog_data
+  pg_order_data:
+    name: ticketcraft_pg_order_data
