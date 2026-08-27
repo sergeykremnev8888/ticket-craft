@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import ru.ticketcraft.model.Event;
 
@@ -18,6 +19,7 @@ public interface EventRepository extends JpaRepository<Event, Long> {
      * Затем, когда сервис попытается прочитать билеты для каждого мероприятия, 
      * Hibernate сделает еще N дополнительных запросов в таблицу tickets.
      */
+	@Transactional(readOnly = true)
     List<Event> findAll();
 
     /**
