@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/catalog_db
+    username: ${CATALOG_DB_USERNAME:postgres}
+    password: ${CATALOG_DB_PASSWORD:postgres}
+
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 5000
+
+  jpa:
+    open-in-view: false
+
+    hibernate:
+      ddl-auto: validate
+
+    show-sql: false
+
+  sql:
+    init:
+      mode: never
+
+logging:
+  level:
+    "[ru.ticketcraft]": DEBUG
+    "[org.hibernate.SQL]": DEBUG
+    "[org.hibernate.orm.jdbc.bind]": TRACE

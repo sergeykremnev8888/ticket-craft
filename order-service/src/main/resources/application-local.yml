@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/order_db
+    username: ${ORDER_DB_USERNAME:postgres}
+    password: ${ORDER_DB_PASSWORD:postgres}
+
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 5
+      connection-timeout: 5000
+
+  sql:
+    init:
+      mode: never
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+    producer:
+      acks: all
+      enable-idempotence: true
+      retries: 5
+
+catalog:
+  service:
+    url: ${CATALOG_SERVICE_URL:http://localhost:8081}
+
+logging:
+  level:
+    "[ru.ticketcraft]": DEBUG
+    "[org.hibernate.SQL]": DEBUG
+    "[org.hibernate.orm.jdbc.bind]": TRACE

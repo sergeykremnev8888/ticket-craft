@@ -11,7 +11,7 @@ public class CatalogClient {
 
     private final RestClient restClient;
 
-    public CatalogClient(@Value("${catalog.service.url:http://localhost:8081}") String catalogUrl) {
+    public CatalogClient(@Value("${catalog.service.url}") String catalogUrl) {
         this.restClient = RestClient.builder()
                 .baseUrl(catalogUrl)
                 .build();

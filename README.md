@@ -1,246 +1,728 @@
-# TicketCraft — Система бронирования и покупки билетов
+# Ticket Craft
 
-**TicketCraft** — это демонстрационная распределенная микросервисная система продажи и бронирования билетов на мероприятия, спроектированная с учетом паттернов **Highload**, **Database-per-Service**, **Event-Driven Architecture** и демонстрации решений классических проблем работы с БД (N+1, пессимистические блокировки `SELECT ... FOR UPDATE`, идемпотентность консьюмеров).
+Учебный проект системы бронирования и покупки билетов, построенный в виде набора микросервисов.
+
+Проект предназначен не только для демонстрации Spring Boot и Kafka, но и как практическая площадка для изучения проблем, которые возникают в распределённых системах:
+
+- конкурентное бронирование одного ресурса;
+- согласованность данных между микросервисами;
+- Kafka и асинхронное взаимодействие;
+- идемпотентность;
+- транзакции;
+- N+1;
+- работа с PostgreSQL под нагрузкой;
+- отказоустойчивость;
+- observability;
+- подготовка приложения к highload.
+
+> **Статус проекта:** учебный production-like проект.
+> Некоторые механизмы намеренно реализованы в упрощённом виде и будут последовательно улучшаться в рамках roadmap.
+
+---
+
+## Архитектура
+
+Система состоит из трёх микросервисов:
+
+- `catalog-service` — каталог мероприятий и билетов;
+- `order-service` — создание заказов;
+- `notification-service` — обработка событий заказов и отправка уведомлений.
+
+Каждый сервис владеет собственной базой данных.
+
+```text
+                         ┌──────────────────┐
+                         │      Client      │
+                         └────────┬─────────┘
+                                  │
+                    ┌─────────────┴─────────────┐
+                    │                           │
+                    ▼                           ▼
+          ┌──────────────────┐        ┌──────────────────┐
+          │ catalog-service  │◄──────►│   order-service  │
+          │     :8081        │  REST  │      :8082       │
+          └────────┬─────────┘        └───────┬──────────┘
+                   │                          │
+                   ▼                          ▼
+          ┌──────────────────┐       ┌───────────────────┐
+          │   catalog_db     │       │     order_db      │
+          │   PostgreSQL     │       │    PostgreSQL     │
+          └──────────────────┘       └─────────┬─────────┘
+                                               │
+                                               │ Kafka
+                                               ▼
+                                     ┌────────────────────┐
+                                     │ notification-service│
+                                     │       :8083        │
+                                     └────────────────────┘
+```
+
+### Database-per-Service
+
+Каждый микросервис имеет собственную PostgreSQL database.
+
+```text
+catalog-service  ──► catalog_db
+order-service    ──► order_db
+```
+
+Сервисы не используют общие таблицы и не обращаются напрямую к базе данных другого сервиса.
 
 ---
 
 ## Технологический стек
 
-* **Язык & Платформа:** Java 21 (LTS)
-* **Фреймворк:** Spring Boot (Spring Web, Spring Data JPA, Spring Data JDBC, Spring Kafka)
-* **Базы данных:** PostgreSQL 16 (изолированные БД `catalog_db` и `order_db` по паттерну *Database-per-Service*)
-* **Веб-интерфейсы управления:** **pgAdmin 4** (UI для PostgreSQL), **Kafka UI** (веб-панель Apache Kafka)
-* **Брокер сообщений:** Apache Kafka (KRaft mode без ZooKeeper)
-* **Инструменты & Сборка:** Apache Maven, Docker & Docker Compose
+| Технология | Использование |
+|---|---|
+| Java 21 | основной язык |
+| Spring Boot 4 | backend framework |
+| Spring Web | REST API |
+| Spring Data JPA | работа с каталогом |
+| Spring Data JDBC | работа с заказами |
+| Spring Kafka | взаимодействие через Kafka |
+| PostgreSQL 16 | persistent storage |
+| Apache Kafka | event-driven communication |
+| Maven | сборка проекта |
+| Docker Compose | локальная инфраструктура |
+| Actuator | health/metrics endpoints |
+| HikariCP | connection pool |
 
 ---
 
-## Архитектура и взаимодействие микросервисов
+## Структура проекта
 
-```
-                    ┌─────────────────────────┐
-                    │  Frontend / API Client  │
-                    └────────────┬────────────┘
-                                 │
-          ┌──────────────────────┴──────────────────────┐
-          │ HTTP (GET events / POST reserve)            │ HTTP (POST orders)
-          ▼                                             ▼
-┌───────────────────────────┐                 ┌───────────────────────────┐
-│      catalog-service      │◄────────────────┤       order-service       │
-│        (Port 8081)        │   HTTP Client   │        (Port 8082)        │
-├───────────────────────────┤ (Pessimistic    ├───────────────────────────┤
-│ Spring Data JPA/Hibernate │   Lock / REST)  │ Spring Data JDBC          │
-│ PostgreSQL (Port 5432)    │                 │ PostgreSQL (Port 5433)    │
-│ DB: catalog_db            │                 │ DB: order_db              │
-└─────────────┬─────────────┘                 └─────────────┬─────────────┘
-              │                                             │
-              │                                             │ Kafka Producer
-              │                                             │ Topic: order-events
-              │                                             ▼
-              │                               ┌───────────────────────────┐
-              │                               │   Apache Kafka (KRaft)    │
-              │                               │        (Port 9092)        │
-              │                               └─────────────┬─────────────┘
-              │                                             │
-              │                                             │ Kafka Consumer
-              │                                             ▼
-              │                               ┌───────────────────────────┐
-              │                               │   notification-service    │
-              │                               │        (Port 8083)        │
-              │                               │  Идемпотентный консьюмер  │
-              │                               └───────────────────────────┘
-              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│               Инфраструктурные Web UI (Docker Compose)                  │
-│                                                                         │
-│    pgAdmin 4 (PostgreSQL Web UI): http://localhost:5050                 │
-│     ├─ Подключение к Catalog DB (порт 5432, db: catalog_db)             │
-│     └─ Подключение к Order DB (порт 5433, db: order_db)                 │
-│                                                                         │
-│    Kafka UI (Web Management):    http://localhost:8080                 │
-│     └─ Просмотр топиков (order-events), сообщений и партиций            │
-└─────────────────────────────────────────────────────────────────────────┘
+```text
+ticket-craft/
+│
+├── common-dto/
+│
+├── catalog-service/
+│   └── src/main/
+│       ├── java/
+│       └── resources/
+│           ├── application.yml
+│           ├── application-local.yml
+│           └── application-prod.yml
+│
+├── order-service/
+│   └── src/main/
+│       ├── java/
+│       └── resources/
+│           ├── application.yml
+│           ├── application-local.yml
+│           └── application-prod.yml
+│
+├── notification-service/
+│   └── src/main/
+│       ├── java/
+│       └── resources/
+│           ├── application.yml
+│           ├── application-local.yml
+│           └── application-prod.yml
+│
+├── docker-compose.yml
+├── pgadmin-servers.json
+├── pom.xml
+└── README.md
 ```
 
 ---
 
-## Модули проекта
+# Сервисы
 
-1. **`common-dto`** — общий модуль с иммутабельными Java Record DTO и событиями (`OrderEvent`, `OrderState`), используемый для сериализации/десериализации сообщений Kafka между сервисами.
-2. **`catalog-service`** (`8081`) — сервис каталога мероприятий и билетов. Демонстрирует:
-   - Сравнение ленивой загрузки (проблема N+1) и оптимизированного `EntityGraph` / `JOIN FETCH`.
-   - Пессимистическую блокировку билета при резервации (`@Lock(LockModeType.PESSIMISTIC_WRITE)` / `SELECT ... FOR UPDATE`).
-3. **`order-service`** (`8082`) — транзакционный сервис оформления заказов на базе Spring Data JDBC. Делегирует блокировку в `catalog-service`, сохраняет заказ в `order_db` и отправляет событие в Kafka.
-4. **`notification-service`** (`8083`) — сервис нотификаций. Читает топик `order-events` с защитой от дубликатов сообщений (реестр идемпотентности).
+## catalog-service
+
+Отвечает за:
+
+- мероприятия;
+- билеты;
+- доступность билетов;
+- резервирование билета.
+
+Порт:
+
+```text
+8081
+```
+
+Основная база:
+
+```text
+catalog_db
+```
 
 ---
 
-## Пошаговая инструкция по локальному запуску
+## order-service
 
-### 1. Предварительные требования
-Убедитесь, что у вас установлены:
-- **Java 21+** (`java -version`)
-- **Maven 3.9+** (`mvn -v`)
-- **Docker & Docker Compose** (`docker compose version`)
+Отвечает за:
+
+- создание заказа;
+- хранение заказа;
+- взаимодействие с `catalog-service`;
+- публикацию событий заказа в Kafka.
+
+Порт:
+
+```text
+8082
+```
+
+Основная база:
+
+```text
+order_db
+```
 
 ---
 
-### 2. Запуск инфраструктуры в Docker
+## notification-service
 
-В корневой директории проекта выполните команду для поднятия контейнеров:
+Получает события из Kafka и обрабатывает их.
+
+Порт:
+
+```text
+8083
+```
+
+Основной Kafka consumer group:
+
+```text
+notification-group
+```
+
+---
+
+# API
+
+## Получить каталог мероприятий
+
+```http
+GET /api/v1/catalog/events
+```
+
+Пример:
 
 ```bash
-docker compose down -v   # Очистка предыдущих томов (при необходимости)
-docker compose up -d
+curl http://localhost:8081/api/v1/catalog/events
 ```
 
-Проверьте статус контейнеров (`docker compose ps`):
-* `postgres-catalog` (порт `5432`) — база данных `catalog_db`
-* `postgres-order` (порт `5433`) — база данных `order_db`
-* `kafka` (порт `9092`) — брокер Kafka в режиме KRaft
-* `kafka-ui` (порт `8080`) — веб-панель управления Kafka: [http://localhost:8080](http://localhost:8080)
-* `pgadmin` (порт `5050`) — веб-панель управления PostgreSQL: [http://localhost:5050](http://localhost:5050)
-
 ---
 
-### 3. Работа с базами данных через pgAdmin 4
+## Зарезервировать билет
 
-В `docker-compose.yml` встроен веб-интерфейс **pgAdmin 4** для визуализации таблиц и запросов к `catalog_db` и `order_db`.
+```http
+POST /api/v1/catalog/tickets/{ticketId}/reserve
+```
 
-1. Откройте в браузере: **[http://localhost:5050](http://localhost:5050)**
-2. Данные для входа в pgAdmin:
-   - **Email:** `admin@ticketcraft.ru`
-   - **Password:** `admin`
-3. В левой панели **Servers -> TicketCraft Servers** предварительно настроены подключения:
-   - **Catalog DB (`catalog_db`):** Host `postgres-catalog`, Port `5432`, User `catalog_user`, Password `catalog_password`
-   - **Order DB (`order_db`):** Host `postgres-order`, Port `5432`, User `order_user`, Password `order_password`
-
-#### Подключение через внешние клиенты (DBeaver, DataGrip, IntelliJ IDEA):
-* **Catalog Service DB:** `localhost:5432`, база: `catalog_db`, пользователь: `catalog_user`, пароль: `catalog_password`
-* **Order Service DB:** `localhost:5433` *(внешний порт 5433)*, база: `order_db`, пользователь: `order_user`, пароль: `order_password`
-
----
-
-### 4. Сборка Maven-модулей
-
-Соберите весь многомодульный проект и установите `common-dto` в локальный репозиторий `.m2`:
+Пример:
 
 ```bash
-mvn clean install -DskipTests
+curl -X POST \
+  http://localhost:8081/api/v1/catalog/tickets/1/reserve
 ```
+
+На текущем этапе резервирование использует pessimistic locking.
+
+> В дальнейшем горячий путь бронирования будет переведён на атомарный conditional `UPDATE`.
 
 ---
 
-### 5. Запуск микросервисов
+## Создать заказ
 
-Запустите каждый сервис в отдельном терминале (или через Run Configuration в вашей IDE):
-
-#### 1. Catalog Service (порт `8081`):
-```bash
-mvn spring-boot:run -pl catalog-service
-```
-*База `catalog_db` автоматически создается Hibernate (`ddl-auto: create-drop`) и наполняется тестовыми данными из `data.sql`.*
-
-#### 2. Order Service (порт `8082`):
-```bash
-mvn spring-boot:run -pl order-service
-```
-*Подключается к `order_db` и автоматически применяет схему таблиц из `schema.sql`.*
-
-#### 3. Notification Service (порт `8083`):
-```bash
-mvn spring-boot:run -pl notification-service
-```
-*Подключается к брокеру Kafka и слушает топик `order-events`.*
-
----
-
-## Сводная таблица портов и Web UI
-
-| Сервис / UI | URL / Порт | Назначение / Описание |
-| :--- | :--- | :--- |
-| **pgAdmin 4 UI** | [http://localhost:5050](http://localhost:5050) | Веб-интерфейс администрирования баз данных PostgreSQL |
-| **Kafka UI** | [http://localhost:8080](http://localhost:8080) | Веб-интерфейс мониторинга сообщений и топиков Kafka |
-| **Catalog Service API** | `http://localhost:8081` | REST API каталога мероприятий и пессимистического резерва |
-| **Order Service API** | `http://localhost:8082` | REST API создания и процессинга заказов |
-| **Notification Service** | `http://localhost:8083` | Служба фоновой обработки и нотификаций |
-| **Catalog PostgreSQL DB** | `localhost:5432` | СУБД каталога (`catalog_db`, пользователь `catalog_user`) |
-| **Order PostgreSQL DB** | `localhost:5433` | СУБД заказов (`order_db`, пользователь `order_user`) |
-| **Apache Kafka Broker** | `localhost:9092` | Брокер сообщений KRaft (топик `order-events`) |
-
----
-
-## Сценарии сквозного тестирования (E2E)
-
-### Сценарий 1. Демонстрация проблемы N+1 vs Оптимизированный запрос
-
-* **Запрос с N+1 проблемой:**
-  ```bash
-  curl -X GET http://localhost:8081/api/v1/catalog/events-lazy
-  ```
-  *(В логах `catalog-service` появится 1 SQL-запрос для выборки событий + N запросов для выборки билетов каждого мероприятия).*
-
-* **Оптимизированный запрос (Решение N+1):**
-  ```bash
-  curl -X GET http://localhost:8081/api/v1/catalog/events-optimized
-  ```
-  *(В логах выполнится ровно 1 SQL-запрос с `LEFT OUTER JOIN`).*
-
----
-
-### Сценарий 2. Успешное оформление заказа и резервация билета
-
-Отправьте POST-запрос на покупку доступного билета №1:
-```bash
-curl -X POST http://localhost:8082/api/v1/orders \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": 101,
-    "eventId": 1,
-    "ticketId": 1,
-    "price": 5500.00
-  }'
+```http
+POST /api/v1/orders
 ```
 
-**Ожидаемый ответ:** `201 Created`
+Пример:
+
 ```json
 {
-  "id": 1,
-  "userId": 101,
-  "eventId": 1,
-  "totalPrice": 5500.00,
-  "status": "CREATED",
-  "createdAt": "2026-08-27T13:00:00Z"
+  "userId": "user-123",
+  "ticketId": 1
 }
 ```
 
----
+Пример запроса:
 
-### Сценарий 3. Проверка пессимистической блокировки (Double-Spending Prevention)
-
-Попробуйте купить тот же билет №1 повторно:
 ```bash
-curl -X POST http://localhost:8082/api/v1/orders \
+curl -X POST \
+  http://localhost:8082/api/v1/orders \
   -H "Content-Type: application/json" \
   -d '{
-    "userId": 102,
-    "eventId": 1,
-    "ticketId": 1,
-    "price": 5500.00
+    "userId": "user-123",
+    "ticketId": 1
   }'
 ```
 
-**Ожидаемый ответ:** `409 Conflict`  
-*(Запрос отклонен, так как билет уже заблокирован и недоступен).*
+---
+
+# Текущий flow создания заказа
+
+На текущем этапе flow выглядит следующим образом:
+
+```text
+Client
+  │
+  │ POST /orders
+  ▼
+order-service
+  │
+  │ POST /catalog/tickets/{id}/reserve
+  ▼
+catalog-service
+  │
+  │ PostgreSQL transaction
+  │ lock ticket
+  │ check availability
+  │ reserve ticket
+  ▼
+catalog_db
+  │
+  │ success
+  ▼
+order-service
+  │
+  │ save order
+  ▼
+order_db
+  │
+  │ publish OrderEvent
+  ▼
+Kafka
+  │
+  ▼
+notification-service
+```
 
 ---
 
-### Сценарий 4. Проверка событий в Notification Service и Kafka UI
+# Kafka
 
-1. В логах консоли `notification-service` появится сообщение:
-   ```text
-   Уведомление отправлено пользователю 101: Ваш заказ #1 успешно оформлен на сумму 5500.00!
-   ```
-2. Откройте в браузере **Kafka UI**: [http://localhost:8080](http://localhost:8080):
-   - Перейдите в раздел **Topics** -> **`order-events`** -> вкладка **Messages**.
-   - Убедитесь в наличии события с ключом `101` и телом `OrderEvent`.
+Kafka используется для асинхронного взаимодействия между сервисами.
+
+Текущая схема:
+
+```text
+order-service
+      │
+      │ OrderEvent
+      ▼
+   Kafka
+      │
+      ▼
+notification-service
+```
+
+Producer использует:
+
+```yaml
+acks: all
+enable-idempotence: true
+```
+
+Consumer использует:
+
+```text
+manual acknowledgement
+```
+
+и имеет базовую защиту от повторной обработки событий.
+
+> Текущая реализация consumer idempotency хранит обработанные event ID в памяти процесса. Это означает, что информация теряется после restart. Персистентная идемпотентность будет добавлена в рамках отдельной задачи roadmap.
+
+---
+
+# PostgreSQL
+
+Используются две независимые базы данных.
+
+### Catalog
+
+```text
+localhost:5432
+database: catalog_db
+```
+
+### Order
+
+```text
+localhost:5433
+database: order_db
+```
+
+Для локальной разработки PostgreSQL запускается через Docker Compose.
+
+---
+
+# Конфигурация
+
+Разделена на:
+
+```text
+application.yml
+application-local.yml
+application-prod.yml
+```
+
+### application.yml
+
+Содержит общие настройки приложения:
+
+- имя сервиса;
+- порт;
+- Actuator;
+- базовые logging settings;
+- настройки, одинаковые для разных окружений.
+
+### application-local.yml
+
+Используется для локальной разработки.
+
+Например:
+
+```text
+localhost:5432
+localhost:5433
+localhost:9092
+```
+
+### application-prod.yml
+
+Содержит production configuration contract.
+
+Адреса инфраструктуры и credentials передаются через environment variables:
+
+```text
+CATALOG_DB_URL
+CATALOG_DB_USERNAME
+CATALOG_DB_PASSWORD
+ORDER_DB_URL
+ORDER_DB_USERNAME
+ORDER_DB_PASSWORD
+KAFKA_BOOTSTRAP_SERVERS
+CATALOG_SERVICE_URL
+```
+
+Секреты не должны храниться в Git.
+
+---
+
+# Spring Profiles
+
+Для локального запуска используется профиль:
+
+```text
+local
+```
+
+Production:
+
+```text
+prod
+```
+
+Например:
+
+```bash
+SPRING_PROFILES_ACTIVE=local
+```
+
+или:
+
+```bash
+SPRING_PROFILES_ACTIVE=prod
+```
+
+По умолчанию используется `local`, чтобы проект можно было запустить без дополнительной конфигурации.
+
+---
+
+# Переменные окружения
+
+В репозитории должен находиться только пример конфигурации:
+
+```text
+.env.example
+```
+
+Например:
+
+```dotenv
+CATALOG_DB_NAME=catalog_db
+CATALOG_DB_USERNAME=postgres
+CATALOG_DB_PASSWORD=postgres
+
+ORDER_DB_NAME=order_db
+ORDER_DB_USERNAME=postgres
+ORDER_DB_PASSWORD=postgres
+
+PGADMIN_EMAIL=admin@example.com
+PGADMIN_PASSWORD=change-me
+
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+```
+
+Файл с реальными credentials:
+
+```text
+.env
+```
+
+не должен попадать в Git.
+
+---
+
+# Database schema
+
+На текущем этапе схема базы данных создаётся средствами приложения.
+
+Для production configuration:
+
+```yaml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+```
+
+Hibernate не должен создавать или удалять production schema.
+
+Также отключён автоматический SQL initialization:
+
+```yaml
+spring:
+  sql:
+    init:
+      mode: never
+```
+
+---
+
+# Connection Pool
+
+Для работы с PostgreSQL используется HikariCP.
+
+Параметры pool являются конфигурируемыми.
+
+Например:
+
+```yaml
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:30}
+      minimum-idle: ${DB_POOL_MIN_IDLE:10}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
+```
+
+Размер connection pool не следует увеличивать бездумно.
+
+Например, если запустить:
+
+```text
+10 application replicas
+×
+30 DB connections
+=
+300 connections
+```
+
+это уже необходимо сопоставлять с возможностями PostgreSQL.
+
+---
+
+# Docker Compose
+
+Локальная инфраструктура запускается через:
+
+```bash
+docker compose up -d
+```
+
+Остановка:
+
+```bash
+docker compose down
+```
+
+Проверка контейнеров:
+
+```bash
+docker compose ps
+```
+
+---
+
+# Локальная инфраструктура
+
+Docker Compose поднимает:
+
+```text
+┌──────────────────────┐
+│ PostgreSQL           │
+│ catalog_db           │
+│ :5432                │
+└──────────────────────┘
+
+┌──────────────────────┐
+│ PostgreSQL           │
+│ order_db             │
+│ :5433                │
+└──────────────────────┘
+
+┌──────────────────────┐
+│ Kafka                │
+│ :9092                │
+└──────────────────────┘
+
+┌──────────────────────┐
+│ Kafka UI             │
+└──────────────────────┘
+
+┌──────────────────────┐
+│ pgAdmin              │
+└──────────────────────┘
+```
+
+---
+
+# Запуск проекта
+
+## 1. Требования
+
+Необходимы:
+
+- JDK 21;
+- Docker;
+- Docker Compose;
+- Maven.
+
+Проверить Java:
+
+```bash
+java -version
+```
+
+Ожидается Java 21.
+
+---
+
+## 2. Запустить инфраструктуру
+
+```bash
+docker compose up -d
+```
+
+Проверить:
+
+```bash
+docker compose ps
+```
+
+---
+
+## 3. Запустить catalog-service
+
+```bash
+./mvnw -pl catalog-service spring-boot:run
+```
+
+Windows:
+
+```powershell
+mvnw.cmd -pl catalog-service spring-boot:run
+```
+
+---
+
+## 4. Запустить order-service
+
+```bash
+./mvnw -pl order-service spring-boot:run
+```
+
+---
+
+## 5. Запустить notification-service
+
+```bash
+./mvnw -pl notification-service spring-boot:run
+```
+
+---
+
+# Health Checks
+
+Для сервисов включён Spring Boot Actuator.
+
+Основной endpoint:
+
+```http
+GET /actuator/health
+```
+
+Например:
+
+```bash
+curl http://localhost:8081/actuator/health
+```
+
+Также подготовлен endpoint для Prometheus:
+
+```http
+GET /actuator/prometheus
+```
+
+---
+
+# Текущие архитектурные паттерны
+
+Проект демонстрирует следующие подходы:
+
+### Database-per-Service
+
+Каждый сервис владеет собственной базой.
+
+### REST
+
+Синхронное взаимодействие:
+
+```text
+order-service → catalog-service
+```
+
+### Event-Driven Architecture
+
+Асинхронное взаимодействие:
+
+```text
+order-service → Kafka → notification-service
+```
+
+### Pessimistic Locking
+
+Текущий механизм защиты от одновременного бронирования одного билета.
+
+### N+1 demonstration
+
+В `catalog-service` специально продемонстрирован N+1 problem.
+
+### EntityGraph
+
+Есть вариант загрузки связанных сущностей без N+1.
+
+### Kafka Producer Idempotence
+
+Producer настроен с:
+
+```yaml
+enable-idempotence: true
+```
+
+### Manual Consumer Acknowledgement
+
+Kafka consumer использует manual acknowledgement.
+
+---
