@@ -1,0 +1,30 @@
+spring:
+  datasource:
+    url: ${CATALOG_DB_URL}
+    username: ${CATALOG_DB_USERNAME}
+    password: ${CATALOG_DB_PASSWORD}
+
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:30}
+      minimum-idle: ${DB_POOL_MIN_IDLE:10}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:1000}
+
+  jpa:
+    open-in-view: false
+
+    hibernate:
+      ddl-auto: validate
+
+    show-sql: false
+
+  sql:
+    init:
+      mode: never
+
+logging:
+  level:
+    root: INFO
+    "[ru.ticketcraft]": INFO
+    "[org.hibernate.SQL]": OFF
+    "[org.hibernate.orm.jdbc.bind]": OFF

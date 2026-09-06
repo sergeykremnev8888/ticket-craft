@@ -1,0 +1,13 @@
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:notification-group}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+
+logging:
+  level:
+    root: INFO
+    "[ru.ticketcraft]": INFO
