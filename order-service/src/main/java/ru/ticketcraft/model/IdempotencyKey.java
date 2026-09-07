@@ -28,17 +28,21 @@ public class IdempotencyKey {
     @Column("created_at")
     private Instant createdAt;
 
+    @Column("updated_at")
+    private Instant updatedAt;
+
     public IdempotencyKey() {
     }
 
     public IdempotencyKey(String idempotencyKey, Long userId, String requestHash, Long orderId,
-            IdempotencyStatus status, Instant createdAt) {
+            IdempotencyStatus status, Instant createdAt, Instant updatedAt) {
         this.idempotencyKey = idempotencyKey;
         this.userId = userId;
         this.requestHash = requestHash;
         this.orderId = orderId;
         this.status = status;
         this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 
     public String getIdempotencyKey() {
@@ -88,4 +92,13 @@ public class IdempotencyKey {
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
 }

@@ -1,5 +1,7 @@
 package ru.ticketcraft.repository;
 
+import java.time.Instant;
+
 import org.springframework.data.jdbc.repository.query.Modifying;
 import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.CrudRepository;
@@ -35,4 +37,30 @@ public interface IdempotencyKeyRepository extends CrudRepository<IdempotencyKey,
             @Param("requestHash") String requestHash
     );
 
+    @Modifying
+    @Query("""
+        UPDATE idempotency_keys
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE idempotency_key = :idempotencyKey
+          AND status = 'IN_PROGRESS'
+          AND updated_at < :staleBefore
+        """)
+    int recoverStale(
+        @Param("idempotencyKey") String idempotencyKey,
+        @Param("staleBefore") Instant staleBefore
+    );
+
+    @Modifying
+    @Query("""
+        UPDATE idempotency_keys
+        SET status = 'COMPLETED',
+            order_id = :orderId,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE idempotency_key = :idempotencyKey
+          AND status = 'IN_PROGRESS'
+        """)
+    int markCompleted(
+        @Param("idempotencyKey") String idempotencyKey,
+        @Param("orderId") Long orderId
+    );
 }

@@ -32,11 +32,17 @@ public class IdempotencyService {
         IdempotencyKey existing = repository.findById(idempotencyKey)
                 .orElseThrow(() -> new IllegalStateException("Idempotency key was not found: " + idempotencyKey));
 
-        if (created == 0) {
-            validateExistingRequest(existing, userId, requestHash);
+        if (created == 1) {
+            return existing;
         }
 
-        return existing;
+        validateExistingRequest(existing, userId, requestHash);
+
+        if (existing.getStatus() == IdempotencyStatus.COMPLETED) {
+            return existing;
+        }
+
+        throw new OrderConflictException("Request with this Idempotency-Key is already in progress");
     }
 
     /**
@@ -52,7 +58,6 @@ public class IdempotencyService {
 
         repository.save(idempotencyKeyEntity);
     }
-
 
     private IdempotencyKey validateExistingRequest(IdempotencyKey existing, Long userId, String requestHash) {
         if (!existing.getUserId().equals(userId)) {
