@@ -41,7 +41,7 @@ class TicketReservationServiceConcurrencyTest {
 
     @Container
     @ServiceConnection
-    @SuppressWarnings("resource") //The SuppressWarnings is added because the Testcontainers manages by lifecycle of POSTGRES.
+    @SuppressWarnings("resource") // Testcontainers manages the container lifecycle.
     static final PostgreSQLContainer POSTGRES =
             new PostgreSQLContainer("postgres:16-alpine")
                     .withDatabaseName("catalog_db")
