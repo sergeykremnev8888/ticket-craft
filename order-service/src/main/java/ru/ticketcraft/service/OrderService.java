@@ -9,6 +9,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ru.ticketcraft.client.CatalogClient;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.exception.OrderConflictException;
@@ -33,9 +34,11 @@ public class OrderService {
     }
 
     /**
-     * Бизнес-метод создания заказа и резервирования места. Аннотация @Transactional
-     * гарантирует, что если внутри метода произойдет сбой, все изменения в БД
-     * (включая блокировку FOR UPDATE) откатятся.
+     * Создаёт заказ после успешного резервирования билета в catalog-service.
+     *
+     * Транзакция {@code @Transactional} охватывает только изменения в базе данных
+     * order-service. Резервирование билета выполняется в catalog-service
+     * в рамках отдельной транзакции.
      */
     @Transactional
     public Order createOrder(Long userId, UUID eventId, UUID ticketId, BigDecimal price) {

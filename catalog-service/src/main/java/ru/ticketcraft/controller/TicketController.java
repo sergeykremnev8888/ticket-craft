@@ -21,7 +21,7 @@ public class TicketController {
     }
 
     @PostMapping("/{ticketId}/reserve")
-    public ResponseEntity<Void> reserveTicket(@PathVariable("ticketId") UUID ticketId) {
+    public ResponseEntity<Void> reserveTicket(@PathVariable UUID ticketId) {
         reservationService.reserveTicket(ticketId);
         return ResponseEntity.ok().build();
     }

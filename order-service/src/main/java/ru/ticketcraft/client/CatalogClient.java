@@ -1,21 +1,22 @@
-package ru.ticketcraft.service;
+package ru.ticketcraft.client;
 
 import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+
+import ru.ticketcraft.config.CatalogProperties;
 
 @Component
 public class CatalogClient {
 
     private final RestClient restClient;
 
-    public CatalogClient(@Value("${catalog.service.url}") String catalogUrl) {
+    public CatalogClient(CatalogProperties properties) {
         this.restClient = RestClient.builder()
-                .baseUrl(catalogUrl)
+                .baseUrl(properties.url())
                 .build();
     }
 

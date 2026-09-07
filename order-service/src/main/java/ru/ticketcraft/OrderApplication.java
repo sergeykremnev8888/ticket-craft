@@ -2,6 +2,7 @@ package ru.ticketcraft;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.data.jdbc.repository.config.EnableJdbcRepositories;
 
 /**
@@ -10,6 +11,7 @@ import org.springframework.data.jdbc.repository.config.EnableJdbcRepositories;
  */
 @SpringBootApplication
 @EnableJdbcRepositories(basePackages = "ru.ticketcraft.repository")
+@ConfigurationPropertiesScan
 public class OrderApplication {
 
 	public static void main(String[] args) {
