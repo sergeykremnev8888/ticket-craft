@@ -9,10 +9,6 @@ spring:
       minimum-idle: ${DB_POOL_MIN_IDLE:10}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
 
-  sql:
-    init:
-      mode: never
-
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
 
@@ -23,8 +19,8 @@ spring:
 
 
 catalog:
-  client:
-    base-url: ${CATALOG_SERVICE_URL}
+  service:
+    url: ${CATALOG_SERVICE_URL}
 
 logging:
   level:
