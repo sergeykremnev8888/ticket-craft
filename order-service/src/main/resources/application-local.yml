@@ -14,7 +14,6 @@ spring:
 
     producer:
       acks: all
-      enable-idempotence: true
       retries: 5
 
 catalog:

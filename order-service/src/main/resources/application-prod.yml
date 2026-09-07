@@ -14,9 +14,7 @@ spring:
 
     producer:
       acks: all
-      enable-idempotence: true
       retries: ${KAFKA_PRODUCER_RETRIES:10}
-
 
 catalog:
   service:

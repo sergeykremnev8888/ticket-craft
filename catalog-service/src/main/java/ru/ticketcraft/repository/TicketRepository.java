@@ -1,6 +1,7 @@
 package ru.ticketcraft.repository;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -12,11 +13,11 @@ import jakarta.persistence.LockModeType;
 import ru.ticketcraft.model.Ticket;
 
 @Repository
-public interface TicketRepository extends JpaRepository<Ticket, Long> {
+public interface TicketRepository extends JpaRepository<Ticket, UUID> {
 
     // Spring Data JPA транслирует PESSIMISTIC_WRITE в SQL: SELECT ... FOR UPDATE
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Ticket t WHERE t.id = :id")
-    Optional<Ticket> findByIdForUpdate(@Param("id") Long id);
+    Optional<Ticket> findByIdForUpdate(@Param("id") UUID id);
 
 }
