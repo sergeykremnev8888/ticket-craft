@@ -3,6 +3,7 @@ package ru.ticketcraft.dto;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -16,8 +17,8 @@ public final class OrderEvent {
 	private final String messageId;
 	private final Long orderId;
 	private final Long userId;
-	private final Long eventId;
-	private final List<Long> ticketIds;
+	private final UUID eventId;
+	private final List<UUID> ticketIds;
 	private final BigDecimal totalPrice;
 	private final OrderState state;
 	private final Instant createdAt;
@@ -27,8 +28,8 @@ public final class OrderEvent {
 	 */
 	@JsonCreator
 	public OrderEvent(@JsonProperty("messageId") String messageId, @JsonProperty("orderId") Long orderId,
-			@JsonProperty("userId") Long userId, @JsonProperty("eventId") Long eventId,
-			@JsonProperty("ticketIds") List<Long> ticketIds, @JsonProperty("totalPrice") BigDecimal totalPrice,
+			@JsonProperty("userId") Long userId, @JsonProperty("eventId") UUID eventId,
+			@JsonProperty("ticketIds") List<UUID> ticketIds, @JsonProperty("totalPrice") BigDecimal totalPrice,
 			@JsonProperty("state") OrderState state, @JsonProperty("createdAt") Instant createdAt) {
 		this.messageId = messageId;
 		this.orderId = orderId;
@@ -52,11 +53,11 @@ public final class OrderEvent {
 		return userId;
 	}
 
-	public Long getEventId() {
+	public UUID getEventId() {
 		return eventId;
 	}
 
-	public List<Long> getTicketIds() {
+	public List<UUID> getTicketIds() {
 		return ticketIds;
 	}
 

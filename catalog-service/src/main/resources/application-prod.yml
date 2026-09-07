@@ -10,18 +10,6 @@ spring:
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
       validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:1000}
 
-  jpa:
-    open-in-view: false
-
-    hibernate:
-      ddl-auto: validate
-
-    show-sql: false
-
-  sql:
-    init:
-      mode: never
-
 logging:
   level:
     root: INFO

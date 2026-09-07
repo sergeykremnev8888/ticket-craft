@@ -1,6 +1,7 @@
 package ru.ticketcraft.dto;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
-public record TicketResponse(Long id, String seatNumber, BigDecimal price, boolean available) {
+public record TicketResponse(UUID id, String seatNumber, BigDecimal price, TicketStatus status) {
 }

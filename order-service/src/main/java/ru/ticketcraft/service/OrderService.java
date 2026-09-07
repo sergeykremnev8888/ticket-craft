@@ -37,7 +37,7 @@ public class OrderService {
 	 * (включая блокировку FOR UPDATE) откатятся.
 	 */
 	@Transactional
-	public Order createOrder(Long userId, Long eventId, Long ticketId, BigDecimal price) {
+	public Order createOrder(Long userId, UUID eventId, UUID ticketId, BigDecimal price) {
 		// 1. Делегируем блокировку и проверку владельцу данных — catalog-service
         boolean reserved = catalogClient.reserveTicket(ticketId);
         if (!reserved) {
