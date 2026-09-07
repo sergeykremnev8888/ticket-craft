@@ -59,7 +59,7 @@ public class CatalogController {
                         ticket.getId(),
                         ticket.getSeatNumber(),
                         ticket.getPrice(),
-                        ticket.isAvailable()
+                        ticket.getStatus()
                     )).toList()
             )).toList();
     }

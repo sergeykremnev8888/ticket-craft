@@ -3,13 +3,16 @@ package ru.ticketcraft.model;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
@@ -18,78 +21,95 @@ import jakarta.persistence.Table;
 @Table(name = "events")
 public class Event {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
+    @Id
+    @GeneratedValue
+    private UUID id;
 
-	@Column(name = "title", nullable = false)
-	private String title; // Название, например "Спектакль 'Гамлет'"
+    @Column(nullable = false, length = 255)
+    private String title;
 
-	@Column(name = "description")
-	private String description;
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
-	@Column(name = "event_date", nullable = false)
-	private Instant eventDate; // Дата и время проведения в UTC
+    @Column(name = "event_date", nullable = false)
+    private Instant eventDate;
 
-	/**
-	 * Одно мероприятие имеет много билетов. Параметр fetch = FetchType.LAZY
-	 * означает, что список билетов не будет загружаться из БД автоматически, а
-	 * только при первом вызове метода event.getTickets(). ИМЕННО ЭТА НАСТРОЙКА в
-	 * сочетании с циклом порождает классическую проблему N+1.
-	 */
-	@OneToMany(mappedBy = "event", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-	private List<Ticket> tickets = new ArrayList<>();
+    @Column(nullable = false, length = 255)
+    private String venue;
 
-	// Явный конструктор без параметров (обязателен для JPA)
-	public Event() {
-	}
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
 
-	// Явный конструктор со всеми параметрами
-	public Event(Long id, String title, String description, Instant eventDate, List<Ticket> tickets) {
-		this.id = id;
-		this.title = title;
-		this.description = description;
-		this.eventDate = eventDate;
-		this.tickets = tickets;
-	}
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
 
-	public Long getId() {
-		return id;
-	}
+    @OneToMany(mappedBy = "event", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Ticket> tickets = new ArrayList<>();
 
-	public void setId(Long id) {
-		this.id = id;
-	}
+    public UUID getId() {
+        return id;
+    }
 
-	public String getTitle() {
-		return title;
-	}
+    public void setId(UUID id) {
+        this.id = id;
+    }
 
-	public void setTitle(String title) {
-		this.title = title;
-	}
+    public String getTitle() {
+        return title;
+    }
 
-	public String getDescription() {
-		return description;
-	}
+    public void setTitle(String title) {
+        this.title = title;
+    }
 
-	public void setDescription(String description) {
-		this.description = description;
-	}
+    public String getDescription() {
+        return description;
+    }
 
-	public Instant getEventDate() {
-		return eventDate;
-	}
+    public void setDescription(String description) {
+        this.description = description;
+    }
 
-	public void setEventDate(Instant eventDate) {
-		this.eventDate = eventDate;
-	}
+    public Instant getEventDate() {
+        return eventDate;
+    }
 
-	public List<Ticket> getTickets() {
-		return tickets;
-	}
+    public void setEventDate(Instant eventDate) {
+        this.eventDate = eventDate;
+    }
 
-	public void setTickets(List<Ticket> tickets) {
-		this.tickets = tickets;
-	}
+    public String getVenue() {
+        return venue;
+    }
+
+    public void setVenue(String venue) {
+        this.venue = venue;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public List<Ticket> getTickets() {
+        return tickets;
+    }
+
+    public void setTickets(List<Ticket> tickets) {
+        this.tickets = tickets;
+    }
+
 }

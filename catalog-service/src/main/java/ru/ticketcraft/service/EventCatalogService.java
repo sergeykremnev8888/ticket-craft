@@ -35,7 +35,7 @@ public class EventCatalogService {
 
 	private EventDto convertToDto(Event event) {
 		List<TicketDto> tickets = event.getTickets().stream()
-				.map(t -> new TicketDto(t.getId(), t.getSeatNumber(), t.getPrice(), t.isAvailable())).toList();
+				.map(t -> new TicketDto(t.getId(), t.getSeatNumber(), t.getPrice(), t.getStatus())).toList();
 
 		return new EventDto(event.getId(), event.getTitle(), tickets);
 	}

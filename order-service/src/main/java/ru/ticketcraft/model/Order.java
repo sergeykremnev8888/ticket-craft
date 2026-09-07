@@ -2,6 +2,7 @@ package ru.ticketcraft.model;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.UUID;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
@@ -19,10 +20,10 @@ public class Order {
 	private Long userId;
 
 	@Column("event_id")
-	private Long eventId;
+	private UUID eventId;
 
 	@Column("ticket_id")
-	private Long ticketId;
+	private UUID ticketId;
 
 	@Column("total_price")
 	private BigDecimal totalPrice;
@@ -37,7 +38,7 @@ public class Order {
 	public Order() {
 	}
 
-	public Order(Long id, Long userId, Long eventId, Long ticketId, BigDecimal totalPrice, OrderState status, Instant createdAt) {
+	public Order(Long id, Long userId, UUID eventId, UUID ticketId, BigDecimal totalPrice, OrderState status, Instant createdAt) {
 		this.id = id;
 		this.userId = userId;
 		this.eventId = eventId;
@@ -63,19 +64,19 @@ public class Order {
 		this.userId = userId;
 	}
 
-	public Long getEventId() {
+	public UUID getEventId() {
 		return eventId;
 	}
 
-	public void setEventId(Long eventId) {
+	public void setEventId(UUID eventId) {
 		this.eventId = eventId;
 	}
 
-	public Long getTicketId() {
+	public UUID getTicketId() {
 		return ticketId;
 	}
 
-	public void setTicketId(Long ticketId) {
+	public void setTicketId(UUID ticketId) {
 		this.ticketId = ticketId;
 	}
 

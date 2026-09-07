@@ -1,5 +1,7 @@
 package ru.ticketcraft.service;
 
+import java.util.UUID;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -17,7 +19,7 @@ public class CatalogClient {
                 .build();
     }
 
-    public boolean reserveTicket(Long ticketId) {
+    public boolean reserveTicket(UUID ticketId) {
         try {
             ResponseEntity<Void> response = restClient.post()
                     .uri("/api/v1/catalog/tickets/{ticketId}/reserve", ticketId)
