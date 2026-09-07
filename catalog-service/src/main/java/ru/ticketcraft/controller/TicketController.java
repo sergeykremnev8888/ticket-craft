@@ -1,6 +1,7 @@
 package ru.ticketcraft.controller;
 
-import org.springframework.http.HttpStatus;
+import java.util.UUID;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,12 +21,8 @@ public class TicketController {
     }
 
     @PostMapping("/{ticketId}/reserve")
-    public ResponseEntity<Void> reserveTicket(@PathVariable("ticketId") Long ticketId) {
-        boolean reserved = reservationService.reserveTicket(ticketId);
-        if (reserved) {
-            return ResponseEntity.ok().build(); // 200 OK
-        } else {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build(); // 409 Conflict
-        }
+    public ResponseEntity<Void> reserveTicket(@PathVariable("ticketId") UUID ticketId) {
+        reservationService.reserveTicket(ticketId);
+        return ResponseEntity.ok().build();
     }
 }

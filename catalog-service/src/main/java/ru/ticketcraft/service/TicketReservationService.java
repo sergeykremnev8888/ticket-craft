@@ -1,9 +1,12 @@
 package ru.ticketcraft.service;
 
+import java.util.UUID;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ru.ticketcraft.dto.TicketStatus;
+import ru.ticketcraft.exception.TicketNotFoundException;
 import ru.ticketcraft.model.Ticket;
 import ru.ticketcraft.repository.TicketRepository;
 
@@ -17,9 +20,9 @@ public class TicketReservationService {
     }
 
     @Transactional
-    public boolean reserveTicket(Long ticketId) {
+    public boolean reserveTicket(UUID ticketId) {
         Ticket ticket = ticketRepository.findByIdForUpdate(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Билет не найден: " + ticketId));
+                .orElseThrow(() -> new TicketNotFoundException("Билет не найден: " + ticketId));
 
         if (ticket.getStatus() != TicketStatus.AVAILABLE) {
             return false; // Уже куплен другим пользователем
