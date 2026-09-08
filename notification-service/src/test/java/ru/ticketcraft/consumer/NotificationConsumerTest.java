@@ -1,5 +1,8 @@
 package ru.ticketcraft.consumer;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
@@ -11,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.kafka.support.Acknowledgment;
 
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
@@ -31,6 +35,9 @@ class NotificationConsumerTest {
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
 
     @Mock
+    private Acknowledgment acknowledgment;
+
+    @Mock
     private IdempotentNotificationProcessor processor;
 
     private NotificationConsumer consumer;
@@ -46,9 +53,32 @@ class NotificationConsumerTest {
     void shouldDelegateEventToProcessor() {
         OrderEvent event = createEvent();
 
-        consumer.listen(event, MESSAGE_ID, 0, 42L);
+        consumer.listen(event, MESSAGE_ID, 0, 42L, acknowledgment);
 
         verify(processor).process(event);
+    }
+
+    @Test
+    void shouldProcessEventAndAcknowledge() {
+        OrderEvent event = createEvent();
+
+        consumer.listen(event, MESSAGE_ID, 0, 42L, acknowledgment);
+
+        verify(processor).process(event);
+        verify(acknowledgment).acknowledge();
+    }
+
+    @Test
+    void shouldNotAcknowledgeWhenProcessingFails() {
+        OrderEvent event = createEvent();
+
+        doThrow(new RuntimeException("Processing failed")).when(processor).process(event);
+
+        assertThatThrownBy(() -> consumer.listen(event, MESSAGE_ID, 0, 42L, acknowledgment))
+                .isInstanceOf(RuntimeException.class).hasMessage("Processing failed");
+
+        verify(processor).process(event);
+        verify(acknowledgment, never()).acknowledge();
     }
 
     private OrderEvent createEvent() {

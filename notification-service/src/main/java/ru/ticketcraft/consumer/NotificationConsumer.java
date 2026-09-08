@@ -3,6 +3,7 @@ package ru.ticketcraft.consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -24,13 +25,17 @@ public class NotificationConsumer {
 
     @KafkaListener(topics = "order-events", groupId = "notification-group")
     public void listen(@Payload OrderEvent event, @Header(KafkaHeaders.RECEIVED_KEY) String messageKey,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition, @Header(KafkaHeaders.OFFSET) long offset) {
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition, @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
 
         log.info("Получено сообщение из Kafka [partition={}, offset={}, key={}, messageId={}]", partition, offset,
                 messageKey, event.getMessageId());
 
         processor.process(event);
 
-        log.info("Сообщение обработано [messageId={}, orderId={}]", event.getMessageId(), event.getOrderId());
+        acknowledgment.acknowledge();
+
+        log.info("Сообщение обработано и подтверждено [messageId={}, orderId={}]", event.getMessageId(),
+                event.getOrderId());
     }
 }
