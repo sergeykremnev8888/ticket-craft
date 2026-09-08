@@ -52,13 +52,13 @@ public class IdempotencyService {
      */
     @Transactional
     public void complete(String idempotencyKey, Long orderId) {
-        IdempotencyKey idempotencyKeyEntity = repository.findById(idempotencyKey)
-                .orElseThrow(() -> new IllegalStateException("Idempotency key not found: " + idempotencyKey));
+        int updated = repository.markCompleted(idempotencyKey, orderId);
 
-        idempotencyKeyEntity.setOrderId(orderId);
-        idempotencyKeyEntity.setStatus(IdempotencyStatus.COMPLETED);
-
-        repository.save(idempotencyKeyEntity);
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Failed to complete idempotency key: " + idempotencyKey
+            );
+        }
     }
 
     private IdempotencyKey validateExistingRequest(IdempotencyKey existing, Long userId, String requestHash) {
