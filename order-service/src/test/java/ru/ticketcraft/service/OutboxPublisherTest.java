@@ -163,8 +163,14 @@ class OutboxPublisherTest {
 
     @Test
     void shouldDoNothingWhenNoEventsClaimed() {
-        when(claimService.claimPending(any(UUID.class), any(Instant.class), any(Instant.class), any(Instant.class),
-                any(String.class), eq(100))).thenReturn(0);
+        when(claimService.claimPending(
+                any(UUID.class),
+                any(Instant.class),
+                any(Instant.class),
+                any(Instant.class),
+                any(String.class),
+                eq(BATCH_SIZE)
+        )).thenReturn(0);
 
         publisher.publishPendingEvents();
 
