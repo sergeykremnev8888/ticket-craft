@@ -35,6 +35,9 @@ class IdempotencyKeyRepositoryConcurrencyTest {
     @Autowired
     private TransactionTemplate transactionTemplate;
 
+    @Autowired
+    private IdempotencyKeyRepository repository;
+
     @Test
     void shouldAllowOnlyOneRequestToCreateSameIdempotencyKey()
             throws Exception {
@@ -52,24 +55,7 @@ class IdempotencyKeyRepositoryConcurrencyTest {
             List<Callable<Integer>> tasks = new ArrayList<>();
 
             for (int i = 0; i < requestCount; i++) {
-                tasks.add(() ->
-                        transactionTemplate.execute(status ->
-                                jdbcTemplate.update("""
-                                    INSERT INTO idempotency_keys (
-                                        idempotency_key,
-                                        user_id,
-                                        request_hash,
-                                        status,
-                                        created_at
-                                    )
-                                    VALUES (?, ?, ?, 'IN_PROGRESS', CURRENT_TIMESTAMP)
-                                    ON CONFLICT (idempotency_key) DO NOTHING
-                                    """,
-                                key,
-                                userId,
-                                hash
-                        )
-                ));
+                tasks.add(() -> transactionTemplate.execute(status -> repository.tryCreate(key, userId, hash)));
             }
 
             List<Future<Integer>> futures =
@@ -89,15 +75,11 @@ class IdempotencyKeyRepositoryConcurrencyTest {
                     "Exactly one concurrent request must create the idempotency key"
             );
 
-            Integer count = jdbcTemplate.queryForObject(
-                    """
+            Integer count = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*)
                     FROM idempotency_keys
                     WHERE idempotency_key = ?
-                    """,
-                    Integer.class,
-                    key
-            );
+                    """, Integer.class, key);
 
             assertEquals(1, count);
         } finally {
