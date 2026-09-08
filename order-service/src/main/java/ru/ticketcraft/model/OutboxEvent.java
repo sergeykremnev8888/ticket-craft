@@ -1,11 +1,11 @@
 package ru.ticketcraft.model;
 
+import java.time.Instant;
+import java.util.UUID;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
-
-import java.time.Instant;
-import java.util.UUID;
 
 @Table("outbox_events")
 public class OutboxEvent {
@@ -52,21 +52,9 @@ public class OutboxEvent {
     public OutboxEvent() {
     }
 
-    public OutboxEvent(
-            UUID id,
-            String aggregateType,
-            String aggregateId,
-            String eventType,
-            String payload,
-            OutboxStatus status,
-            Instant createdAt,
-            Instant publishedAt,
-            Integer attempts,
-            Instant nextAttemptAt,
-            Instant lockedAt,
-            String lockedBy,
-            UUID claimId
-    ) {
+    public OutboxEvent(UUID id, String aggregateType, String aggregateId, String eventType, String payload,
+            OutboxStatus status, Instant createdAt, Instant publishedAt, Integer attempts, Instant nextAttemptAt,
+            Instant lockedAt, String lockedBy, UUID claimId) {
         this.id = id;
         this.aggregateType = aggregateType;
         this.aggregateId = aggregateId;

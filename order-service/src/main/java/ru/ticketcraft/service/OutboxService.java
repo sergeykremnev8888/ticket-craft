@@ -25,17 +25,16 @@ public class OutboxService {
     }
 
     public UUID saveOrderCreatedEvent(Order order, OrderEvent event) {
-        UUID eventId = UUID.randomUUID();
         String payload = serialize(event);
 
-        int inserted = repository.insert(eventId, AGGREGATE_TYPE, order.getId().toString(), EVENT_TYPE, payload,
+        int inserted = repository.insert(event.getEventId(), AGGREGATE_TYPE, order.getId().toString(), EVENT_TYPE, payload,
                 order.getCreatedAt());
 
         if (inserted != 1) {
             throw new IllegalStateException("Failed to insert outbox event for order: " + order.getId());
         }
 
-        return eventId;
+        return event.getEventId();
     }
 
     private String serialize(OrderEvent event) {

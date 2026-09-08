@@ -1,14 +1,15 @@
 package ru.ticketcraft.repository;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
 import org.springframework.data.jdbc.repository.query.Modifying;
 import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
-import ru.ticketcraft.model.OutboxEvent;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
+import ru.ticketcraft.model.OutboxEvent;
 
 public interface OutboxEventRepository extends CrudRepository<OutboxEvent, UUID> {
 
