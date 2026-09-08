@@ -22,6 +22,17 @@ management:
       exposure:
         include: health,info,prometheus
 
+ticketcraft:
+  outbox:
+    publisher:
+      enabled: true
+      batch-size: 100
+      fixed-delay: 1s
+      lock-duration: 30s
+      retry-delay: 5s
+      send-timeout: 10s
+      topic: order-events
+
 logging:
   level:
     root: INFO

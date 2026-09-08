@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,19 +23,16 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final CatalogClient catalogClient;
-    private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private final OutboxService outboxService;
     private final IdempotencyService idempotencyService;
     private final RequestHashService requestHashService;
 
-    // Имя топика Kafka, в который отправляем события
-    private static final String TOPIC = "order-events";
-
     public OrderService(OrderRepository orderRepository, CatalogClient catalogClient,
-            KafkaTemplate<String, OrderEvent> kafkaTemplate, IdempotencyService idempotencyService,
+            OutboxService outboxService, IdempotencyService idempotencyService,
             RequestHashService requestHashService) {
         this.orderRepository = orderRepository;
         this.catalogClient = catalogClient;
-        this.kafkaTemplate = kafkaTemplate;
+        this.outboxService = outboxService;
         this.idempotencyService = idempotencyService;
         this.requestHashService = requestHashService;
     }
@@ -73,11 +69,7 @@ public class OrderService {
                 savedOrder.getEventId(), List.of(ticketId), savedOrder.getTotalPrice(), savedOrder.getStatus(),
                 savedOrder.getCreatedAt());
 
-        // 4: Асинхронно отправляем событие в брокер Kafka.
-        // В качестве Message Key передаем userId в виде строки.
-        // Это железно гарантирует, что все события данного пользователя попадут в ОДНУ
-        // партицию Kafka.
-        kafkaTemplate.send(TOPIC, savedOrder.getUserId().toString(), event);
+        outboxService.saveOrderCreatedEvent(savedOrder, event);
 
         return savedOrder;
     }
