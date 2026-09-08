@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import ru.ticketcraft.client.CatalogClient;
 import ru.ticketcraft.dto.OrderEvent;
@@ -45,7 +44,7 @@ class OrderServiceIdempotencyTest {
     private CatalogClient catalogClient;
 
     @Mock
-    private KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private OutboxService outboxService;
 
     @Mock
     private IdempotencyService idempotencyService;
@@ -57,7 +56,7 @@ class OrderServiceIdempotencyTest {
 
     @BeforeEach
     void setUp() {
-        service = new OrderService(orderRepository, catalogClient, kafkaTemplate, idempotencyService,
+        service = new OrderService(orderRepository, catalogClient, outboxService, idempotencyService,
                 requestHashService);
     }
 
@@ -85,7 +84,7 @@ class OrderServiceIdempotencyTest {
 
         verify(orderRepository, never()).save(any());
 
-        verify(kafkaTemplate, never()).send(any(), any(), any());
+        verify(outboxService, never()).saveOrderCreatedEvent(any(), any());
     }
 
     @Test
@@ -132,7 +131,7 @@ class OrderServiceIdempotencyTest {
 
         verify(idempotencyService).complete(IDEMPOTENCY_KEY, 42L);
 
-        verify(kafkaTemplate).send(eq("order-events"), eq(USER_ID.toString()), any(OrderEvent.class));
+        verify(outboxService).saveOrderCreatedEvent(eq(savedOrder), any(OrderEvent.class));
     }
 
 }

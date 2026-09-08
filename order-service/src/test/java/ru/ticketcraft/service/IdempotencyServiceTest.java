@@ -170,26 +170,20 @@ class IdempotencyServiceTest {
 
     @Test
     void shouldCompleteIdempotencyKey() {
-        IdempotencyKey key = idempotencyKey(IDEMPOTENCY_KEY, USER_ID, REQUEST_HASH, null,
-                IdempotencyStatus.IN_PROGRESS);
-
-        when(repository.findById(IDEMPOTENCY_KEY)).thenReturn(Optional.of(key));
+        when(repository.markCompleted(IDEMPOTENCY_KEY, 42L)).thenReturn(1);
 
         service.complete(IDEMPOTENCY_KEY, 42L);
 
-        assertEquals(42L, key.getOrderId());
-        assertEquals(IdempotencyStatus.COMPLETED, key.getStatus());
-
-        verify(repository).save(key);
+        verify(repository).markCompleted(IDEMPOTENCY_KEY, 42L);
     }
 
     @Test
     void shouldThrowWhenCompletingUnknownKey() {
-        when(repository.findById(IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
+        when(repository.markCompleted(IDEMPOTENCY_KEY, 42L)).thenReturn(0);
 
         assertThrows(IllegalStateException.class, () -> service.complete(IDEMPOTENCY_KEY, 42L));
 
-        verify(repository, never()).save(any());
+        verify(repository).markCompleted(IDEMPOTENCY_KEY, 42L);
     }
 
     private IdempotencyKey idempotencyKey(String key, Long userId, String requestHash, Long orderId,

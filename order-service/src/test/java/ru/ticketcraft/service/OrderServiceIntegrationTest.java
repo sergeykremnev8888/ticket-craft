@@ -3,7 +3,6 @@ package ru.ticketcraft.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,7 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
@@ -66,7 +64,7 @@ class OrderServiceIntegrationTest {
     private CatalogClient catalogClient;
 
     @MockitoBean
-    private KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private OutboxService outboxService;
 
     @BeforeEach
     void setUp() {
@@ -125,7 +123,7 @@ class OrderServiceIntegrationTest {
 
         verify(catalogClient, times(1)).reserveTicket(ticketId);
 
-        verify(kafkaTemplate, times(1)).send(anyString(), anyString(), any(OrderEvent.class));
+        verify(outboxService, times(1)).saveOrderCreatedEvent(any(Order.class), any(OrderEvent.class));
     }
 
     @Test
@@ -156,7 +154,7 @@ class OrderServiceIntegrationTest {
 
         verify(catalogClient, times(1)).reserveTicket(ticketId);
 
-        verify(kafkaTemplate, times(1)).send(anyString(), anyString(), any(OrderEvent.class));
+        verify(outboxService, times(1)).saveOrderCreatedEvent(any(Order.class), any(OrderEvent.class));
     }
 
     @Test
@@ -207,7 +205,7 @@ class OrderServiceIntegrationTest {
             verify(catalogClient, times(1)).reserveTicket(ticketId);
 
             // Событие должно быть отправлено только для реально созданного заказа.
-            verify(kafkaTemplate, times(1)).send(anyString(), anyString(), any(OrderEvent.class));
+            verify(outboxService, times(1)).saveOrderCreatedEvent(any(Order.class), any(OrderEvent.class));
 
         } finally {
             executor.shutdownNow();
