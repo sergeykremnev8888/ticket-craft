@@ -11,13 +11,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
-import org.springframework.kafka.support.serializer.JsonSerializer;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
 
 import ru.ticketcraft.dto.OrderEvent;
+import tools.jackson.databind.json.JsonMapper;
 
 @Configuration
 public class KafkaProducerConfig {
@@ -26,27 +23,26 @@ public class KafkaProducerConfig {
     private String bootstrapServers;
 
     @Bean
-    ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        return mapper;
+    JsonMapper objectMapper() {
+        return JsonMapper.builder().build();
     }
 
     @Bean
-    ProducerFactory<String, OrderEvent> producerFactory(ObjectMapper objectMapper) {
+    ProducerFactory<String, OrderEvent> producerFactory(JsonMapper objectMapper) {
         Map<String, Object> configProps = new HashMap<>();
+
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        
-        // Передаем сконфигурированный ObjectMapper с поддержкой Instant
-        JsonSerializer<OrderEvent> valueSerializer = new JsonSerializer<>(objectMapper);
+
+        JacksonJsonSerializer<OrderEvent> valueSerializer = new JacksonJsonSerializer<OrderEvent>(objectMapper);
 
         return new DefaultKafkaProducerFactory<>(configProps, new StringSerializer(), valueSerializer);
     }
 
     @Bean
     KafkaTemplate<String, OrderEvent> kafkaTemplate(ProducerFactory<String, OrderEvent> producerFactory) {
+
         return new KafkaTemplate<>(producerFactory);
     }
 }

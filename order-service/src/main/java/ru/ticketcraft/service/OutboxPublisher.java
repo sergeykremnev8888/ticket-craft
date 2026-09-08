@@ -96,7 +96,7 @@ public class OutboxPublisher {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
 
             handlePublishFailure(event, claimId, cause);
-        } catch (TimeoutException | JacksonException e) {
+        } catch (TimeoutException | RuntimeException e) {
             handlePublishFailure(event, claimId, e);
         }
     }

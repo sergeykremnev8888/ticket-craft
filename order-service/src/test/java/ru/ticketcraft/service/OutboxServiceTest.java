@@ -28,6 +28,16 @@ import tools.jackson.databind.ObjectMapper;
 @ExtendWith(MockitoExtension.class)
 class OutboxServiceTest {
 
+    private static final Long ORDER_ID = 123L;
+    private static final Long USER_ID = 10L;
+
+    private static final UUID EVENT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID TICKET_ID = UUID.fromString("55555555-5555-5555-5555-555555555555");
+
+    private static final BigDecimal TOTAL_PRICE = new BigDecimal("100.00");
+
+    private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
+
     @Mock
     private OutboxEventRepository repository;
 
@@ -43,49 +53,35 @@ class OutboxServiceTest {
 
     @Test
     void shouldSaveOrderCreatedEvent() throws Exception {
-        UUID eventId = UUID.randomUUID();
-        Long orderId = 123L;
-        Long userId = 456L;
-        UUID eventUuid = UUID.randomUUID();
-        UUID ticketId = UUID.randomUUID();
-        Instant createdAt = Instant.now();
+        OrderEvent event = new OrderEvent(EVENT_ID.toString(), ORDER_ID, USER_ID, EVENT_ID, List.of(TICKET_ID),
+                TOTAL_PRICE, OrderState.CREATED, CREATED_AT);
 
-        Order order = new Order(orderId, userId, eventUuid, ticketId, new BigDecimal("150.00"), OrderState.CREATED,
-                createdAt);
+        Order order = new Order(ORDER_ID, USER_ID, EVENT_ID, TICKET_ID, TOTAL_PRICE, OrderState.CREATED, CREATED_AT);
 
-        OrderEvent event = new OrderEvent(UUID.randomUUID().toString(), orderId, userId, eventUuid, List.of(ticketId),
-                new BigDecimal("150.00"), OrderState.CREATED, createdAt);
-
-        String payload = "{\"orderId\":123}";
+        String payload = "{\"messageId\":\"11111111-1111-1111-1111-111111111111\"}";
 
         when(objectMapper.writeValueAsString(event)).thenReturn(payload);
 
-        when(repository.insert(any(UUID.class), eq("ORDER"), eq("123"), eq("OrderCreated"), eq(payload), eq(createdAt)))
-                .thenReturn(1);
+        when(repository.insert(eq(EVENT_ID), eq("ORDER"), eq(ORDER_ID.toString()), eq("OrderCreated"), eq(payload),
+                eq(CREATED_AT))).thenReturn(1);
 
         UUID result = outboxService.saveOrderCreatedEvent(order, event);
 
-        assertEquals(eventId.getClass(), result.getClass());
+        assertEquals(EVENT_ID, result);
 
         verify(objectMapper).writeValueAsString(event);
 
-        verify(repository).insert(any(UUID.class), eq("ORDER"), eq("123"), eq("OrderCreated"), eq(payload),
-                eq(createdAt));
+        verify(repository).insert(eq(EVENT_ID), eq("ORDER"), eq(ORDER_ID.toString()), eq("OrderCreated"), eq(payload),
+                eq(CREATED_AT));
     }
 
     @Test
     void shouldThrowExceptionWhenOutboxInsertFails() throws Exception {
-        Long orderId = 123L;
-        Long userId = 456L;
-        UUID eventId = UUID.randomUUID();
-        UUID ticketId = UUID.randomUUID();
-        Instant createdAt = Instant.now();
+        Order order = new Order(ORDER_ID, USER_ID, EVENT_ID, TICKET_ID, new BigDecimal("150.00"), OrderState.CREATED,
+                CREATED_AT);
 
-        Order order = new Order(orderId, userId, eventId, ticketId, new BigDecimal("150.00"), OrderState.CREATED,
-                createdAt);
-
-        OrderEvent event = new OrderEvent(UUID.randomUUID().toString(), orderId, userId, eventId, List.of(ticketId),
-                new BigDecimal("150.00"), OrderState.CREATED, createdAt);
+        OrderEvent event = new OrderEvent(UUID.randomUUID().toString(), ORDER_ID, USER_ID, EVENT_ID, List.of(TICKET_ID),
+                new BigDecimal("150.00"), OrderState.CREATED, CREATED_AT);
 
         when(objectMapper.writeValueAsString(event)).thenReturn("{\"orderId\":123}");
 
@@ -97,7 +93,7 @@ class OutboxServiceTest {
         assertEquals("Failed to insert outbox event for order: 123", exception.getMessage());
 
         verify(repository).insert(any(UUID.class), eq("ORDER"), eq("123"), eq("OrderCreated"), eq("{\"orderId\":123}"),
-                eq(createdAt));
+                eq(CREATED_AT));
     }
 
     @Test
