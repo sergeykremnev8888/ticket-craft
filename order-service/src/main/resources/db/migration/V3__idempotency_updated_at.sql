@@ -1,3 +1,0 @@
-ALTER TABLE idempotency_keys
-    ADD COLUMN updated_at TIMESTAMPTZ NOT NULL
-        DEFAULT CURRENT_TIMESTAMP;

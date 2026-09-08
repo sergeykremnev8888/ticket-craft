@@ -18,10 +18,12 @@ public class IdempotencyService {
     }
 
     /**
-     * Проверяет idempotency key и регистрирует новый запрос.
+     * Проверяет Idempotency-Key и регистрирует новый запрос.
      *
-     * @return существующую запись, если запрос уже выполнялся; null, если запрос
-     *         новый и его можно выполнять
+     * @return запись idempotency key для нового или уже завершённого запроса
+     * @throws OrderConflictException если ключ уже используется для другого
+     *         запроса или запрос с этим ключом ещё выполняется
+     * @throws IllegalStateException если ключ не найден
      */
     @Transactional
     public IdempotencyKey checkAndRegister(String idempotencyKey, Long userId, String requestHash) {
