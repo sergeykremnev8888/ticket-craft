@@ -12,6 +12,7 @@ import ru.ticketcraft.client.CatalogClient;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.exception.OrderConflictException;
+import ru.ticketcraft.exception.OrderNotFoundException;
 import ru.ticketcraft.idempotency.CanonicalOrderRequest;
 import ru.ticketcraft.model.IdempotencyKey;
 import ru.ticketcraft.model.IdempotencyStatus;
@@ -26,15 +27,17 @@ public class OrderService {
     private final OutboxService outboxService;
     private final IdempotencyService idempotencyService;
     private final RequestHashService requestHashService;
+    private final OrderStateMachine orderStateMachine;
 
     public OrderService(OrderRepository orderRepository, CatalogClient catalogClient,
             OutboxService outboxService, IdempotencyService idempotencyService,
-            RequestHashService requestHashService) {
+            RequestHashService requestHashService, OrderStateMachine orderStateMachine) {
         this.orderRepository = orderRepository;
         this.catalogClient = catalogClient;
         this.outboxService = outboxService;
         this.idempotencyService = idempotencyService;
         this.requestHashService = requestHashService;
+        this.orderStateMachine = orderStateMachine;
     }
 
     /**
@@ -72,5 +75,17 @@ public class OrderService {
         outboxService.saveOrderCreatedEvent(savedOrder, event);
 
         return savedOrder;
+    }
+
+    @Transactional
+    public Order transitionTo(Long orderId, OrderState targetState) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+
+        orderStateMachine.validateTransition(order.getStatus(), targetState);
+
+        order.setStatus(targetState);
+
+        return orderRepository.save(order);
     }
 }
