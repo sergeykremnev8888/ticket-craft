@@ -23,7 +23,11 @@ public class NotificationConsumer {
         this.processor = processor;
     }
 
-    @KafkaListener(topics = "order-events", groupId = "notification-group")
+    @KafkaListener(
+            id = "notificationConsumer",
+            topics = "order-events",
+            groupId = "${spring.kafka.consumer.group-id}"
+    )
     public void listen(@Payload OrderEvent event, @Header(KafkaHeaders.RECEIVED_KEY) String messageKey,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition, @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
@@ -32,7 +36,6 @@ public class NotificationConsumer {
                 messageKey, event.getMessageId());
 
         processor.process(event);
-
         acknowledgment.acknowledge();
 
         log.info("Сообщение обработано и подтверждено [messageId={}, orderId={}]", event.getMessageId(),
