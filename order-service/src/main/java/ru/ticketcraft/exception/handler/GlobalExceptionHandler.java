@@ -13,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import ru.ticketcraft.exception.InvalidOrderStateTransitionException;
 import ru.ticketcraft.exception.OrderConflictException;
 
 @RestControllerAdvice
@@ -51,6 +52,14 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         problem.setTitle("Malformed request");
         problem.setDetail("Request body is invalid");
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidOrderStateTransitionException.class)
+    public ProblemDetail handleInvalidOrderStateTransition(InvalidOrderStateTransitionException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Invalid order state transition");
+        problem.setDetail(ex.getMessage());
         return problem;
     }
 }

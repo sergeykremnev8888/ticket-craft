@@ -52,12 +52,15 @@ class OrderServiceIdempotencyTest {
     @Mock
     private RequestHashService requestHashService;
 
+    @Mock
+    private OrderStateMachine orderStateMachine;
+
     private OrderService service;
 
     @BeforeEach
     void setUp() {
         service = new OrderService(orderRepository, catalogClient, outboxService, idempotencyService,
-                requestHashService);
+                requestHashService, orderStateMachine);
     }
 
     @Test
