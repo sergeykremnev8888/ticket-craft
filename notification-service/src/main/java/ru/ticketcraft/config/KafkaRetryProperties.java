@@ -4,7 +4,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 
 @ConfigurationProperties(prefix = "ticketcraft.kafka.retry")
 @Validated
@@ -15,9 +14,6 @@ public class KafkaRetryProperties {
 
     @Min(0)
     private long backoffMs;
-
-    @NotBlank
-    private String dltTopic;
 
     public int getMaxAttempts() {
         return maxAttempts;
@@ -35,11 +31,4 @@ public class KafkaRetryProperties {
         this.backoffMs = backoffMs;
     }
 
-    public String getDltTopic() {
-        return dltTopic;
-    }
-
-    public void setDltTopic(String dltTopic) {
-        this.dltTopic = dltTopic;
-    }
 }

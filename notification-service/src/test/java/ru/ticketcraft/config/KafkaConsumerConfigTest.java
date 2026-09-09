@@ -1,63 +1,32 @@
 package ru.ticketcraft.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
-import java.util.concurrent.CompletableFuture;
-
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
-import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
+import org.springframework.kafka.listener.DefaultErrorHandler;
 
 import ru.ticketcraft.dto.OrderEvent;
 
-@ExtendWith(MockitoExtension.class)
 class KafkaConsumerConfigTest {
 
     @Mock
-    private KafkaTemplate<String, OrderEvent> kafkaTemplate;
-
-    @Captor
-    private ArgumentCaptor<ProducerRecord<String, OrderEvent>> producerRecordCaptor;
+    private ConsumerFactory<String, OrderEvent> consumerFactory;
 
     @Test
-    void shouldPublishFailedRecordToConfiguredDlt() {
-        KafkaRetryProperties properties = new KafkaRetryProperties();
-        properties.setDltTopic("order-events.DLT");
-
-        when(kafkaTemplate.send(ArgumentMatchers.<ProducerRecord<String, OrderEvent>>any()))
-                .thenReturn(CompletableFuture.completedFuture(null));
+    void shouldConfigureListenerContainerFactory() {
+        DefaultErrorHandler errorHandler = mock(DefaultErrorHandler.class);
 
         KafkaConsumerConfig config = new KafkaConsumerConfig();
 
-        DeadLetterPublishingRecoverer recoverer = config.deadLetterPublishingRecoverer(kafkaTemplate, properties);
+        ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory = config
+                .kafkaListenerContainerFactory(consumerFactory, errorHandler);
 
-        OrderEvent orderEvent = new OrderEvent(null, null, null, null, null, null, null, null);
-        ConsumerRecord<Object, Object> record = new ConsumerRecord<>("order-events", 0, 42L, "key", orderEvent);
-
-        RuntimeException exception = new RuntimeException("Processing failed");
-
-        recoverer.accept(record, exception);
-
-        verify(kafkaTemplate).send(producerRecordCaptor.capture());
-
-        ProducerRecord<String, OrderEvent> dltRecord = producerRecordCaptor.getValue();
-
-        assertThat(dltRecord.topic()).isEqualTo("order-events.DLT");
-
-        assertThat(dltRecord.partition()).isEqualTo(0);
-
-        assertThat(dltRecord.key()).isEqualTo("key");
-
-        assertThat(dltRecord.value()).isEqualTo(orderEvent);
+        assertThat(factory.getConsumerFactory()).isSameAs(consumerFactory);
+        assertThat(factory.getContainerProperties().getAckMode()).isEqualTo(ContainerProperties.AckMode.MANUAL);
     }
 }

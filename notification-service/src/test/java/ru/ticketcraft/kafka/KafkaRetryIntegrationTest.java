@@ -21,8 +21,10 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -61,26 +63,26 @@ import ru.ticketcraft.service.IdempotentNotificationProcessor;
         "spring.kafka.listener.ack-mode=manual",
         "spring.kafka.listener.auto-startup=true",
 
-        "ticketcraft.kafka.retry.max-attempts=3",
-        "ticketcraft.kafka.retry.backoff-ms=100",
-        "ticketcraft.kafka.retry.dlt-topic=order-events.DLT",
+        "ticketcraft.kafka.topic.source-topic=order-events",
+        "ticketcraft.kafka.topic.dlt-topic=order-events.DLT",
+        "ticketcraft.kafka.topic.partitions=3",
+        "ticketcraft.kafka.topic.replicas=1",
 
-        "logging.level.org.springframework.kafka=DEBUG",
-        "logging.level.org.springframework.kafka.listener=TRACE",
-        "logging.level.org.apache.kafka.clients.consumer=INFO"
+        "ticketcraft.kafka.retry.max-attempts=3",
+        "ticketcraft.kafka.retry.backoff-ms=100"
 })
 @EmbeddedKafka(
-        partitions = 1,
+        partitions = 3,
         topics = {
-                "order-events",
-                "order-events.DLT"
+                KafkaRetryIntegrationTest.SOURCE_TOPIC,
+                KafkaRetryIntegrationTest.DLT_TOPIC
         }
 )
 @Testcontainers
 class KafkaRetryIntegrationTest {
 
-    private static final String SOURCE_TOPIC = "order-events";
-    private static final String DLT_TOPIC = "order-events.DLT";
+    public static final String SOURCE_TOPIC = "order-events";
+    public static final String DLT_TOPIC = "order-events.DLT";
 
     @Container
     @ServiceConnection
@@ -113,14 +115,19 @@ class KafkaRetryIntegrationTest {
 
     @Test
     void shouldRetryThreeTimesAndPublishToDlt() {
+
         OrderEvent event = createEvent();
 
         doThrow(new RuntimeException("Processing failed")).when(processor).process(any(OrderEvent.class));
 
-        try(Consumer<String, OrderEvent> dltConsumer = createDltConsumer()) {
+        try (Consumer<String, OrderEvent> dltConsumer = createDltConsumer()) {
+
             waitForListenerAssignment();
 
-            kafkaTemplate.send(SOURCE_TOPIC, event.getMessageId(), event).join();
+            ProducerRecord<String, OrderEvent> record = new ProducerRecord<>(SOURCE_TOPIC, 2, event.getMessageId(),
+                    event);
+
+            kafkaTemplate.send(record).join();
 
             verify(processor, timeout(10_000).times(3)).process(any(OrderEvent.class));
 
@@ -132,22 +139,37 @@ class KafkaRetryIntegrationTest {
             assertThat(dltRecord.value().getMessageId()).isEqualTo(event.getMessageId());
 
             assertThat(dltRecord.key()).isEqualTo(event.getMessageId());
+
+            assertThat(dltRecord.partition()).isEqualTo(2);
         }
     }
 
     @Test
     void shouldProcessSuccessfullyWithoutRetryAndDlt() {
+
         OrderEvent event = createEvent();
 
-        try(Consumer<String, OrderEvent> dltConsumer = createDltConsumer()) {
+        try (Consumer<String, OrderEvent> dltConsumer = createDltConsumer()) {
+
             waitForListenerAssignment();
 
             kafkaTemplate.send(SOURCE_TOPIC, event.getMessageId(), event).join();
 
-            verify(processor, timeout(10_000).times(1)).process(any(OrderEvent.class));
+            ArgumentCaptor<OrderEvent> eventCaptor = ArgumentCaptor.forClass(OrderEvent.class);
+
+            verify(processor, timeout(10_000).times(1)).process(eventCaptor.capture());
+
+            OrderEvent processedEvent = eventCaptor.getValue();
+            assertThat(processedEvent.getMessageId()).isEqualTo(event.getMessageId());
+            assertThat(processedEvent.getOrderId()).isEqualTo(event.getOrderId());
+            assertThat(processedEvent.getUserId()).isEqualTo(event.getUserId());
+            assertThat(processedEvent.getEventId()).isEqualTo(event.getEventId());
+            assertThat(processedEvent.getTicketIds()).containsExactlyElementsOf(event.getTicketIds());
+            assertThat(processedEvent.getTotalPrice()).isEqualByComparingTo(event.getTotalPrice());
+            assertThat(processedEvent.getState()).isEqualTo(event.getState());
+            assertThat(processedEvent.getCreatedAt()).isEqualTo(event.getCreatedAt());
 
             ConsumerRecords<String, OrderEvent> records = dltConsumer.poll(Duration.ofSeconds(2));
-
             assertThat(records).isEmpty();
         }
     }
@@ -157,7 +179,7 @@ class KafkaRetryIntegrationTest {
 
         assertThat(container).isNotNull();
 
-        ContainerTestUtils.waitForAssignment(container, 1);
+        ContainerTestUtils.waitForAssignment(container, 3);
     }
 
     private Consumer<String, OrderEvent> createDltConsumer() {

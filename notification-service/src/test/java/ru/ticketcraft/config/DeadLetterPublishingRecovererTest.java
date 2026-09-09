@@ -30,8 +30,8 @@ class DeadLetterPublishingRecovererTest {
     private ArgumentCaptor<ProducerRecord<String, OrderEvent>> producerRecordCaptor;
 
     @Test
-    void shouldPublishFailedRecordToConfiguredDlt() {
-        KafkaRetryProperties properties = new KafkaRetryProperties();
+    void shouldPublishFailedRecordToConfiguredDltWithSamePartition() {
+        KafkaTopicProperties properties = new KafkaTopicProperties();
         properties.setDltTopic("order-events.DLT");
 
         when(kafkaTemplate.send(ArgumentMatchers.<ProducerRecord<String, OrderEvent>>any()))
@@ -42,7 +42,8 @@ class DeadLetterPublishingRecovererTest {
         DeadLetterPublishingRecoverer recoverer = config.deadLetterPublishingRecoverer(kafkaTemplate, properties);
 
         OrderEvent orderEvent = new OrderEvent(null, null, null, null, null, null, null, null);
-        ConsumerRecord<Object, Object> record = new ConsumerRecord<>("order-events", 0, 42L, "key", orderEvent);
+
+        ConsumerRecord<Object, Object> record = new ConsumerRecord<>("order-events", 2, 42L, "key", orderEvent);
 
         RuntimeException exception = new RuntimeException("Processing failed");
 
@@ -54,11 +55,10 @@ class DeadLetterPublishingRecovererTest {
 
         assertThat(dltRecord.topic()).isEqualTo("order-events.DLT");
 
-        assertThat(dltRecord.partition()).isEqualTo(0);
+        assertThat(dltRecord.partition()).isEqualTo(2);
 
         assertThat(dltRecord.key()).isEqualTo("key");
 
         assertThat(dltRecord.value()).isEqualTo(orderEvent);
     }
-
 }

@@ -1,6 +1,7 @@
 package ru.ticketcraft.config;
 
 import org.apache.kafka.common.TopicPartition;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
@@ -14,14 +15,15 @@ import org.springframework.util.backoff.FixedBackOff;
 import ru.ticketcraft.dto.OrderEvent;
 
 @Configuration
+@EnableConfigurationProperties(KafkaRetryProperties.class)
 public class KafkaConsumerConfig {
 
     @Bean
     DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(KafkaTemplate<String, OrderEvent> kafkaTemplate,
-            KafkaRetryProperties retryProperties) {
+            KafkaTopicProperties topicProperties) {
 
         return new DeadLetterPublishingRecoverer(kafkaTemplate,
-                (record, exception) -> new TopicPartition(retryProperties.getDltTopic(), record.partition()));
+                (record, exception) -> new TopicPartition(topicProperties.getDltTopic(), record.partition()));
     }
 
     @Bean

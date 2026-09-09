@@ -35,7 +35,12 @@ ticketcraft:
     retry:
       max-attempts: 3
       backoff-ms: 1000
+
+    topic:
+      source-topic: order-events
       dlt-topic: order-events.DLT
+      partitions: 1
+      replicas: 1
 
 logging:
   level:

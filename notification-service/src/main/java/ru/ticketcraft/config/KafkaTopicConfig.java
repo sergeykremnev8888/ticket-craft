@@ -7,11 +7,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
 
 @Configuration
-@EnableConfigurationProperties(KafkaRetryProperties.class)
+@EnableConfigurationProperties(KafkaTopicProperties.class)
 public class KafkaTopicConfig {
 
     @Bean
-    NewTopic orderEventsDltTopic(KafkaRetryProperties retryProperties) {
-        return TopicBuilder.name(retryProperties.getDltTopic()).partitions(1).replicas(1).build();
+    NewTopic orderEventsDltTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getDltTopic()).partitions(topicProperties.getPartitions())
+                .replicas(topicProperties.getReplicas()).build();
     }
 }

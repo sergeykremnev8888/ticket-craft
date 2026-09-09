@@ -25,7 +25,7 @@ public class NotificationConsumer {
 
     @KafkaListener(
             id = "notificationConsumer",
-            topics = "order-events",
+            topics = "${ticketcraft.kafka.topic.source-topic}",
             groupId = "${spring.kafka.consumer.group-id}"
     )
     public void listen(@Payload OrderEvent event, @Header(KafkaHeaders.RECEIVED_KEY) String messageKey,
