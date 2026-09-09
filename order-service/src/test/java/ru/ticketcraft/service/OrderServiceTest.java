@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import ru.ticketcraft.client.CatalogClient;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.exception.InvalidOrderStateTransitionException;
+import ru.ticketcraft.exception.OrderNotFoundException;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.repository.OrderRepository;
 
@@ -103,7 +104,7 @@ class OrderServiceTest {
         when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> orderService.transitionTo(ORDER_ID, OrderState.TICKETS_RESERVED))
-                .isInstanceOf(IllegalArgumentException.class).hasMessage("Order not found: " + ORDER_ID);
+                .isInstanceOf(OrderNotFoundException.class).hasMessage("Order not found: " + ORDER_ID);
 
         verify(orderStateMachine, never()).validateTransition(any(), any());
 
