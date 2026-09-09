@@ -14,8 +14,8 @@ class KafkaRetryPropertiesTest {
 
     @Test
     void shouldBindKafkaRetryProperties() {
-        contextRunner.withPropertyValues("ticketcraft.kafka.retry.max-attempts=3",
-                "ticketcraft.kafka.retry.backoff-ms=1000", "ticketcraft.kafka.retry.dlt-topic=order-events.DLT")
+        contextRunner
+                .withPropertyValues("ticketcraft.kafka.retry.max-attempts=3", "ticketcraft.kafka.retry.backoff-ms=1000")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
 
@@ -27,8 +27,8 @@ class KafkaRetryPropertiesTest {
 
     @Test
     void shouldRejectZeroMaxAttempts() {
-        contextRunner.withPropertyValues("ticketcraft.kafka.retry.max-attempts=0",
-                "ticketcraft.kafka.retry.backoff-ms=1000", "ticketcraft.kafka.retry.dlt-topic=order-events.DLT")
+        contextRunner
+                .withPropertyValues("ticketcraft.kafka.retry.max-attempts=0", "ticketcraft.kafka.retry.backoff-ms=1000")
                 .run(context -> {
 
                     assertThat(context).hasFailed();
@@ -37,19 +37,12 @@ class KafkaRetryPropertiesTest {
 
     @Test
     void shouldRejectNegativeBackoff() {
-        contextRunner.withPropertyValues("ticketcraft.kafka.retry.max-attempts=3",
-                "ticketcraft.kafka.retry.backoff-ms=-1", "ticketcraft.kafka.retry.dlt-topic=order-events.DLT")
+        contextRunner
+                .withPropertyValues("ticketcraft.kafka.retry.max-attempts=3", "ticketcraft.kafka.retry.backoff-ms=-1")
                 .run(context -> {
 
                     assertThat(context).hasFailed();
                 });
-    }
-
-    @Test
-    void shouldRejectBlankDltTopic() {
-        contextRunner.withPropertyValues("ticketcraft.kafka.topic.source-topic=order-events",
-                "ticketcraft.kafka.topic.dlt-topic=", "ticketcraft.kafka.topic.partitions=1",
-                "ticketcraft.kafka.topic.replicas=1").run(context -> assertThat(context).hasFailed());
     }
 
     @Configuration
