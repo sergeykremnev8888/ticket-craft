@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: ${PAYMENT_DB_URL}
+    username: ${PAYMENT_DB_USERNAME}
+    password: ${PAYMENT_DB_PASSWORD}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:payment-group}
+
+    producer:
+      acks: all
+      retries: ${KAFKA_PRODUCER_RETRIES:10}
+
+ticketcraft:
+  kafka:
+    topic:
+      partitions: 3
+      replicas: 3

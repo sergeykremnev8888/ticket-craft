@@ -25,6 +25,7 @@
         <module>catalog-service</module>
         <module>order-service</module>
         <module>notification-service</module>
+        <module>payment-service</module>
     </modules>
 
     <!-- Управление версиями зависимостей (импортируем BOM от Spring Boot) -->
@@ -58,12 +59,4 @@
         </dependencies>
     </dependencyManagement>
 
-    <dependencies>
-        <!-- Утилита Lombok, чтобы не писать геттеры/сеттеры руками, полезна во всех модулях -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <scope>provided</scope>
-        </dependency>
-    </dependencies>
 </project>
