@@ -7,6 +7,12 @@ spring:
       auto-offset-reset: earliest
       enable-auto-commit: false
 
+ticketcraft:
+  kafka:
+    topic:
+      partitions: 1
+      replicas: 1
+
 logging:
   level:
     "[ru.ticketcraft]": DEBUG

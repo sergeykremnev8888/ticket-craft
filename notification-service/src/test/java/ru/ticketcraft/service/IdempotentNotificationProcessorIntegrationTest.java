@@ -8,20 +8,23 @@ import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.data.jdbc.test.autoconfigure.DataJdbcTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.repository.ProcessedEventRepository;
 
-@SpringBootTest(properties = { "spring.kafka.listener.auto-startup=false" })
+@DataJdbcTest
 @Testcontainers
-@ActiveProfiles("test")
+@Import({ ProcessedEventRepository.class, IdempotentNotificationProcessor.class })
 class IdempotentNotificationProcessorIntegrationTest {
 
     private static final String MESSAGE_ID = "rollback-message-001";
@@ -47,6 +50,7 @@ class IdempotentNotificationProcessorIntegrationTest {
     }
 
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void shouldRollbackProcessedEventWhenNotificationFails() {
         OrderEvent event = org.mockito.Mockito.mock(OrderEvent.class);
 

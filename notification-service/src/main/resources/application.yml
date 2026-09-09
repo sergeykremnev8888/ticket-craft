@@ -5,18 +5,42 @@ spring:
   profiles:
     default: local
 
-  server:
-    port: ${SERVER_PORT:8083}
-
   kafka:
     listener:
       ack-mode: manual
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+
+    consumer:
+      enable-auto-commit: false
+      group-id: ${KAFKA_CONSUMER_GROUP:notification-group}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      properties:
+        "[spring.json.trusted.packages]": ru.ticketcraft.dto
+        "[spring.json.value.default.type]": ru.ticketcraft.dto.OrderEvent
+
+server:
+  port: ${SERVER_PORT:8083}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
+
+ticketcraft:
+  kafka:
+    retry:
+      max-attempts: 3
+      backoff-ms: 1000
+
+    topic:
+      source-topic: order-events
+      dlt-topic: order-events.DLT
+      partitions: 1
+      replicas: 1
 
 logging:
   level:
