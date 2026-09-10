@@ -39,10 +39,10 @@ public class PaymentService {
                 payment.getAmount());
 
         if (result.successful()) {
-            PaymentSucceededEvent suceededEvent = new PaymentSucceededEvent(createSucceededMessageId(payment.getId()),
+            PaymentSucceededEvent succeededEvent = new PaymentSucceededEvent(createSucceededMessageId(payment.getId()),
                     payment.getOrderId(), payment.getId(), payment.getAmount(), Instant.now());
 
-            paymentTransactionService.markSucceeded(suceededEvent);
+            paymentTransactionService.markSucceeded(succeededEvent);
 
             return result;
         }

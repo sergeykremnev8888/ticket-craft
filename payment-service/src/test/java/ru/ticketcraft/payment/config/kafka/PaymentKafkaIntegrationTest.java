@@ -1,6 +1,7 @@
 package ru.ticketcraft.payment.config.kafka;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -8,7 +9,6 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.awaitility.Awaitility.await;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -19,7 +19,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -45,7 +44,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;
@@ -112,13 +113,15 @@ class PaymentKafkaIntegrationTest {
 
         kafkaTemplate.send(REQUEST_TOPIC, event.messageId(), event).join();
 
-        verify(paymentGateway, timeout(10_000).times(1)).charge(any(UUID.class), eq(event.orderId()),
-                eq(event.userId()), eq(event.amount()));
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
 
-        Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
+            assertThat(payment).isPresent();
+            assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        });
 
-        assertThat(payment).isPresent();
-        assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        verify(paymentGateway, times(1)).charge(any(UUID.class), eq(event.orderId()), eq(event.userId()),
+                eq(event.amount()));
     }
 
     @Test
@@ -220,11 +223,128 @@ class PaymentKafkaIntegrationTest {
 
         assertThat(paymentIds.get(0)).isEqualTo(paymentIds.get(1));
 
-        Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
+        UUID paymentId = paymentIds.get(0);
 
-        assertThat(payment).isPresent();
-        assertThat(payment.get().getId()).isEqualTo(paymentIds.get(0));
-        assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
+
+            assertThat(payment).isPresent();
+            assertThat(payment.get().getId()).isEqualTo(paymentId);
+            assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        });
+    }
+
+    @Test
+    void shouldPublishSucceededEventFromOutboxToResultTopic() {
+        PaymentRequestedEvent event = createEvent(1005L, "payment-message-outbox-success");
+
+        when(paymentGateway.charge(any(UUID.class), eq(event.orderId()), eq(event.userId()), eq(event.amount())))
+                .thenReturn(PaymentResult.success());
+
+        try (Consumer<String, PaymentSucceededEvent> resultConsumer = createResultConsumer(
+                "payment-result-test-group-success", PaymentSucceededEvent.class)) {
+
+            waitForListenerAssignment();
+
+            kafkaTemplate.send(REQUEST_TOPIC, event.messageId(), event).join();
+
+            ConsumerRecord<String, PaymentSucceededEvent> resultRecord = KafkaTestUtils.getSingleRecord(resultConsumer,
+                    RESULT_TOPIC, Duration.ofSeconds(10));
+
+            assertThat(resultRecord).isNotNull();
+
+            PaymentSucceededEvent resultEvent = resultRecord.value();
+
+            assertThat(resultEvent).isNotNull();
+
+            assertThat(resultEvent.orderId()).isEqualTo(event.orderId());
+
+            assertThat(resultEvent.amount()).isEqualByComparingTo(event.amount());
+
+            assertThat(resultEvent.paymentId()).isNotNull();
+
+            assertThat(resultEvent.messageId()).isEqualTo("payment:" + resultEvent.paymentId() + ":succeeded");
+
+            assertThat(resultRecord.key()).isEqualTo(event.orderId().toString());
+
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
+
+                assertThat(payment).isPresent();
+
+                assertThat(payment.get().getId()).isEqualTo(resultEvent.paymentId());
+
+                assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+            });
+
+            verify(paymentGateway, times(1)).charge(any(UUID.class), eq(event.orderId()), eq(event.userId()),
+                    eq(event.amount()));
+        }
+    }
+
+    @Test
+    void shouldPublishFailedEventFromOutboxToResultTopic() {
+        PaymentRequestedEvent event = createEvent(1006L, "payment-message-outbox-failed");
+
+        when(paymentGateway.charge(any(UUID.class), eq(event.orderId()), eq(event.userId()), eq(event.amount())))
+                .thenReturn(PaymentResult.failure("Insufficient funds"));
+
+        try (Consumer<String, PaymentFailedEvent> resultConsumer = createResultConsumer(
+                "payment-result-test-group-failed", PaymentFailedEvent.class)) {
+
+            waitForListenerAssignment();
+
+            kafkaTemplate.send(REQUEST_TOPIC, event.messageId(), event).join();
+
+            ConsumerRecord<String, PaymentFailedEvent> resultRecord = KafkaTestUtils.getSingleRecord(resultConsumer,
+                    RESULT_TOPIC, Duration.ofSeconds(10));
+
+            PaymentFailedEvent resultEvent = resultRecord.value();
+
+            assertThat(resultEvent).isNotNull();
+
+            assertThat(resultEvent.orderId()).isEqualTo(event.orderId());
+
+            assertThat(resultEvent.paymentId()).isNotNull();
+
+            assertThat(resultEvent.amount()).isEqualByComparingTo(event.amount());
+
+            assertThat(resultEvent.messageId()).isEqualTo("payment:" + resultEvent.paymentId() + ":failed");
+
+            assertThat(resultEvent.reason()).isEqualTo("Insufficient funds");
+
+            assertThat(resultRecord.key()).isEqualTo(event.orderId().toString());
+
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
+
+                assertThat(payment).isPresent();
+
+                assertThat(payment.get().getId()).isEqualTo(resultEvent.paymentId());
+
+                assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.FAILED);
+            });
+
+            verify(paymentGateway, times(1)).charge(any(UUID.class), eq(event.orderId()), eq(event.userId()),
+                    eq(event.amount()));
+        }
+    }
+
+    private <T> Consumer<String, T> createResultConsumer(String groupId, Class<T> eventType) {
+        Map<String, Object> consumerProperties = KafkaTestUtils.consumerProps(embeddedKafkaBroker, groupId, false);
+
+        JacksonJsonDeserializer<T> valueDeserializer = new JacksonJsonDeserializer<>(eventType);
+
+        valueDeserializer.addTrustedPackages("ru.ticketcraft.dto");
+
+        ConsumerFactory<String, T> consumerFactory = new DefaultKafkaConsumerFactory<>(consumerProperties,
+                new StringDeserializer(), valueDeserializer);
+
+        Consumer<String, T> consumer = consumerFactory.createConsumer();
+
+        embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, true, RESULT_TOPIC);
+
+        return consumer;
     }
 
     private void waitForListenerAssignment() {
@@ -236,10 +356,7 @@ class PaymentKafkaIntegrationTest {
     }
 
     private Consumer<String, PaymentRequestedEvent> createDltConsumer(String groupId) {
-
         Map<String, Object> consumerProperties = KafkaTestUtils.consumerProps(embeddedKafkaBroker, groupId, false);
-
-        consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
         JacksonJsonDeserializer<PaymentRequestedEvent> valueDeserializer = new JacksonJsonDeserializer<>(
                 PaymentRequestedEvent.class);
@@ -251,7 +368,7 @@ class PaymentKafkaIntegrationTest {
 
         Consumer<String, PaymentRequestedEvent> consumer = consumerFactory.createConsumer();
 
-        consumer.subscribe(List.of(DLT_TOPIC));
+        embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, true, DLT_TOPIC);
 
         return consumer;
     }

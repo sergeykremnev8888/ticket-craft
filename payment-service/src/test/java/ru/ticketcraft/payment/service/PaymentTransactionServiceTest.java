@@ -179,8 +179,8 @@ class PaymentTransactionServiceTest {
     void shouldMarkPaymentAsFailedAndCreateOutboxEvent() {
         UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
-        PaymentFailedEvent event = new PaymentFailedEvent(createFailedMessageId(paymentId), 100L, paymentId, new BigDecimal("150.00"),
-                "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
+        PaymentFailedEvent event = new PaymentFailedEvent(createFailedMessageId(paymentId), 100L, paymentId,
+                new BigDecimal("150.00"), "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
 
         when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
                 .thenReturn(1);
@@ -198,8 +198,8 @@ class PaymentTransactionServiceTest {
     void shouldThrowWhenFailedPaymentStatusUpdateUpdatesMoreThanOneRow() {
         UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
-        PaymentFailedEvent event = new PaymentFailedEvent(createFailedMessageId(paymentId), 100L, paymentId, new BigDecimal("150.00"),
-                "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
+        PaymentFailedEvent event = new PaymentFailedEvent(createFailedMessageId(paymentId), 100L, paymentId,
+                new BigDecimal("150.00"), "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
 
         when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
                 .thenReturn(2);
@@ -230,35 +230,95 @@ class PaymentTransactionServiceTest {
     }
 
     @Test
-    void shouldNotCreateFailedOutboxEventWhenPaymentAlreadyCompleted() {
+    void shouldNotCreateFailedOutboxEventWhenPaymentAlreadyFailed() {
         UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
         PaymentFailedEvent event = new PaymentFailedEvent(createFailedMessageId(paymentId), 100L, paymentId,
                 new BigDecimal("150.00"), "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
 
+        Payment currentPayment = createPayment(paymentId, PaymentStatus.FAILED);
+
         when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
                 .thenReturn(0);
 
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(currentPayment));
+
         paymentTransactionService.markFailed(event);
 
+        verify(paymentRepository).findById(paymentId);
+
         verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
     }
 
     @Test
-    void shouldNotCreateSucceededOutboxEventWhenPaymentAlreadyCompleted() {
+    void shouldNotCreateSucceededOutboxEventWhenPaymentAlreadySucceeded() {
         UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
         PaymentSucceededEvent event = new PaymentSucceededEvent(createSucceededMessageId(paymentId), 100L, paymentId,
                 new BigDecimal("150.00"), Instant.parse("2026-09-09T10:01:00Z"));
 
+        Payment currentPayment = createPayment(paymentId, PaymentStatus.SUCCEEDED);
+
         when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
                 .thenReturn(0);
 
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(currentPayment));
+
         paymentTransactionService.markSucceeded(event);
+
+        verify(paymentRepository).findById(paymentId);
 
         verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
 
         verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
+    }
+
+    @Test
+    void shouldRejectSucceededTransitionWhenPaymentAlreadyFailed() {
+        UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+        PaymentSucceededEvent event = new PaymentSucceededEvent(createSucceededMessageId(paymentId), 100L, paymentId,
+                new BigDecimal("150.00"), Instant.parse("2026-09-09T10:01:00Z"));
+
+        Payment currentPayment = createPayment(paymentId, PaymentStatus.FAILED);
+
+        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
+                .thenReturn(0);
+
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(currentPayment));
+
+        assertThatThrownBy(() -> paymentTransactionService.markSucceeded(event))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("Cannot transition payment")
+                .hasMessageContaining("FAILED").hasMessageContaining("SUCCEEDED");
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
+    }
+
+    @Test
+    void shouldRejectFailedTransitionWhenPaymentAlreadySucceeded() {
+        UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+        PaymentFailedEvent event = new PaymentFailedEvent(createFailedMessageId(paymentId), 100L, paymentId,
+                new BigDecimal("150.00"), "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
+
+        Payment currentPayment = createPayment(paymentId, PaymentStatus.SUCCEEDED);
+
+        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
+                .thenReturn(0);
+
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(currentPayment));
+
+        assertThatThrownBy(() -> paymentTransactionService.markFailed(event)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot transition payment").hasMessageContaining("SUCCEEDED")
+                .hasMessageContaining("FAILED");
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
     }
 
     private PaymentRequestedEvent createEvent() {

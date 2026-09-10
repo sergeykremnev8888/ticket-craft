@@ -30,11 +30,6 @@ public class PaymentConsumer {
         log.info("Получено PaymentRequestedEvent " + "[messageId={}, orderId={}]", event.messageId(), event.orderId());
 
         PaymentResult result = paymentService.process(event);
-
-        // Пока event publishing добавим следующим шагом.
-        // ACK должен происходить только после успешной
-        // обработки текущего use case.
-
         acknowledgment.acknowledge();
 
         log.info("PaymentRequestedEvent обработан " + "[messageId={}, orderId={}, successful={}]", event.messageId(),

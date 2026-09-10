@@ -66,7 +66,7 @@ class PaymentServiceTest {
 
         PaymentSucceededEvent succeededEvent = eventCaptor.getValue();
 
-        assertThat(succeededEvent.messageId()).isNotBlank();
+        assertThat(succeededEvent.messageId()).isEqualTo("payment:" + paymentId + ":succeeded");
         assertThat(succeededEvent.orderId()).isEqualTo(event.orderId());
         assertThat(succeededEvent.paymentId()).isEqualTo(paymentId);
         assertThat(succeededEvent.amount()).isEqualByComparingTo(event.amount());
@@ -103,7 +103,7 @@ class PaymentServiceTest {
 
         PaymentFailedEvent failedEvent = eventCaptor.getValue();
 
-        assertThat(failedEvent.messageId()).isNotBlank();
+        assertThat(failedEvent.messageId()).isEqualTo("payment:" + paymentId + ":failed");
         assertThat(failedEvent.orderId()).isEqualTo(event.orderId());
         assertThat(failedEvent.paymentId()).isEqualTo(paymentId);
         assertThat(failedEvent.amount()).isEqualByComparingTo(event.amount());

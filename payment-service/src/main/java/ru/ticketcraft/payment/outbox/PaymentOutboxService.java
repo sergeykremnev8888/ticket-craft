@@ -12,10 +12,6 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class PaymentOutboxService {
 
-    private static final String PAYMENT_SUCCEEDED_EVENT = "PaymentSucceededEvent";
-
-    private static final String PAYMENT_FAILED_EVENT = "PaymentFailedEvent";
-
     private final PaymentOutboxRepository paymentOutboxRepository;
     private final ObjectMapper objectMapper;
 
@@ -26,18 +22,17 @@ public class PaymentOutboxService {
     }
 
     public void addSucceededEvent(PaymentSucceededEvent event) {
-        addEvent(event.messageId(), event.orderId(), PAYMENT_SUCCEEDED_EVENT, event);
+        addEvent(event.messageId(), event.orderId(), PaymentOutboxEventType.PAYMENT_SUCCEEDED, event);
     }
 
     public void addFailedEvent(PaymentFailedEvent event) {
-        addEvent(event.messageId(), event.orderId(), PAYMENT_FAILED_EVENT, event);
+        addEvent(event.messageId(), event.orderId(), PaymentOutboxEventType.PAYMENT_FAILED, event);
     }
 
-    private void addEvent(String messageId, Long orderId, String eventType, Object event) {
-
+    private void addEvent(String messageId, Long orderId, PaymentOutboxEventType eventType, Object event) {
         String payload = objectMapper.writeValueAsString(event);
 
-        paymentOutboxRepository.insertIfAbsent(UUID.randomUUID(), messageId, orderId, eventType, payload,
-                Instant.now());
+        paymentOutboxRepository.insertIfAbsent(UUID.randomUUID(), messageId, orderId, eventType.getPersistedValue(),
+                payload, Instant.now());
     }
 }

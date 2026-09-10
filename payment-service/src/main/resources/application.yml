@@ -38,6 +38,10 @@ logging:
     "[ru.ticketcraft]": INFO
 
 ticketcraft:
+  outbox:
+    batch-size: ${PAYMENT_OUTBOX_BATCH_SIZE:100}
+    claim-lease: ${PAYMENT_OUTBOX_CLAIM_LEASE:30s}
+    publish-delay: ${PAYMENT_OUTBOX_PUBLISH_DELAY:1s}
   kafka:
     request-topic: payment-requests
     result-topic: payment-results
