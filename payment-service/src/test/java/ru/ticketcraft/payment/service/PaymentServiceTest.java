@@ -2,6 +2,7 @@ package ru.ticketcraft.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,10 +14,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;
@@ -57,11 +61,23 @@ class PaymentServiceTest {
 
         verify(paymentGateway).charge(paymentId, event.orderId(), event.userId(), event.amount());
 
-        verify(paymentTransactionService).updatePaymentStatus(paymentId, PaymentStatus.SUCCEEDED);
+        ArgumentCaptor<PaymentSucceededEvent> eventCaptor = ArgumentCaptor.forClass(PaymentSucceededEvent.class);
+
+        verify(paymentTransactionService).markSucceeded(eq(paymentId), eventCaptor.capture());
+
+        PaymentSucceededEvent succeededEvent = eventCaptor.getValue();
+
+        assertThat(succeededEvent.messageId()).isNotBlank();
+        assertThat(succeededEvent.orderId()).isEqualTo(event.orderId());
+        assertThat(succeededEvent.paymentId()).isEqualTo(paymentId);
+        assertThat(succeededEvent.amount()).isEqualByComparingTo(event.amount());
+        assertThat(succeededEvent.createdAt()).isNotNull();
+
+        verify(paymentTransactionService, never()).markFailed(any(UUID.class), any(PaymentFailedEvent.class));
     }
 
     @Test
-    void shouldMarkPaymentAsFailedWhenGatewayFails() {
+    void shouldMarkPaymentAsFailedWhenGatewayReturnsFailure() {
         PaymentRequestedEvent event = createEvent();
 
         UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -78,10 +94,24 @@ class PaymentServiceTest {
         PaymentResult result = paymentService.process(event);
 
         assertThat(result.successful()).isFalse();
+        assertThat(result.reason()).isEqualTo("Insufficient funds");
 
         verify(paymentGateway).charge(paymentId, event.orderId(), event.userId(), event.amount());
 
-        verify(paymentTransactionService).updatePaymentStatus(paymentId, PaymentStatus.FAILED);
+        ArgumentCaptor<PaymentFailedEvent> eventCaptor = ArgumentCaptor.forClass(PaymentFailedEvent.class);
+
+        verify(paymentTransactionService).markFailed(eq(paymentId), eventCaptor.capture());
+
+        PaymentFailedEvent failedEvent = eventCaptor.getValue();
+
+        assertThat(failedEvent.messageId()).isNotBlank();
+        assertThat(failedEvent.orderId()).isEqualTo(event.orderId());
+        assertThat(failedEvent.paymentId()).isEqualTo(paymentId);
+        assertThat(failedEvent.amount()).isEqualByComparingTo(event.amount());
+        assertThat(failedEvent.reason()).isEqualTo("Insufficient funds");
+        assertThat(failedEvent.createdAt()).isNotNull();
+
+        verify(paymentTransactionService, never()).markSucceeded(any(UUID.class), any(PaymentSucceededEvent.class));
     }
 
     @Test
@@ -101,7 +131,9 @@ class PaymentServiceTest {
         verify(paymentGateway, never()).charge(any(UUID.class), any(Long.class), any(Long.class),
                 any(BigDecimal.class));
 
-        verify(paymentTransactionService, never()).updatePaymentStatus(any(UUID.class), any(PaymentStatus.class));
+        verify(paymentTransactionService, never()).markSucceeded(any(UUID.class), any(PaymentSucceededEvent.class));
+
+        verify(paymentTransactionService, never()).markFailed(any(UUID.class), any(PaymentFailedEvent.class));
     }
 
     @Test
@@ -122,7 +154,9 @@ class PaymentServiceTest {
         verify(paymentGateway, never()).charge(any(UUID.class), any(Long.class), any(Long.class),
                 any(BigDecimal.class));
 
-        verify(paymentTransactionService, never()).updatePaymentStatus(any(UUID.class), any(PaymentStatus.class));
+        verify(paymentTransactionService, never()).markSucceeded(any(UUID.class), any(PaymentSucceededEvent.class));
+
+        verify(paymentTransactionService, never()).markFailed(any(UUID.class), any(PaymentFailedEvent.class));
     }
 
     @Test
@@ -144,7 +178,7 @@ class PaymentServiceTest {
 
         verify(paymentGateway).charge(paymentId, event.orderId(), event.userId(), event.amount());
 
-        verify(paymentTransactionService).updatePaymentStatus(paymentId, PaymentStatus.SUCCEEDED);
+        verify(paymentTransactionService).markSucceeded(any(UUID.class), any(PaymentSucceededEvent.class));
     }
 
     private PaymentRequestedEvent createEvent() {
@@ -153,6 +187,7 @@ class PaymentServiceTest {
     }
 
     private Payment createPayment(UUID paymentId, PaymentStatus status) {
+
         Instant now = Instant.parse("2026-09-09T10:00:00Z");
 
         return new Payment(paymentId, 100L, 200L, new BigDecimal("150.00"), status, "message-1", now, now);

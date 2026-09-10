@@ -1,8 +1,13 @@
 package ru.ticketcraft.payment.service;
 
+import java.time.Instant;
+import java.util.UUID;
+
 import org.springframework.stereotype.Service;
 
+import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;
@@ -33,11 +38,18 @@ public class PaymentService {
         PaymentResult result = paymentGateway.charge(payment.getId(), payment.getOrderId(), payment.getUserId(),
                 payment.getAmount());
 
-        PaymentStatus status = result.successful() ? PaymentStatus.SUCCEEDED : PaymentStatus.FAILED;
+        if (result.successful()) {
+            PaymentSucceededEvent succeededEvent = new PaymentSucceededEvent(UUID.randomUUID().toString(),
+                    payment.getOrderId(), payment.getId(), payment.getAmount(), Instant.now());
 
-        paymentTransactionService.updatePaymentStatus(payment.getId(), status);
+            paymentTransactionService.markSucceeded(payment.getId(), succeededEvent);
+        } else {
+            PaymentFailedEvent failedEvent = new PaymentFailedEvent(UUID.randomUUID().toString(), payment.getOrderId(),
+                    payment.getId(), payment.getAmount(), result.reason(), Instant.now());
+
+            paymentTransactionService.markFailed(payment.getId(), failedEvent);
+        }
 
         return result;
     }
-
 }

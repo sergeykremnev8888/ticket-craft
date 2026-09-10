@@ -23,8 +23,7 @@ public class PaymentConsumer {
 
     @KafkaListener(
             id = "paymentConsumer",
-            topics = "${ticketcraft.kafka.request-topic}",
-            groupId = "${spring.kafka.consumer.group-id}"
+            topics = "${ticketcraft.kafka.request-topic}"
     )
     public void listen(PaymentRequestedEvent event, Acknowledgment acknowledgment) {
 

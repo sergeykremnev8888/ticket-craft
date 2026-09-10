@@ -15,3 +15,5 @@ CREATE TABLE payments
 
 CREATE INDEX idx_payments_user_id
     ON payments (user_id);
+CREATE UNIQUE INDEX uq_payments_message_id
+    ON payments(message_id);

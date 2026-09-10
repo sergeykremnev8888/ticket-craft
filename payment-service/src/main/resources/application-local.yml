@@ -11,10 +11,6 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
 
-    consumer:
-      group-id: ${PAYMENT_KAFKA_GROUP_ID:payment-group}
-      auto-offset-reset: earliest
-
 ticketcraft:
   kafka:
     concurrency: 1

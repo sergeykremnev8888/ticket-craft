@@ -17,6 +17,7 @@ spring:
     consumer:
       group-id: ${PAYMENT_KAFKA_GROUP_ID:payment-group}
       enable-auto-commit: false
+      auto-offset-reset: earliest
 
     producer:
       acks: all

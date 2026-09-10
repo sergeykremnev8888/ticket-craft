@@ -6,18 +6,17 @@ import java.util.UUID;
 
 public class Payment {
 
-    private UUID id;
-    private Long orderId;
-    private Long userId;
-    private BigDecimal amount;
-    private PaymentStatus status;
-    private String messageId;
-    private Instant createdAt;
-    private Instant updatedAt;
+    private final UUID id;
+    private final Long orderId;
+    private final Long userId;
+    private final BigDecimal amount;
+    private final PaymentStatus status;
+    private final String messageId;
+    private final Instant createdAt;
+    private final Instant updatedAt;
 
     public Payment(UUID id, Long orderId, Long userId, BigDecimal amount, PaymentStatus status, String messageId,
             Instant createdAt, Instant updatedAt) {
-
         this.id = id;
         this.orderId = orderId;
         this.userId = userId;
@@ -60,11 +59,4 @@ public class Payment {
         return updatedAt;
     }
 
-    public void setStatus(PaymentStatus status) {
-        this.status = status;
-    }
-
-    public void setUpdatedAt(Instant updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }

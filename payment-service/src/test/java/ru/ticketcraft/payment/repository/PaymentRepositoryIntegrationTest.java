@@ -9,8 +9,9 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.data.jdbc.test.autoconfigure.DataJdbcTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -19,7 +20,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import ru.ticketcraft.payment.model.Payment;
 import ru.ticketcraft.payment.model.PaymentStatus;
 
-@SpringBootTest
+@DataJdbcTest
+@Import(PaymentRepository.class)
 @Testcontainers
 @ActiveProfiles("test")
 class PaymentRepositoryIntegrationTest {
@@ -27,8 +29,11 @@ class PaymentRepositoryIntegrationTest {
     @Container
     @ServiceConnection
     @SuppressWarnings("resource")
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("payment_db").withUsername("postgres").withPassword("postgres");
+    static final PostgreSQLContainer POSTGRES =
+            new PostgreSQLContainer("postgres:16-alpine")
+                    .withDatabaseName("payment_db")
+                    .withUsername("postgres")
+                    .withPassword("postgres");
 
     @Autowired
     private PaymentRepository paymentRepository;
@@ -65,9 +70,9 @@ class PaymentRepositoryIntegrationTest {
         Instant now = Instant.parse("2026-09-09T10:00:00Z");
 
         Payment firstPayment = new Payment(paymentId1, 200L, 300L, new BigDecimal("150.00"), PaymentStatus.PENDING,
-                "message-1", now, now);
-        Payment secondPayment = new Payment(paymentId2, 200L, 300L, new BigDecimal("150.00"), PaymentStatus.PENDING,
                 "message-2", now, now);
+        Payment secondPayment = new Payment(paymentId2, 200L, 300L, new BigDecimal("150.00"), PaymentStatus.PENDING,
+                "message-3", now, now);
 
         assertThat(paymentRepository.insertIfAbsent(firstPayment)).isTrue();
         assertThat(paymentRepository.insertIfAbsent(secondPayment)).isFalse();

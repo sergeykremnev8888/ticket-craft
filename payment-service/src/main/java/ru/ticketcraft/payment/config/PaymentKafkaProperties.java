@@ -14,7 +14,7 @@ public class PaymentKafkaProperties {
     private Duration pollTimeout = Duration.ofSeconds(1);
 
     private int partitions = 3;
-    private short replicas = 1;
+    private int replicas = 1;
 
     public String getRequestTopic() {
         return requestTopic;
@@ -64,7 +64,7 @@ public class PaymentKafkaProperties {
         this.partitions = partitions;
     }
 
-    public short getReplicas() {
+    public int getReplicas() {
         return replicas;
     }
 

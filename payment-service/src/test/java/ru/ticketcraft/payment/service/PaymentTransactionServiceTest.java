@@ -21,9 +21,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.payment.model.Payment;
 import ru.ticketcraft.payment.model.PaymentStatus;
+import ru.ticketcraft.payment.outbox.PaymentOutboxService;
 import ru.ticketcraft.payment.repository.PaymentRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,11 +35,14 @@ class PaymentTransactionServiceTest {
     @Mock
     private PaymentRepository paymentRepository;
 
+    @Mock
+    private PaymentOutboxService paymentOutboxService;
+
     private PaymentTransactionService paymentTransactionService;
 
     @BeforeEach
     void setUp() {
-        paymentTransactionService = new PaymentTransactionService(paymentRepository);
+        paymentTransactionService = new PaymentTransactionService(paymentRepository, paymentOutboxService);
     }
 
     @Test
@@ -55,6 +61,10 @@ class PaymentTransactionServiceTest {
         verify(paymentRepository).findByOrderId(event.orderId());
 
         verify(paymentRepository, never()).insertIfAbsent(any(Payment.class));
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
     }
 
     @Test
@@ -68,11 +78,18 @@ class PaymentTransactionServiceTest {
         Payment result = paymentTransactionService.getOrCreatePayment(event);
 
         assertThat(result).isNotNull();
+        assertThat(result.getId()).isNotNull();
         assertThat(result.getOrderId()).isEqualTo(event.orderId());
         assertThat(result.getUserId()).isEqualTo(event.userId());
         assertThat(result.getAmount()).isEqualByComparingTo(event.amount());
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(result.getMessageId()).isEqualTo(event.messageId());
+        assertThat(result.getCreatedAt()).isNotNull();
+        assertThat(result.getUpdatedAt()).isNotNull();
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
     }
 
     @Test
@@ -108,9 +125,8 @@ class PaymentTransactionServiceTest {
         Payment existingPayment = createPayment(UUID.fromString("11111111-1111-1111-1111-111111111111"),
                 PaymentStatus.PENDING);
 
-        when(paymentRepository.findByOrderId(event.orderId()))
-                .thenReturn(Optional.<Payment>empty())
-                .thenReturn(Optional.<Payment>of(existingPayment));
+        when(paymentRepository.findByOrderId(event.orderId())).thenReturn(Optional.empty())
+                .thenReturn(Optional.of(existingPayment));
 
         when(paymentRepository.insertIfAbsent(any(Payment.class))).thenReturn(false);
 
@@ -125,38 +141,87 @@ class PaymentTransactionServiceTest {
     void shouldThrowWhenInsertWasRejectedAndPaymentCannotBeFound() {
         PaymentRequestedEvent event = createEvent();
 
-        when(paymentRepository.findByOrderId(event.orderId()))
-                .thenReturn(Optional.<Payment>empty())
-                .thenReturn(Optional.<Payment>empty());
+        when(paymentRepository.findByOrderId(event.orderId())).thenReturn(Optional.empty())
+                .thenReturn(Optional.empty());
 
         when(paymentRepository.insertIfAbsent(any(Payment.class))).thenReturn(false);
 
         assertThatThrownBy(() -> paymentTransactionService.getOrCreatePayment(event))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Payment was not found after failed insert for order 100");
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
     }
 
     @Test
-    void shouldUpdatePaymentStatusSuccessfully() {
+    void shouldMarkPaymentAsSucceededAndCreateOutboxEvent() {
         UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+        PaymentSucceededEvent event = new PaymentSucceededEvent("success-message-1", 100L, paymentId,
+                new BigDecimal("150.00"), Instant.parse("2026-09-09T10:01:00Z"));
 
         when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
                 .thenReturn(1);
 
-        paymentTransactionService.updatePaymentStatus(paymentId, PaymentStatus.SUCCEEDED);
+        paymentTransactionService.markSucceeded(paymentId, event);
 
         verify(paymentRepository).updateStatus(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class));
+
+        verify(paymentOutboxService).addSucceededEvent(event);
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
     }
 
     @Test
-    void shouldThrowWhenPaymentStatusUpdateDoesNotUpdateExactlyOneRow() {
+    void shouldMarkPaymentAsFailedAndCreateOutboxEvent() {
         UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+        PaymentFailedEvent event = new PaymentFailedEvent("failed-message-1", 100L, paymentId, new BigDecimal("150.00"),
+                "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
+
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class))).thenReturn(1);
+
+        paymentTransactionService.markFailed(paymentId, event);
+
+        verify(paymentRepository).updateStatus(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class));
+
+        verify(paymentOutboxService).addFailedEvent(event);
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+    }
+
+    @Test
+    void shouldThrowWhenSucceededPaymentStatusUpdateDoesNotUpdateExactlyOneRow() {
+        UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+        PaymentSucceededEvent event = new PaymentSucceededEvent("success-message-1", 100L, paymentId,
+                new BigDecimal("150.00"), Instant.parse("2026-09-09T10:01:00Z"));
+
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> paymentTransactionService.markSucceeded(paymentId, event))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Expected one payment to be updated, but updated rows: 0");
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+    }
+
+    @Test
+    void shouldThrowWhenFailedPaymentStatusUpdateDoesNotUpdateExactlyOneRow() {
+        UUID paymentId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+        PaymentFailedEvent event = new PaymentFailedEvent("failed-message-1", 100L, paymentId, new BigDecimal("150.00"),
+                "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
 
         when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class))).thenReturn(0);
 
-        assertThatThrownBy(() -> paymentTransactionService.updatePaymentStatus(paymentId, PaymentStatus.FAILED))
-                .isInstanceOf(IllegalStateException.class)
+        assertThatThrownBy(() -> paymentTransactionService.markFailed(paymentId, event)).isInstanceOf(IllegalStateException.class)
                 .hasMessage("Expected one payment to be updated, but updated rows: 0");
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
     }
 
     private PaymentRequestedEvent createEvent() {
@@ -165,6 +230,7 @@ class PaymentTransactionServiceTest {
     }
 
     private Payment createPayment(UUID paymentId, PaymentStatus status) {
+
         Instant now = Instant.parse("2026-09-09T10:00:00Z");
 
         return new Payment(paymentId, 100L, 200L, new BigDecimal("150.00"), status, "message-1", now, now);
