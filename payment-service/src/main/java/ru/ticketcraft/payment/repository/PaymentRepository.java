@@ -66,12 +66,13 @@ public class PaymentRepository {
         });
     }
 
-    public int updateStatus(UUID paymentId, PaymentStatus status, Instant updatedAt) {
+    public int updateStatusFromPending(UUID paymentId, PaymentStatus status, Instant updatedAt) {
         return jdbcTemplate.update("""
                 UPDATE payments
                 SET status = ?,
                     updated_at = ?
                 WHERE id = ?
+                  AND status = 'PENDING'
                 """, status.name(), Timestamp.from(updatedAt), paymentId);
     }
 

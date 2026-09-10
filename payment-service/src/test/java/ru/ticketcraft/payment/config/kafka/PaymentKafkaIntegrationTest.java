@@ -5,8 +5,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.awaitility.Awaitility.await;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -50,11 +52,9 @@ import ru.ticketcraft.payment.model.Payment;
 import ru.ticketcraft.payment.model.PaymentStatus;
 import ru.ticketcraft.payment.repository.PaymentRepository;
 
-@SpringBootTest(properties = {
-        "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
+@SpringBootTest(properties = { "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
 
-        "spring.kafka.consumer.group-id=payment-test-group",
-        "spring.kafka.consumer.auto-offset-reset=earliest",
+        "spring.kafka.consumer.group-id=payment-test-group", "spring.kafka.consumer.auto-offset-reset=earliest",
         "spring.kafka.consumer.enable-auto-commit=false",
 
         "spring.kafka.consumer.properties.spring.json.trusted.packages=ru.ticketcraft.dto",
@@ -63,26 +63,15 @@ import ru.ticketcraft.payment.repository.PaymentRepository;
         "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer",
         "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JacksonJsonSerializer",
 
-        "spring.kafka.listener.ack-mode=manual",
-        "spring.kafka.listener.auto-startup=true",
+        "spring.kafka.listener.ack-mode=manual", "spring.kafka.listener.auto-startup=true",
 
-        "ticketcraft.kafka.request-topic=payment-requests",
-        "ticketcraft.kafka.result-topic=payment-results",
-        "ticketcraft.kafka.dlt-topic=payment-requests.DLT",
-        "ticketcraft.kafka.partitions=3",
+        "ticketcraft.kafka.request-topic=payment-requests", "ticketcraft.kafka.result-topic=payment-results",
+        "ticketcraft.kafka.dlt-topic=payment-requests.DLT", "ticketcraft.kafka.partitions=3",
         "ticketcraft.kafka.replicas=1",
 
-        "ticketcraft.kafka.retry.max-attempts=3",
-        "ticketcraft.kafka.retry.back-off=100ms"
-})
-@EmbeddedKafka(
-        partitions = 3,
-        topics = {
-                PaymentKafkaIntegrationTest.REQUEST_TOPIC,
-                PaymentKafkaIntegrationTest.RESULT_TOPIC,
-                PaymentKafkaIntegrationTest.DLT_TOPIC
-        }
-)
+        "ticketcraft.kafka.retry.max-attempts=3", "ticketcraft.kafka.retry.back-off=100ms" })
+@EmbeddedKafka(partitions = 3, topics = { PaymentKafkaIntegrationTest.REQUEST_TOPIC,
+        PaymentKafkaIntegrationTest.RESULT_TOPIC, PaymentKafkaIntegrationTest.DLT_TOPIC })
 @Testcontainers
 @ActiveProfiles("test")
 class PaymentKafkaIntegrationTest {
@@ -145,8 +134,7 @@ class PaymentKafkaIntegrationTest {
 
             waitForListenerAssignment();
 
-            ProducerRecord<String, Object> record = new ProducerRecord<>(REQUEST_TOPIC, 2,
-                    event.messageId(), event);
+            ProducerRecord<String, Object> record = new ProducerRecord<>(REQUEST_TOPIC, 2, event.messageId(), event);
 
             kafkaTemplate.send(record).join();
 
@@ -192,13 +180,16 @@ class PaymentKafkaIntegrationTest {
 
             kafkaTemplate.send(REQUEST_TOPIC, event.messageId(), event).join();
 
-            verify(paymentGateway, timeout(10_000).times(1)).charge(any(UUID.class), eq(event.orderId()),
-                    eq(event.userId()), eq(event.amount()));
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
 
-            Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
+                assertThat(payment).isPresent();
 
-            assertThat(payment).isPresent();
-            assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+                assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+            });
+
+            verify(paymentGateway, times(1)).charge(any(UUID.class), eq(event.orderId()), eq(event.userId()),
+                    eq(event.amount()));
 
             ConsumerRecord<String, PaymentRequestedEvent> unexpectedDltRecord = pollSingleRecordIfPresent(dltConsumer,
                     DLT_TOPIC, Duration.ofSeconds(2));

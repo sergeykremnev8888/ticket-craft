@@ -39,17 +39,27 @@ public class PaymentService {
                 payment.getAmount());
 
         if (result.successful()) {
-            PaymentSucceededEvent succeededEvent = new PaymentSucceededEvent(UUID.randomUUID().toString(),
+            PaymentSucceededEvent suceededEvent = new PaymentSucceededEvent(createSucceededMessageId(payment.getId()),
                     payment.getOrderId(), payment.getId(), payment.getAmount(), Instant.now());
 
-            paymentTransactionService.markSucceeded(payment.getId(), succeededEvent);
-        } else {
-            PaymentFailedEvent failedEvent = new PaymentFailedEvent(UUID.randomUUID().toString(), payment.getOrderId(),
-                    payment.getId(), payment.getAmount(), result.reason(), Instant.now());
+            paymentTransactionService.markSucceeded(suceededEvent);
 
-            paymentTransactionService.markFailed(payment.getId(), failedEvent);
+            return result;
         }
 
+        PaymentFailedEvent failedEvent = new PaymentFailedEvent(createFailedMessageId(payment.getId()),
+                payment.getOrderId(), payment.getId(), payment.getAmount(), result.reason(), Instant.now());
+
+        paymentTransactionService.markFailed(failedEvent);
+
         return result;
+    }
+
+    private String createSucceededMessageId(UUID paymentId) {
+        return "payment:" + paymentId + ":succeeded";
+    }
+
+    private String createFailedMessageId(UUID paymentId) {
+        return "payment:" + paymentId + ":failed";
     }
 }

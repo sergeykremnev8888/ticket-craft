@@ -2,7 +2,6 @@ package ru.ticketcraft.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,7 +62,7 @@ class PaymentServiceTest {
 
         ArgumentCaptor<PaymentSucceededEvent> eventCaptor = ArgumentCaptor.forClass(PaymentSucceededEvent.class);
 
-        verify(paymentTransactionService).markSucceeded(eq(paymentId), eventCaptor.capture());
+        verify(paymentTransactionService).markSucceeded(eventCaptor.capture());
 
         PaymentSucceededEvent succeededEvent = eventCaptor.getValue();
 
@@ -73,7 +72,7 @@ class PaymentServiceTest {
         assertThat(succeededEvent.amount()).isEqualByComparingTo(event.amount());
         assertThat(succeededEvent.createdAt()).isNotNull();
 
-        verify(paymentTransactionService, never()).markFailed(any(UUID.class), any(PaymentFailedEvent.class));
+        verify(paymentTransactionService, never()).markFailed(any(PaymentFailedEvent.class));
     }
 
     @Test
@@ -100,7 +99,7 @@ class PaymentServiceTest {
 
         ArgumentCaptor<PaymentFailedEvent> eventCaptor = ArgumentCaptor.forClass(PaymentFailedEvent.class);
 
-        verify(paymentTransactionService).markFailed(eq(paymentId), eventCaptor.capture());
+        verify(paymentTransactionService).markFailed(eventCaptor.capture());
 
         PaymentFailedEvent failedEvent = eventCaptor.getValue();
 
@@ -111,7 +110,7 @@ class PaymentServiceTest {
         assertThat(failedEvent.reason()).isEqualTo("Insufficient funds");
         assertThat(failedEvent.createdAt()).isNotNull();
 
-        verify(paymentTransactionService, never()).markSucceeded(any(UUID.class), any(PaymentSucceededEvent.class));
+        verify(paymentTransactionService, never()).markSucceeded(any(PaymentSucceededEvent.class));
     }
 
     @Test
@@ -131,9 +130,9 @@ class PaymentServiceTest {
         verify(paymentGateway, never()).charge(any(UUID.class), any(Long.class), any(Long.class),
                 any(BigDecimal.class));
 
-        verify(paymentTransactionService, never()).markSucceeded(any(UUID.class), any(PaymentSucceededEvent.class));
+        verify(paymentTransactionService, never()).markSucceeded(any(PaymentSucceededEvent.class));
 
-        verify(paymentTransactionService, never()).markFailed(any(UUID.class), any(PaymentFailedEvent.class));
+        verify(paymentTransactionService, never()).markFailed(any(PaymentFailedEvent.class));
     }
 
     @Test
@@ -154,9 +153,9 @@ class PaymentServiceTest {
         verify(paymentGateway, never()).charge(any(UUID.class), any(Long.class), any(Long.class),
                 any(BigDecimal.class));
 
-        verify(paymentTransactionService, never()).markSucceeded(any(UUID.class), any(PaymentSucceededEvent.class));
+        verify(paymentTransactionService, never()).markSucceeded(any(PaymentSucceededEvent.class));
 
-        verify(paymentTransactionService, never()).markFailed(any(UUID.class), any(PaymentFailedEvent.class));
+        verify(paymentTransactionService, never()).markFailed(any(PaymentFailedEvent.class));
     }
 
     @Test
@@ -178,7 +177,7 @@ class PaymentServiceTest {
 
         verify(paymentGateway).charge(paymentId, event.orderId(), event.userId(), event.amount());
 
-        verify(paymentTransactionService).markSucceeded(any(UUID.class), any(PaymentSucceededEvent.class));
+        verify(paymentTransactionService).markSucceeded(any(PaymentSucceededEvent.class));
     }
 
     private PaymentRequestedEvent createEvent() {

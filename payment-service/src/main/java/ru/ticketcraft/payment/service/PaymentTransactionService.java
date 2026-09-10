@@ -48,22 +48,38 @@ public class PaymentTransactionService {
     }
 
     @Transactional
-    public void markSucceeded(UUID paymentId, PaymentSucceededEvent event) {
-        int updatedRows = paymentRepository.updateStatus(paymentId, PaymentStatus.SUCCEEDED, Instant.now());
+    public boolean markSucceeded(PaymentSucceededEvent event) {
+        int updatedRows = paymentRepository.updateStatusFromPending(event.paymentId(), PaymentStatus.SUCCEEDED,
+                Instant.now());
+
+        if (updatedRows == 0) {
+            return false;
+        }
+
         if (updatedRows != 1) {
-            throw new IllegalStateException("Expected one payment to be updated, but updated rows: " + updatedRows);
+            throw new IllegalStateException("Unexpected number of updated payment rows: " + updatedRows);
         }
 
         paymentOutboxService.addSucceededEvent(event);
+
+        return true;
     }
 
     @Transactional
-    public void markFailed(UUID paymentId, PaymentFailedEvent event) {
-        int updatedRows = paymentRepository.updateStatus(paymentId, PaymentStatus.FAILED, Instant.now());
+    public boolean markFailed(PaymentFailedEvent event) {
+        int updatedRows = paymentRepository.updateStatusFromPending(event.paymentId(), PaymentStatus.FAILED,
+                Instant.now());
+
+        if (updatedRows == 0) {
+            return false;
+        }
+
         if (updatedRows != 1) {
-            throw new IllegalStateException("Expected one payment to be updated, but updated rows: " + updatedRows);
+            throw new IllegalStateException("Unexpected number of updated payment rows: " + updatedRows);
         }
 
         paymentOutboxService.addFailedEvent(event);
+
+        return true;
     }
 }

@@ -6,10 +6,8 @@ import java.util.UUID;
 public interface PaymentGateway {
 
     /**
-     * Executes payment using paymentId as an idempotency key.
-     *
-     * Repeated calls with the same paymentId must not result in multiple charges.
+     * Charges the payment using paymentId as the idempotency key. Repeated calls
+     * with the same paymentId must represent the same payment operation.
      */
     PaymentResult charge(UUID paymentId, Long orderId, Long userId, BigDecimal amount);
-
 }
