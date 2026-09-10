@@ -20,6 +20,7 @@ public interface OutboxEventRepository extends CrudRepository<OutboxEvent, UUID>
                 aggregate_type,
                 aggregate_id,
                 event_type,
+                topic,
                 payload,
                 status,
                 created_at
@@ -29,6 +30,7 @@ public interface OutboxEventRepository extends CrudRepository<OutboxEvent, UUID>
                 :aggregateType,
                 :aggregateId,
                 :eventType,
+                :topic,
                 :payload,
                 'PENDING',
                 :createdAt
@@ -36,7 +38,7 @@ public interface OutboxEventRepository extends CrudRepository<OutboxEvent, UUID>
             """)
     int insert(@Param("id") UUID id, @Param("aggregateType") String aggregateType,
             @Param("aggregateId") String aggregateId, @Param("eventType") String eventType,
-            @Param("payload") String payload, @Param("createdAt") Instant createdAt);
+            @Param("topic") String topic, @Param("payload") String payload, @Param("createdAt") Instant createdAt);
 
     @Modifying
     @Query("""

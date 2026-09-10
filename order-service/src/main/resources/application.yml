@@ -23,6 +23,12 @@ management:
         include: health,info,prometheus
 
 ticketcraft:
+  kafka:
+    topics:
+      order-events: order-events
+      ticket-reservation-commands: ticket-reservation-commands
+      payment-requests: payment-requests
+
   outbox:
     publisher:
       enabled: true
@@ -31,7 +37,6 @@ ticketcraft:
       lock-duration: 30s
       retry-delay: 5s
       send-timeout: 10s
-      topic: order-events
 
 logging:
   level:
