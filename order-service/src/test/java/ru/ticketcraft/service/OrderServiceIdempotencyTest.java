@@ -19,13 +19,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import ru.ticketcraft.client.CatalogClient;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.model.IdempotencyKey;
 import ru.ticketcraft.model.IdempotencyStatus;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.repository.OrderRepository;
+import ru.ticketcraft.repository.OrderSagaRepository;
+import ru.ticketcraft.saga.OrderSagaStatus;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceIdempotencyTest {
@@ -41,9 +43,6 @@ class OrderServiceIdempotencyTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private CatalogClient catalogClient;
-
-    @Mock
     private OutboxService outboxService;
 
     @Mock
@@ -55,12 +54,15 @@ class OrderServiceIdempotencyTest {
     @Mock
     private OrderStateMachine orderStateMachine;
 
+    @Mock
+    private OrderSagaRepository orderSagaRepository;
+
     private OrderService service;
 
     @BeforeEach
     void setUp() {
-        service = new OrderService(orderRepository, catalogClient, outboxService, idempotencyService,
-                requestHashService, orderStateMachine);
+        service = new OrderService(orderRepository, outboxService, idempotencyService, requestHashService,
+                orderStateMachine, orderSagaRepository);
     }
 
     @Test
@@ -83,8 +85,6 @@ class OrderServiceIdempotencyTest {
 
         assertSame(existingOrder, result);
 
-        verify(catalogClient, never()).reserveTicket(any());
-
         verify(orderRepository, never()).save(any());
 
         verify(outboxService, never()).saveOrderCreatedEvent(any(), any());
@@ -105,12 +105,11 @@ class OrderServiceIdempotencyTest {
 
         assertThrows(IllegalStateException.class,
                 () -> service.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE));
-
-        verify(catalogClient, never()).reserveTicket(any());
     }
 
     @Test
     void shouldCreateOrderForNewIdempotencyKey() {
+
         IdempotencyKey key = new IdempotencyKey(IDEMPOTENCY_KEY, USER_ID, "hash", null, IdempotencyStatus.IN_PROGRESS,
                 Instant.now());
 
@@ -120,21 +119,26 @@ class OrderServiceIdempotencyTest {
 
         when(idempotencyService.checkAndRegister(IDEMPOTENCY_KEY, USER_ID, "hash")).thenReturn(key);
 
-        when(catalogClient.reserveTicket(TICKET_ID)).thenReturn(true);
-
         when(orderRepository.save(any(Order.class))).thenReturn(savedOrder);
+
+        when(orderSagaRepository.insertIfAbsent(any(UUID.class), eq(42L),
+                eq(OrderSagaStatus.WAITING_FOR_RESERVATION.name()), any(Instant.class), any(Instant.class)))
+                .thenReturn(1);
 
         Order result = service.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE);
 
         assertSame(savedOrder, result);
 
-        verify(catalogClient).reserveTicket(TICKET_ID);
-
         verify(orderRepository).save(any(Order.class));
+
+        verify(orderSagaRepository).insertIfAbsent(any(UUID.class), eq(42L),
+                eq(OrderSagaStatus.WAITING_FOR_RESERVATION.name()), any(Instant.class), any(Instant.class));
 
         verify(idempotencyService).complete(IDEMPOTENCY_KEY, 42L);
 
-        verify(outboxService).saveOrderCreatedEvent(eq(savedOrder), any(OrderEvent.class));
+        verify(outboxService).saveReserveTicketCommand(eq(savedOrder), any(ReserveTicketCommand.class));
+
+        verify(outboxService, never()).saveOrderCreatedEvent(any(Order.class), any(OrderEvent.class));
     }
 
 }

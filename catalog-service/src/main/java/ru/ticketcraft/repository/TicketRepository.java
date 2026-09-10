@@ -14,44 +14,52 @@ import ru.ticketcraft.model.Ticket;
 @Repository
 public interface TicketRepository extends JpaRepository<Ticket, UUID> {
 
-    /**
-     * При высокой конкуренции PostgreSQL сам гарантирует, что для одного ticket
-     * только один конкурентный запрос получит affectedRows = 1. Это гораздо лучше
-     * для hot path, чем удерживать row lock на время транзакции.
-     */
     @Modifying
     @Query("""
-        UPDATE Ticket t
-           SET t.status = ru.ticketcraft.dto.TicketStatus.RESERVED,
-               t.reservationId = :reservationId,
-               t.reservedUntil = :reservedUntil,
-               t.version = t.version + 1,
-               t.updatedAt = CURRENT_TIMESTAMP
-         WHERE t.id = :ticketId
-           AND t.status = ru.ticketcraft.dto.TicketStatus.AVAILABLE
-        """)
+                UPDATE Ticket t
+                SET t.status = 'RESERVED',
+                    t.reservationId = :reservationId,
+                    t.reservedUntil = :reservedUntil,
+                    t.version = t.version + 1
+                WHERE t.id = :ticketId
+                  AND t.status = 'AVAILABLE'
+            """)
     int reserveTicket(
             @Param("ticketId") UUID ticketId,
             @Param("reservationId") UUID reservationId,
-            @Param("reservedUntil") Instant reservedUntil
-    );
+            @Param("reservedUntil") Instant reservedUntil);
 
     /**
      * 
-     * @return    0 → ничего не освобождено
-     *            5 → освобождено 5 билетов
-     *         1000 → освобождено 1000
+     * @return 0 → ничего не освобождено 5 → освобождено 5 билетов 1000 →
+     *         освобождено 1000
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
-        UPDATE Ticket t
-           SET t.status = ru.ticketcraft.dto.TicketStatus.AVAILABLE,
-               t.reservationId = NULL,
-               t.reservedUntil = NULL,
-               t.version = t.version + 1,
-               t.updatedAt = CURRENT_TIMESTAMP
-         WHERE t.status = ru.ticketcraft.dto.TicketStatus.RESERVED
-           AND t.reservedUntil < :now
-        """)
+            UPDATE Ticket t
+               SET t.status = ru.ticketcraft.dto.TicketStatus.AVAILABLE,
+                   t.reservationId = NULL,
+                   t.reservedUntil = NULL,
+                   t.version = t.version + 1,
+                   t.updatedAt = CURRENT_TIMESTAMP
+             WHERE t.status = ru.ticketcraft.dto.TicketStatus.RESERVED
+               AND t.reservedUntil < :now
+            """)
     int releaseExpiredReservations(@Param("now") Instant now);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Ticket t
+               SET t.status = ru.ticketcraft.dto.TicketStatus.AVAILABLE,
+                   t.reservationId = NULL,
+                   t.reservedUntil = NULL,
+                   t.version = t.version + 1,
+                   t.updatedAt = CURRENT_TIMESTAMP
+             WHERE t.id = :ticketId
+               AND t.status = ru.ticketcraft.dto.TicketStatus.RESERVED
+               AND t.reservationId = :reservationId
+            """)
+    int releaseTicket(
+            @Param("ticketId") UUID ticketId,
+            @Param("reservationId") UUID reservationId);
 }

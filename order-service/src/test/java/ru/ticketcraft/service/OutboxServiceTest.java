@@ -1,9 +1,11 @@
 package ru.ticketcraft.service;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import ru.ticketcraft.config.KafkaTopicsProperties;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.model.Order;
@@ -44,11 +47,15 @@ class OutboxServiceTest {
     @Mock
     private ObjectMapper objectMapper;
 
+    private KafkaTopicsProperties topics;
     private OutboxService outboxService;
 
     @BeforeEach
     void setUp() {
-        outboxService = new OutboxService(repository, objectMapper);
+        topics = new KafkaTopicsProperties("order-events", "ticket-reservation-commands", "ticket-reservation-results",
+                "ticket-reservation-results.DLT", "payment-requests", "payment-results", "payment-results.DLT");
+
+        outboxService = new OutboxService(repository, objectMapper, topics);
     }
 
     @Test
@@ -62,8 +69,8 @@ class OutboxServiceTest {
 
         when(objectMapper.writeValueAsString(event)).thenReturn(payload);
 
-        when(repository.insert(eq(EVENT_ID), eq("ORDER"), eq(ORDER_ID.toString()), eq("OrderCreated"), eq(payload),
-                eq(CREATED_AT))).thenReturn(1);
+        when(repository.insert(eq(EVENT_ID), eq("ORDER"), eq(ORDER_ID.toString()), eq("OrderCreated"),
+                eq("order-events"), eq(payload), eq(CREATED_AT))).thenReturn(1);
 
         UUID result = outboxService.saveOrderCreatedEvent(order, event);
 
@@ -71,8 +78,8 @@ class OutboxServiceTest {
 
         verify(objectMapper).writeValueAsString(event);
 
-        verify(repository).insert(eq(EVENT_ID), eq("ORDER"), eq(ORDER_ID.toString()), eq("OrderCreated"), eq(payload),
-                eq(CREATED_AT));
+        verify(repository).insert(eq(EVENT_ID), eq("ORDER"), eq(ORDER_ID.toString()), eq("OrderCreated"),
+                eq("order-events"), eq(payload), eq(CREATED_AT));
     }
 
     @Test
@@ -85,15 +92,13 @@ class OutboxServiceTest {
 
         when(objectMapper.writeValueAsString(event)).thenReturn("{\"orderId\":123}");
 
-        when(repository.insert(any(UUID.class), any(), any(), any(), any(), any())).thenReturn(0);
+        when(repository.insert(any(UUID.class), any(), any(), any(), any(), any(), any())).thenReturn(0);
 
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> outboxService.saveOrderCreatedEvent(order, event));
+        assertThatThrownBy(() -> outboxService.saveOrderCreatedEvent(order, event))
+                .isInstanceOf(IllegalStateException.class).hasMessage("Failed to insert outbox event: " + EVENT_ID);
 
-        assertEquals("Failed to insert outbox event for order: 123", exception.getMessage());
-
-        verify(repository).insert(any(UUID.class), eq("ORDER"), eq("123"), eq("OrderCreated"), eq("{\"orderId\":123}"),
-                eq(CREATED_AT));
+        verify(repository).insert(any(UUID.class), eq("ORDER"), eq("123"), eq("OrderCreated"), eq("order-events"),
+                eq("{\"orderId\":123}"), eq(CREATED_AT));
     }
 
     @Test
@@ -110,12 +115,15 @@ class OutboxServiceTest {
         OrderEvent event = new OrderEvent(UUID.randomUUID().toString(), orderId, userId, eventId, List.of(ticketId),
                 new BigDecimal("150.00"), OrderState.CREATED, createdAt);
 
-        when(objectMapper.writeValueAsString(event)).thenThrow(new JacksonException("Serialization failed") {
-        });
+        when(objectMapper.writeValueAsString(any(OrderEvent.class)))
+                .thenThrow(new JacksonException("serialization failed") {
+                });
 
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> outboxService.saveOrderCreatedEvent(order, event));
+        assertThatThrownBy(() -> outboxService.saveOrderCreatedEvent(order, event))
+                .isInstanceOf(IllegalStateException.class).hasMessage("Failed to serialize outbox payload: OrderEvent")
+                .hasCauseInstanceOf(JacksonException.class);
 
-        assertEquals("Failed to serialize OrderEvent", exception.getMessage());
+        verify(repository, never()).insert(any(), anyString(), anyString(), anyString(), anyString(), anyString(),
+                any());
     }
 }

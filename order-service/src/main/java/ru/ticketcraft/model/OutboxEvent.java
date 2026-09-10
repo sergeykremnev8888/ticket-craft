@@ -49,16 +49,21 @@ public class OutboxEvent {
     @Column("claim_id")
     private UUID claimId;
 
+    @Column("topic")
+    private String topic;
+
     public OutboxEvent() {
     }
 
-    public OutboxEvent(UUID id, String aggregateType, String aggregateId, String eventType, String payload,
-            OutboxStatus status, Instant createdAt, Instant publishedAt, Integer attempts, Instant nextAttemptAt,
-            Instant lockedAt, String lockedBy, UUID claimId) {
+    public OutboxEvent(UUID id, String aggregateType, String aggregateId, String eventType, String topic,
+            String payload, OutboxStatus status, Instant createdAt, Instant publishedAt, Integer attempts,
+            Instant nextAttemptAt, Instant lockedAt, String lockedBy, UUID claimId) {
+
         this.id = id;
         this.aggregateType = aggregateType;
         this.aggregateId = aggregateId;
         this.eventType = eventType;
+        this.topic = topic;
         this.payload = payload;
         this.status = status;
         this.createdAt = createdAt;
@@ -120,6 +125,10 @@ public class OutboxEvent {
 
     public UUID getClaimId() {
         return claimId;
+    }
+
+    public String getTopic() {
+        return topic;
     }
 
     public void markPublished(Instant publishedAt) {

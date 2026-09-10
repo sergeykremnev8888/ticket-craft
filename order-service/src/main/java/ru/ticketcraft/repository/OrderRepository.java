@@ -4,17 +4,24 @@ import org.springframework.data.jdbc.repository.query.Modifying;
 import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
 
+import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.model.Order;
 
-@Repository
 public interface OrderRepository extends CrudRepository<Order, Long> {
 
-	/**
-	 * Прямое обновление статуса билета через нативный SQL
-	 */
-	@Modifying
-	@Query("UPDATE tickets SET is_available = :available WHERE id = :ticketId")
-	void updateTicketStatus(@Param("ticketId") Long ticketId, @Param("available") boolean available);
+    @Modifying
+    @Query("""
+            UPDATE orders
+            SET status = :targetStatus
+            WHERE id = :orderId
+              AND status = :expectedStatus
+            """)
+    int updateStatusIfCurrent(@Param("orderId") Long orderId, @Param("expectedStatus") String expectedStatus,
+            @Param("targetStatus") String targetStatus);
+
+    default boolean transitionStatus(Long orderId, OrderState expectedStatus, OrderState targetStatus) {
+
+        return updateStatusIfCurrent(orderId, expectedStatus.name(), targetStatus.name()) == 1;
+    }
 }

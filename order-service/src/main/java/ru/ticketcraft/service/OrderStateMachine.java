@@ -11,8 +11,8 @@ import ru.ticketcraft.exception.InvalidOrderStateTransitionException;
 @Component
 public class OrderStateMachine {
 
-    private final Map<OrderState, Set<OrderState>> transitions = Map.of(
-            OrderState.CREATED, Set.of(OrderState.TICKETS_RESERVED),
+    private final Map<OrderState, Set<OrderState>> transitions = Map.of(OrderState.CREATED,
+            Set.of(OrderState.TICKETS_RESERVED, OrderState.CANCELED),
             OrderState.TICKETS_RESERVED, Set.of(OrderState.PAYMENT_PENDING, OrderState.CANCELED),
             OrderState.PAYMENT_PENDING, Set.of(OrderState.CONFIRMED, OrderState.PAYMENT_FAILED),
             OrderState.PAYMENT_FAILED, Set.of(OrderState.CANCELED),

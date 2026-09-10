@@ -21,6 +21,12 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: catalog-ticket-reservation
+      auto-offset-reset: earliest
+
 server:
   port: ${SERVER_PORT:8081}
 
@@ -39,6 +45,22 @@ catalog:
   reservation:
     duration: ${RESERVATION_DURATION:10m}
     expiration-check-interval: ${RESERVATION_EXPIRATION_CHECK_INTERVAL:10s}
+
+ticketcraft:
+  kafka:
+    topics:
+      ticket-reservation-commands: ticket-reservation-commands
+      ticket-reservation-commands-dlt: ticket-reservation-commands.DLT
+      ticket-reservation-results: ticket-reservation-results
+
+  outbox:
+    publisher:
+      enabled: true
+      batch-size: 100
+      fixed-delay: 1s
+      lock-duration: 30s
+      retry-delay: 5s
+      send-timeout: 10s
 
 logging:
   level:

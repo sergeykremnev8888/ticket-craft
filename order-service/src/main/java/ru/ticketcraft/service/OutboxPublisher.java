@@ -9,13 +9,14 @@ import java.util.concurrent.TimeoutException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import ru.ticketcraft.config.OutboxPublisherProperties;
-import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.model.OutboxEvent;
+import ru.ticketcraft.model.OutboxEventType;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -27,13 +28,13 @@ public class OutboxPublisher {
     private static final String PUBLISHER_ID_PREFIX = "order-service-";
 
     private final OutboxClaimService claimService;
-    private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final OutboxPublisherProperties properties;
 
     private final String publisherId;
 
-    public OutboxPublisher(OutboxClaimService claimService, KafkaTemplate<String, OrderEvent> kafkaTemplate,
+    public OutboxPublisher(OutboxClaimService claimService, @Qualifier("kafkaTemplate") KafkaTemplate<String, Object> kafkaTemplate,
             ObjectMapper objectMapper, OutboxPublisherProperties properties) {
         this.claimService = claimService;
         this.kafkaTemplate = kafkaTemplate;
@@ -71,38 +72,43 @@ public class OutboxPublisher {
 
     private void publishEvent(OutboxEvent event, UUID claimId) {
         try {
-            OrderEvent orderEvent = deserialize(event.getPayload());
+            Object payload = deserialize(event);
 
-            kafkaTemplate.send(properties.topic(), event.getAggregateId(), orderEvent)
+            kafkaTemplate.send(event.getTopic(), event.getAggregateId(), payload)
                     .get(properties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
 
             boolean published = claimService.markPublished(event.getId(), claimId);
 
             if (!published) {
-                log.warn("Outbox event was published to Kafka, but database claim was lost. eventId={}, claimId={}",
+                log.warn(
+                        "Outbox event was published to Kafka, but database claim was lost. " + "eventId={}, claimId={}",
                         event.getId(), claimId);
 
                 return;
             }
 
-            log.debug("Published outbox event. eventId={}, aggregateId={}, claimId={}", event.getId(),
-                    event.getAggregateId(), claimId);
+            log.debug("Published outbox event. eventId={}, eventType={}, topic={}, " + "aggregateId={}, claimId={}",
+                    event.getId(), event.getEventType(), event.getTopic(), event.getAggregateId(), claimId);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
 
             handlePublishFailure(event, claimId, e);
+
         } catch (ExecutionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
 
             handlePublishFailure(event, claimId, cause);
+
         } catch (TimeoutException | RuntimeException e) {
             handlePublishFailure(event, claimId, e);
         }
     }
 
-    private OrderEvent deserialize(String payload) throws JacksonException {
-        return objectMapper.readValue(payload, OrderEvent.class);
+    private Object deserialize(OutboxEvent event) throws JacksonException {
+        OutboxEventType eventType = OutboxEventType.fromValue(event.getEventType());
+
+        return objectMapper.readValue(event.getPayload(), eventType.getPayloadType());
     }
 
     private void handlePublishFailure(OutboxEvent event, UUID claimId, Throwable cause) {
