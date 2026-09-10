@@ -2,85 +2,77 @@ package ru.ticketcraft.service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import ru.ticketcraft.client.CatalogClient;
-import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
-import ru.ticketcraft.exception.OrderConflictException;
+import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.exception.OrderNotFoundException;
 import ru.ticketcraft.idempotency.CanonicalOrderRequest;
 import ru.ticketcraft.model.IdempotencyKey;
 import ru.ticketcraft.model.IdempotencyStatus;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.repository.OrderRepository;
+import ru.ticketcraft.repository.OrderSagaRepository;
+import ru.ticketcraft.saga.OrderSagaStatus;
 
 @Service
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final CatalogClient catalogClient;
     private final OutboxService outboxService;
     private final IdempotencyService idempotencyService;
     private final RequestHashService requestHashService;
     private final OrderStateMachine orderStateMachine;
+    private final OrderSagaRepository orderSagaRepository;
 
-    public OrderService(OrderRepository orderRepository, CatalogClient catalogClient,
-            OutboxService outboxService, IdempotencyService idempotencyService,
-            RequestHashService requestHashService, OrderStateMachine orderStateMachine) {
+    public OrderService(OrderRepository orderRepository, OutboxService outboxService,
+            IdempotencyService idempotencyService, RequestHashService requestHashService,
+            OrderStateMachine orderStateMachine, OrderSagaRepository orderSagaRepository) {
         this.orderRepository = orderRepository;
-        this.catalogClient = catalogClient;
         this.outboxService = outboxService;
         this.idempotencyService = idempotencyService;
         this.requestHashService = requestHashService;
         this.orderStateMachine = orderStateMachine;
+        this.orderSagaRepository = orderSagaRepository;
     }
 
-    /**
-     * Создаёт заказ после успешного резервирования билета в catalog-service.
-     *
-     * Транзакция {@code @Transactional} охватывает только изменения в базе данных
-     * order-service. Резервирование билета выполняется в catalog-service
-     * в рамках отдельной транзакции.
-     */
     @Transactional
     public Order createOrder(String idempotencyKey, Long userId, UUID eventId, UUID ticketId, BigDecimal price) {
         CanonicalOrderRequest request = new CanonicalOrderRequest(userId, eventId, ticketId, price);
         String requestHash = requestHashService.hash(request);
+
         IdempotencyKey key = idempotencyService.checkAndRegister(idempotencyKey, userId, requestHash);
-
         if (key.getStatus() == IdempotencyStatus.COMPLETED) {
-            return orderRepository.findById(key.getOrderId()).orElseThrow(
-                    () -> new IllegalStateException("Order not found for idempotency key: " + idempotencyKey));
+            return orderRepository.findById(key.getOrderId()).orElseThrow(() -> new IllegalStateException(
+                    "Completed idempotency key references missing order: " + key.getOrderId()));
         }
 
-        boolean reserved = catalogClient.reserveTicket(ticketId);
-        if (!reserved) {
-            throw new OrderConflictException("Ticket is already reserved: " + ticketId);
-        }
-
-        Order order = new Order(null, userId, eventId, ticketId, price, OrderState.CREATED, Instant.now());
+        Instant now = Instant.now();
+        Order order = new Order(null, userId, eventId, ticketId, price, OrderState.CREATED, now);
         Order savedOrder = orderRepository.save(order);
 
+        UUID sagaId = UUID.randomUUID();
+        int sagaInserted = orderSagaRepository.insertIfAbsent(sagaId, savedOrder.getId(),
+                OrderSagaStatus.WAITING_FOR_RESERVATION.name(), now, now);
+        if (sagaInserted != 1) {
+            throw new IllegalStateException("Failed to create saga for order: " + savedOrder.getId());
+        }
+
+        String messageId = "saga:" + sagaId + ":reserve-ticket";
+        ReserveTicketCommand command = new ReserveTicketCommand(messageId, savedOrder.getId(), sagaId,
+                savedOrder.getTicketId(), savedOrder.getUserId(), now);
+        outboxService.saveReserveTicketCommand(savedOrder, command);
         idempotencyService.complete(idempotencyKey, savedOrder.getId());
-
-        OrderEvent event = new OrderEvent(UUID.randomUUID().toString(), savedOrder.getId(), savedOrder.getUserId(),
-                savedOrder.getEventId(), List.of(ticketId), savedOrder.getTotalPrice(), savedOrder.getStatus(),
-                savedOrder.getCreatedAt());
-
-        outboxService.saveOrderCreatedEvent(savedOrder, event);
 
         return savedOrder;
     }
 
     @Transactional
     public Order transitionTo(Long orderId, OrderState targetState) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
 
         orderStateMachine.validateTransition(order.getStatus(), targetState);
 

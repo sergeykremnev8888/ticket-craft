@@ -3,9 +3,9 @@ package ru.ticketcraft.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -18,7 +18,6 @@ import java.util.concurrent.Future;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -29,15 +28,16 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import ru.ticketcraft.client.CatalogClient;
-import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.exception.OrderConflictException;
 import ru.ticketcraft.model.IdempotencyKey;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.repository.IdempotencyKeyRepository;
 import ru.ticketcraft.repository.OrderRepository;
+import ru.ticketcraft.repository.OrderSagaRepository;
 
-@SpringBootTest(properties = { "spring.kafka.bootstrap-servers=localhost:9092" })
+@SpringBootTest(properties = { "spring.kafka.bootstrap-servers=localhost:9092",
+        "ticketcraft.outbox.publisher.enabled=false" })
 @Testcontainers
 @ActiveProfiles("test")
 class OrderServiceIntegrationTest {
@@ -55,58 +55,83 @@ class OrderServiceIntegrationTest {
     private OrderRepository orderRepository;
 
     @Autowired
+    private OrderSagaRepository orderSagaRepository;
+
+    @Autowired
     private IdempotencyKeyRepository idempotencyKeyRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @MockitoBean
-    private CatalogClient catalogClient;
-
-    @MockitoBean
     private OutboxService outboxService;
 
     @BeforeEach
     void setUp() {
-        Mockito.reset(catalogClient);
 
+        /*
+         * Важно соблюдать FK order_sagas -> orders.
+         */
+        jdbcTemplate.update("DELETE FROM order_sagas");
         jdbcTemplate.update("DELETE FROM idempotency_keys");
         jdbcTemplate.update("DELETE FROM orders");
     }
 
     @Test
-    void shouldRollbackIdempotencyKeyWhenOrderCreationFails() {
-        // given
+    void shouldRollbackIdempotencyOrderAndSagaWhenOutboxCreationFails() {
+
         String idempotencyKey = "test-key-rollback";
+
         Long userId = 1L;
+
         UUID eventId = UUID.randomUUID();
+
         UUID ticketId = UUID.randomUUID();
+
         BigDecimal price = new BigDecimal("100.00");
 
-        when(catalogClient.reserveTicket(ticketId)).thenThrow(new RuntimeException("Catalog service unavailable"));
+        /*
+         * После Step 4 external Catalog call отсутствует.
+         *
+         * Чтобы проверить rollback createOrder transaction, имитируем failure при
+         * создании initial Saga command.
+         */
+        doThrow(new IllegalStateException("Simulated outbox failure")).when(outboxService)
+                .saveReserveTicketCommand(any(Order.class), any(ReserveTicketCommand.class));
 
-        // when / then
         assertThatThrownBy(() -> orderService.createOrder(idempotencyKey, userId, eventId, ticketId, price))
-                .isInstanceOf(RuntimeException.class).hasMessage("Catalog service unavailable");
+                .isInstanceOf(IllegalStateException.class).hasMessage("Simulated outbox failure");
 
-        // then: idempotency record must be rolled back
+        /*
+         * Idempotency registration должна быть rollback.
+         */
         assertThat(idempotencyKeyRepository.findById(idempotencyKey)).isEmpty();
 
-        // then: order must not be persisted
+        /*
+         * Order INSERT был выполнен до outbox call, но должен быть rollback.
+         */
         assertThat(orderRepository.count()).isZero();
 
-        verify(catalogClient).reserveTicket(ticketId);
+        /*
+         * Saga INSERT также выполняется до outbox call и должна быть rollback.
+         */
+        assertThat(orderSagaRepository.count()).isZero();
+
+        verify(outboxService, times(1)).saveReserveTicketCommand(any(Order.class), any(ReserveTicketCommand.class));
     }
 
     @Test
     void shouldReturnSameOrderForRepeatedRequestWithSameIdempotencyKey() {
-        String idempotencyKey = "test-key-repeated";
-        Long userId = 1L;
-        UUID eventId = UUID.randomUUID();
-        UUID ticketId = UUID.randomUUID();
-        BigDecimal price = new BigDecimal("100.00");
 
-        when(catalogClient.reserveTicket(ticketId)).thenReturn(true);
+        String idempotencyKey = "test-key-repeated";
+
+        Long userId = 1L;
+
+        UUID eventId = UUID.randomUUID();
+
+        UUID ticketId = UUID.randomUUID();
+
+        BigDecimal price = new BigDecimal("100.00");
 
         Order firstOrder = orderService.createOrder(idempotencyKey, userId, eventId, ticketId, price);
 
@@ -116,28 +141,42 @@ class OrderServiceIntegrationTest {
 
         assertThat(secondOrder.getId()).isEqualTo(firstOrder.getId());
 
+        /*
+         * Физически создан только один Order.
+         */
         assertThat(orderRepository.count()).isEqualTo(1);
 
+        /*
+         * И только одна Saga.
+         */
+        assertThat(orderSagaRepository.count()).isEqualTo(1);
+
+        /*
+         * Idempotency key указывает на этот Order.
+         */
         assertThat(idempotencyKeyRepository.findById(idempotencyKey)).isPresent().get()
                 .extracting(IdempotencyKey::getOrderId).isEqualTo(firstOrder.getId());
 
-        verify(catalogClient, times(1)).reserveTicket(ticketId);
-
-        verify(outboxService, times(1)).saveOrderCreatedEvent(any(Order.class), any(OrderEvent.class));
+        /*
+         * Повторный HTTP request не должен создавать ещё один ReserveTicketCommand.
+         */
+        verify(outboxService, times(1)).saveReserveTicketCommand(any(Order.class), any(ReserveTicketCommand.class));
     }
 
     @Test
     void shouldRejectSameIdempotencyKeyWithDifferentPayload() {
+
         String idempotencyKey = "test-key-different-payload";
 
         Long userId = 1L;
+
         UUID eventId = UUID.randomUUID();
+
         UUID ticketId = UUID.randomUUID();
 
         BigDecimal firstPrice = new BigDecimal("100.00");
-        BigDecimal secondPrice = new BigDecimal("200.00");
 
-        when(catalogClient.reserveTicket(ticketId)).thenReturn(true);
+        BigDecimal secondPrice = new BigDecimal("200.00");
 
         Order firstOrder = orderService.createOrder(idempotencyKey, userId, eventId, ticketId, firstPrice);
 
@@ -146,36 +185,49 @@ class OrderServiceIntegrationTest {
         assertThatThrownBy(() -> orderService.createOrder(idempotencyKey, userId, eventId, ticketId, secondPrice))
                 .isInstanceOf(OrderConflictException.class);
 
+        /*
+         * Второй запрос не создаёт новый Order.
+         */
         assertThat(orderRepository.count()).isEqualTo(1);
+
+        /*
+         * И не создаёт вторую Saga.
+         */
+        assertThat(orderSagaRepository.count()).isEqualTo(1);
 
         Order persistedOrder = orderRepository.findById(firstOrder.getId()).orElseThrow();
 
         assertThat(persistedOrder.getTotalPrice()).isEqualByComparingTo(firstPrice);
 
-        verify(catalogClient, times(1)).reserveTicket(ticketId);
-
-        verify(outboxService, times(1)).saveOrderCreatedEvent(any(Order.class), any(OrderEvent.class));
+        /*
+         * ReserveTicketCommand создан только для первого корректного request.
+         */
+        verify(outboxService, times(1)).saveReserveTicketCommand(any(Order.class), any(ReserveTicketCommand.class));
     }
 
     @Test
     void shouldCreateOnlyOneOrderForConcurrentRequestsWithSameIdempotencyKey() throws Exception {
 
         String idempotencyKey = "test-key-concurrent";
-        Long userId = 1L;
-        UUID eventId = UUID.randomUUID();
-        UUID ticketId = UUID.randomUUID();
-        BigDecimal price = new BigDecimal("100.00");
 
-        when(catalogClient.reserveTicket(ticketId)).thenReturn(true);
+        Long userId = 1L;
+
+        UUID eventId = UUID.randomUUID();
+
+        UUID ticketId = UUID.randomUUID();
+
+        BigDecimal price = new BigDecimal("100.00");
 
         int requestCount = 20;
 
         ExecutorService executor = Executors.newFixedThreadPool(requestCount);
 
         try {
+
             List<Callable<Order>> tasks = new ArrayList<>();
 
             for (int i = 0; i < requestCount; i++) {
+
                 tasks.add(() -> orderService.createOrder(idempotencyKey, userId, eventId, ticketId, price));
             }
 
@@ -187,29 +239,39 @@ class OrderServiceIntegrationTest {
                 returnedOrders.add(future.get());
             }
 
-            // Все 20 запросов должны вернуть результат одного и того же заказа.
+            /*
+             * Все запросы должны получить один logical Order.
+             */
             assertThat(returnedOrders).hasSize(requestCount);
 
             Long createdOrderId = returnedOrders.getFirst().getId();
 
             assertThat(returnedOrders).extracting(Order::getId).containsOnly(createdOrderId);
 
-            // Физически в БД должен существовать только один заказ.
+            /*
+             * Физически один Order.
+             */
             assertThat(orderRepository.count()).isEqualTo(1);
 
-            // Idempotency-Key должен ссылаться на этот же заказ.
+            /*
+             * И физически одна Saga.
+             */
+            assertThat(orderSagaRepository.count()).isEqualTo(1);
+
+            /*
+             * Idempotency key указывает на единственный Order.
+             */
             assertThat(idempotencyKeyRepository.findById(idempotencyKey)).isPresent().get()
                     .extracting(IdempotencyKey::getOrderId).isEqualTo(createdOrderId);
 
-            // Ticket должен быть зарезервирован только один раз.
-            verify(catalogClient, times(1)).reserveTicket(ticketId);
-
-            // Событие должно быть отправлено только для реально созданного заказа.
-            verify(outboxService, times(1)).saveOrderCreatedEvent(any(Order.class), any(OrderEvent.class));
+            /*
+             * Initial Saga command должна быть создана только один раз.
+             */
+            verify(outboxService, times(1)).saveReserveTicketCommand(any(Order.class), any(ReserveTicketCommand.class));
 
         } finally {
+
             executor.shutdownNow();
         }
     }
-
 }

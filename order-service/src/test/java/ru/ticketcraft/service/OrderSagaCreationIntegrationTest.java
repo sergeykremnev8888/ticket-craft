@@ -1,7 +1,6 @@
 package ru.ticketcraft.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -33,12 +32,16 @@ import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
 @SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false" })
-class OrderServiceOutboxIntegrationTest {
+class OrderSagaCreationIntegrationTest {
 
-    private static final String IDEMPOTENCY_KEY = "order-service-outbox-integration-key";
-    private static final Long USER_ID = 123L;
+    private static final String IDEMPOTENCY_KEY = "order-saga-integration-key";
+
+    private static final Long USER_ID = 10L;
+
     private static final UUID EVENT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
     private static final UUID TICKET_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
     private static final BigDecimal PRICE = new BigDecimal("100.00");
 
     @Container
@@ -67,7 +70,6 @@ class OrderServiceOutboxIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-
         outboxEventRepository.deleteAll();
         orderSagaRepository.deleteAll();
         idempotencyKeyRepository.deleteAll();
@@ -75,101 +77,82 @@ class OrderServiceOutboxIntegrationTest {
     }
 
     @Test
-    void shouldCreateOrderSagaAndReserveTicketCommandInSameTransaction() throws Exception {
+    void shouldCreateOrderSagaAndReservationCommandAtomically() throws Exception {
 
-        Order order = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE);
+        Order result = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE);
+
+        assertThat(result.getId()).isNotNull();
+        assertThat(result.getUserId()).isEqualTo(USER_ID);
+        assertThat(result.getEventId()).isEqualTo(EVENT_ID);
+        assertThat(result.getTicketId()).isEqualTo(TICKET_ID);
+        assertThat(result.getTotalPrice()).isEqualByComparingTo(PRICE);
+        assertThat(result.getStatus()).isEqualTo(OrderState.CREATED);
 
         /*
-         * Order.
+         * 1. Order действительно записан.
          */
-        assertNotNull(order.getId());
+        Order persistedOrder = orderRepository.findById(result.getId()).orElseThrow();
 
-        assertEquals(USER_ID, order.getUserId());
-
-        assertEquals(EVENT_ID, order.getEventId());
-
-        assertEquals(TICKET_ID, order.getTicketId());
-
-        assertEquals(0, PRICE.compareTo(order.getTotalPrice()));
-
-        assertEquals(OrderState.CREATED, order.getStatus());
+        assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.CREATED);
 
         /*
-         * Order persisted.
+         * 2. Saga создана для этого order.
          */
-        Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
+        OrderSaga saga = orderSagaRepository.findByOrderId(result.getId()).orElseThrow();
 
-        assertEquals(order.getId(), persistedOrder.getId());
+        assertThat(saga.getId()).isNotNull();
 
-        assertEquals(OrderState.CREATED, persistedOrder.getStatus());
+        assertThat(saga.getOrderId()).isEqualTo(result.getId());
 
-        /*
-         * Saga.
-         */
-        OrderSaga saga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
-        assertNotNull(saga.getId());
-
-        assertEquals(order.getId(), saga.getOrderId());
-
-        assertEquals(OrderSagaStatus.WAITING_FOR_RESERVATION, saga.getStatus());
+        assertThat(saga.getStatus()).isEqualTo(OrderSagaStatus.WAITING_FOR_RESERVATION);
 
         /*
-         * Idempotency.
+         * 3. HTTP idempotency завершена.
          */
         IdempotencyKey idempotencyKey = idempotencyKeyRepository.findById(IDEMPOTENCY_KEY).orElseThrow();
 
-        assertEquals(IdempotencyStatus.COMPLETED, idempotencyKey.getStatus());
+        assertThat(idempotencyKey.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
 
-        assertEquals(order.getId(), idempotencyKey.getOrderId());
+        assertThat(idempotencyKey.getOrderId()).isEqualTo(result.getId());
 
         /*
-         * Outbox.
+         * 4. В outbox должна быть ровно одна команда.
          */
         List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
 
-        assertEquals(1, outboxEvents.size());
+        assertThat(outboxEvents).hasSize(1);
 
         OutboxEvent outboxEvent = outboxEvents.get(0);
 
-        assertNotNull(outboxEvent.getId());
+        assertThat(outboxEvent.getAggregateType()).isEqualTo("ORDER");
 
-        assertEquals("ORDER", outboxEvent.getAggregateType());
+        assertThat(outboxEvent.getAggregateId()).isEqualTo(result.getId().toString());
 
-        assertEquals(order.getId().toString(), outboxEvent.getAggregateId());
+        assertThat(outboxEvent.getEventType()).isEqualTo("ReserveTicket");
 
-        assertEquals("ReserveTicket", outboxEvent.getEventType());
+        assertThat(outboxEvent.getTopic()).isEqualTo("ticket-reservation-commands");
 
-        assertEquals("ticket-reservation-commands", outboxEvent.getTopic());
-
-        assertEquals(OutboxStatus.PENDING, outboxEvent.getStatus());
-
-        assertNotNull(outboxEvent.getPayload());
+        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxStatus.PENDING);
 
         /*
-         * Payload.
+         * 5. Проверяем сам payload.
          */
         ReserveTicketCommand command = objectMapper.readValue(outboxEvent.getPayload(), ReserveTicketCommand.class);
 
-        assertEquals(order.getId(), command.orderId());
+        assertThat(command.orderId()).isEqualTo(result.getId());
 
-        assertEquals(TICKET_ID, command.ticketId());
+        assertThat(command.ticketId()).isEqualTo(TICKET_ID);
 
-        assertEquals(USER_ID, command.userId());
-
-        assertNotNull(command.reservationId());
+        assertThat(command.userId()).isEqualTo(USER_ID);
 
         /*
          * Главный Saga invariant:
          *
-         * order_sagas.id == ReserveTicketCommand.reservationId
+         * order_sagas.id == reservationId в Kafka command.
          */
-        assertEquals(saga.getId(), command.reservationId());
+        assertThat(command.reservationId()).isEqualTo(saga.getId());
 
-        /*
-         * Deterministic logical message ID.
-         */
-        assertEquals("saga:" + saga.getId() + ":reserve-ticket", command.messageId());
+        assertThat(command.messageId()).isEqualTo("saga:" + saga.getId() + ":reserve-ticket");
     }
 
     private List<OutboxEvent> toList(Iterable<OutboxEvent> events) {
