@@ -76,4 +76,30 @@ public class PaymentRepository {
                 """, status.name(), Timestamp.from(updatedAt), paymentId);
     }
 
+    public Optional<Payment> findById(UUID paymentId) {
+        return jdbcTemplate.query("""
+                SELECT
+                    id,
+                    order_id,
+                    user_id,
+                    amount,
+                    status,
+                    message_id,
+                    created_at,
+                    updated_at
+                FROM payments
+                WHERE id = ?
+                """, ps -> ps.setObject(1, paymentId), rs -> {
+            if (!rs.next()) {
+                return Optional.empty();
+            }
+
+            Payment payment = new Payment(rs.getObject("id", UUID.class), rs.getLong("order_id"), rs.getLong("user_id"),
+                    rs.getBigDecimal("amount"), PaymentStatus.valueOf(rs.getString("status")),
+                    rs.getString("message_id"), rs.getTimestamp("created_at").toInstant(),
+                    rs.getTimestamp("updated_at").toInstant());
+            return Optional.of(payment);
+        });
+    }
+
 }

@@ -165,9 +165,7 @@ class PaymentTransactionServiceTest {
         when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
                 .thenReturn(1);
 
-        boolean updated = paymentTransactionService.markSucceeded(event);
-
-        assertThat(updated).isTrue();
+        paymentTransactionService.markSucceeded(event);
 
         verify(paymentRepository).updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED),
                 any(Instant.class));
@@ -187,9 +185,7 @@ class PaymentTransactionServiceTest {
         when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
                 .thenReturn(1);
 
-        boolean updated = paymentTransactionService.markFailed(event);
-
-        assertThat(updated).isTrue();
+        paymentTransactionService.markFailed(event);
 
         verify(paymentRepository).updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class));
 
@@ -243,9 +239,7 @@ class PaymentTransactionServiceTest {
         when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
                 .thenReturn(0);
 
-        boolean updated = paymentTransactionService.markFailed(event);
-
-        assertThat(updated).isFalse();
+        paymentTransactionService.markFailed(event);
 
         verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
     }
@@ -260,9 +254,7 @@ class PaymentTransactionServiceTest {
         when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
                 .thenReturn(0);
 
-        boolean updated = paymentTransactionService.markSucceeded(event);
-
-        assertThat(updated).isFalse();
+        paymentTransactionService.markSucceeded(event);
 
         verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
 

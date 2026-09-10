@@ -48,38 +48,35 @@ public class PaymentTransactionService {
     }
 
     @Transactional
-    public boolean markSucceeded(PaymentSucceededEvent event) {
-        int updatedRows = paymentRepository.updateStatusFromPending(event.paymentId(), PaymentStatus.SUCCEEDED,
-                Instant.now());
-
-        if (updatedRows == 0) {
-            return false;
-        }
-
-        if (updatedRows != 1) {
-            throw new IllegalStateException("Unexpected number of updated payment rows: " + updatedRows);
-        }
-
-        paymentOutboxService.addSucceededEvent(event);
-
-        return true;
+    public void markSucceeded(PaymentSucceededEvent event) {
+        transitionToTerminal(event.paymentId(), PaymentStatus.SUCCEEDED,
+                () -> paymentOutboxService.addSucceededEvent(event));
     }
 
     @Transactional
-    public boolean markFailed(PaymentFailedEvent event) {
-        int updatedRows = paymentRepository.updateStatusFromPending(event.paymentId(), PaymentStatus.FAILED,
-                Instant.now());
+    public void markFailed(PaymentFailedEvent event) {
+        transitionToTerminal(event.paymentId(), PaymentStatus.FAILED, () -> paymentOutboxService.addFailedEvent(event));
+    }
 
-        if (updatedRows == 0) {
-            return false;
+    private void transitionToTerminal(UUID paymentId, PaymentStatus targetStatus, Runnable outboxAction) {
+        int updatedRows = paymentRepository.updateStatusFromPending(paymentId, targetStatus, Instant.now());
+        if (updatedRows == 1) {
+            outboxAction.run();
+            return;
         }
 
-        if (updatedRows != 1) {
+        if (updatedRows > 1) {
             throw new IllegalStateException("Unexpected number of updated payment rows: " + updatedRows);
         }
 
-        paymentOutboxService.addFailedEvent(event);
+        Payment currentPayment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new IllegalStateException("Payment not found: " + paymentId));
 
-        return true;
+        if (currentPayment.getStatus() == targetStatus) {
+            return;
+        }
+
+        throw new IllegalStateException("Cannot transition payment " + paymentId + " from " + currentPayment.getStatus()
+                + " to " + targetStatus);
     }
 }
