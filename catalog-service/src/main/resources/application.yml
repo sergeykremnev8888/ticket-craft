@@ -50,6 +50,16 @@ ticketcraft:
   kafka:
     topics:
       ticket-reservation-commands: ticket-reservation-commands
+      ticket-reservation-results: ticket-reservation-results
+
+  outbox:
+    publisher:
+      enabled: true
+      batch-size: 100
+      fixed-delay: 1s
+      lock-duration: 30s
+      retry-delay: 5s
+      send-timeout: 10s
 
 logging:
   level:

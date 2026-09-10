@@ -18,7 +18,6 @@ public class TicketReservationCommandConsumer {
 
     @KafkaListener(topics = "${ticketcraft.kafka.topics.ticket-reservation-commands}", groupId = "catalog-ticket-reservation")
     public void handle(ReserveTicketCommand command) {
-
-        reservationService.reserveTicket(command.ticketId(), command.reservationId());
+        reservationService.processReserveTicketCommand(command);
     }
 }

@@ -28,17 +28,13 @@ class TicketReservationCommandConsumerTest {
     }
 
     @Test
-    void shouldReserveTicketUsingReservationIdFromCommand() {
+    void shouldProcessReserveTicketCommand() {
 
-        UUID reservationId = UUID.randomUUID();
-
-        UUID ticketId = UUID.randomUUID();
-
-        ReserveTicketCommand command = new ReserveTicketCommand("saga:" + reservationId + ":reserve-ticket", 42L,
-                reservationId, ticketId, 10L, Instant.now());
+        ReserveTicketCommand command = new ReserveTicketCommand("saga:111:reserve-ticket", 42L, UUID.randomUUID(),
+                UUID.randomUUID(), 7L, Instant.now());
 
         consumer.handle(command);
 
-        verify(reservationService).reserveTicket(ticketId, reservationId);
+        verify(reservationService).processReserveTicketCommand(command);
     }
 }

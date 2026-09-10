@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -38,13 +39,16 @@ class TicketReservationServiceTest {
     @Mock
     private TicketRepository ticketRepository;
 
+    @Mock
+    private OutboxService outboxService;
+
     private ReservationProperties reservationProperties;
     private TicketReservationService reservationService;
 
     @BeforeEach
     void setUp() {
         reservationProperties = new ReservationProperties(Duration.ofMinutes(10L));
-        reservationService = new TicketReservationService(ticketRepository, reservationProperties);
+        reservationService = new TicketReservationService(ticketRepository, outboxService, reservationProperties);
     }
 
     @Test
@@ -55,6 +59,7 @@ class TicketReservationServiceTest {
         assertThatCode(() -> reservationService.reserveTicket(TICKET_ID, RESERVATION_ID)).doesNotThrowAnyException();
 
         verify(ticketRepository).reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class));
+        verifyNoInteractions(outboxService);
 
         /*
          * UPDATE succeeded, поэтому дополнительный SELECT из БД нам не нужен.
@@ -78,6 +83,7 @@ class TicketReservationServiceTest {
         assertThatCode(() -> reservationService.reserveTicket(TICKET_ID, RESERVATION_ID)).doesNotThrowAnyException();
 
         verify(ticketRepository).reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class));
+        verifyNoInteractions(outboxService);
 
         verify(ticketRepository).findById(TICKET_ID);
     }
@@ -95,6 +101,7 @@ class TicketReservationServiceTest {
                 .isInstanceOf(TicketAlreadyReservedException.class);
 
         verify(ticketRepository).reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class));
+        verifyNoInteractions(outboxService);
 
         verify(ticketRepository).findById(TICKET_ID);
     }
@@ -110,6 +117,7 @@ class TicketReservationServiceTest {
                 .isInstanceOf(TicketNotFoundException.class);
 
         verify(ticketRepository).reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class));
+        verifyNoInteractions(outboxService);
 
         verify(ticketRepository).findById(TICKET_ID);
     }
