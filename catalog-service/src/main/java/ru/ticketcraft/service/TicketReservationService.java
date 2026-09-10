@@ -9,7 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ru.ticketcraft.config.ReservationProperties;
+import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 import ru.ticketcraft.dto.TicketStatus;
@@ -129,6 +131,90 @@ public class TicketReservationService {
          * Билет существует, но зарезервировать его данной Saga нельзя.
          */
         saveTicketReservationFailedResult(command, FAILURE_TICKET_ALREADY_RESERVED, now);
+    }
+
+    @Transactional
+    public void processReleaseTicketCommand(ReleaseTicketCommand command) {
+
+        String resultMessageId = resultMessageId(command);
+
+        if (outboxService.existsByMessageId(resultMessageId)) {
+
+            return;
+        }
+
+        Instant now = Instant.now();
+
+        int updated = ticketRepository.releaseTicket(command.ticketId(), command.reservationId());
+
+        if (updated == 1) {
+
+            saveTicketReleasedResult(command, now);
+
+            return;
+        }
+
+        /*
+         * UPDATE не сработал.
+         *
+         * Нужно отличить:
+         *
+         * 1. билет отсутствует; 2. reservation уже снята; 3. билет сейчас принадлежит
+         * другой reservation.
+         */
+        Optional<Ticket> optionalTicket = ticketRepository.findById(command.ticketId());
+
+        if (optionalTicket.isEmpty()) {
+
+            throw new IllegalStateException("Cannot release reservation: ticket not found" + ": ticketId="
+                    + command.ticketId() + ", reservationId=" + command.reservationId());
+        }
+
+        Ticket ticket = optionalTicket.get();
+
+        /*
+         * Reservation уже отсутствует.
+         *
+         * Это допустимый idempotent completion.
+         *
+         * Например: - reservation была освобождена раньше; - TTL worker успел снять её
+         * до compensation command.
+         *
+         * Для Saga требуемый postcondition уже достигнут: данная reservation больше не
+         * держит билет.
+         */
+        if (ticket.getStatus() == TicketStatus.AVAILABLE) {
+
+            saveTicketReleasedResult(command, now);
+
+            return;
+        }
+
+        /*
+         * RESERVED, но releaseTicket() вернул 0.
+         *
+         * Значит reservationId не совпал.
+         *
+         * Критически важно НЕ освобождать такой билет.
+         */
+        throw new IllegalStateException("Cannot release ticket reserved by another reservation" + ": ticketId="
+                + command.ticketId() + ", expectedReservationId=" + command.reservationId() + ", actualReservationId="
+                + ticket.getReservationId());
+    }
+
+    private void saveTicketReleasedResult(ReleaseTicketCommand command, Instant occurredAt) {
+
+        String messageId = resultMessageId(command);
+
+        TicketReleasedEvent event = new TicketReleasedEvent(messageId, command.orderId(), command.reservationId(),
+                command.ticketId(), occurredAt);
+
+        outboxService.saveTicketReleasedEvent(event);
+    }
+
+    private String resultMessageId(ReleaseTicketCommand command) {
+
+        return "result:" + command.messageId();
     }
 
     private void reserve(UUID ticketId, UUID reservationId) {

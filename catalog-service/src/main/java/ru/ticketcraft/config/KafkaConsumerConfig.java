@@ -11,31 +11,28 @@ import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 
-import ru.ticketcraft.dto.ReserveTicketCommand;
-
 @Configuration
 public class KafkaConsumerConfig {
 
     @Bean
-    ConsumerFactory<String, ReserveTicketCommand> reserveTicketConsumerFactory(KafkaProperties kafkaProperties) {
+    ConsumerFactory<String, Object> ticketReservationCommandConsumerFactory(KafkaProperties kafkaProperties) {
 
         Map<String, Object> properties = kafkaProperties.buildConsumerProperties();
 
-        JacksonJsonDeserializer<ReserveTicketCommand> valueDeserializer = new JacksonJsonDeserializer<>(
-                ReserveTicketCommand.class);
+        JacksonJsonDeserializer<Object> valueDeserializer = new JacksonJsonDeserializer<>();
 
-        valueDeserializer.setUseTypeHeaders(false);
+        valueDeserializer.addTrustedPackages("ru.ticketcraft.dto");
 
         return new DefaultKafkaConsumerFactory<>(properties, new StringDeserializer(), valueDeserializer);
     }
 
     @Bean
-    ConcurrentKafkaListenerContainerFactory<String, ReserveTicketCommand> reserveTicketKafkaListenerContainerFactory(
-            ConsumerFactory<String, ReserveTicketCommand> reserveTicketConsumerFactory) {
+    ConcurrentKafkaListenerContainerFactory<String, Object> ticketReservationCommandKafkaListenerContainerFactory(
+            ConsumerFactory<String, Object> ticketReservationCommandConsumerFactory) {
 
-        ConcurrentKafkaListenerContainerFactory<String, ReserveTicketCommand> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
-        factory.setConsumerFactory(reserveTicketConsumerFactory);
+        factory.setConsumerFactory(ticketReservationCommandConsumerFactory);
 
         return factory;
     }

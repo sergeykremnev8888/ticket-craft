@@ -20,6 +20,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 import ru.ticketcraft.model.Order;
@@ -324,6 +325,176 @@ class TicketReservationResultProcessorIntegrationTest {
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.WAITING_FOR_RESERVATION);
 
         assertThat(outboxEventRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldCancelOrderAndFailSagaWhenTicketReleased() {
+
+        // Given
+        Order order = createOrder(OrderState.PAYMENT_FAILED);
+
+        createSaga(order.getId(), OrderSagaStatus.COMPENSATING_RESERVATION);
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":release-ticket";
+
+        TicketReleasedEvent event = new TicketReleasedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                Instant.now());
+
+        // When
+        processor.process(event);
+
+        // Then
+        Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
+
+        assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.CANCELED);
+
+        OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
+
+        assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.FAILED);
+
+        assertThat(processedEventCount(messageId)).isEqualTo(1);
+    }
+
+    @Test
+    void shouldIgnoreDuplicateTicketReleasedEvent() {
+
+        // Given
+        Order order = createOrder(OrderState.PAYMENT_FAILED);
+
+        createSaga(order.getId(), OrderSagaStatus.COMPENSATING_RESERVATION);
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":release-ticket";
+
+        TicketReleasedEvent event = new TicketReleasedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                Instant.now());
+
+        // When
+        processor.process(event);
+
+        processor.process(event);
+
+        // Then
+        Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
+
+        assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.CANCELED);
+
+        OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
+
+        assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.FAILED);
+
+        /*
+         * Второй delivery должен остановиться на persistent idempotency marker.
+         */
+        assertThat(processedEventCount(messageId)).isEqualTo(1);
+    }
+
+    @Test
+    void shouldRollbackSagaAndProcessedMarkerWhenCancelOrderFails() {
+
+        // Given
+
+        /*
+         * Намеренно неконсистентное состояние.
+         *
+         * Saga готова к завершению compensation, но Order не находится в
+         * PAYMENT_FAILED.
+         */
+        Order order = createOrder(OrderState.CONFIRMED);
+
+        createSaga(order.getId(), OrderSagaStatus.COMPENSATING_RESERVATION);
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":release-ticket";
+
+        TicketReleasedEvent event = new TicketReleasedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                Instant.now());
+
+        // When / Then
+        assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Failed to transition order");
+
+        /*
+         * Order не должен измениться.
+         */
+        Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
+
+        assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.CONFIRMED);
+
+        /*
+         * transitionSaga() выполнялся раньше, поэтому если @Transactional работает
+         * правильно, Saga UPDATE тоже обязан откатиться.
+         */
+        OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
+
+        assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPENSATING_RESERVATION);
+
+        /*
+         * Persistent idempotency marker также обязан быть rollback-нут.
+         *
+         * Иначе Kafka redelivery уже никогда не сможет повторить событие.
+         */
+        assertThat(processedEventCount(messageId)).isZero();
+    }
+
+    @Test
+    void shouldRollbackWhenTicketReleasedReservationIdDoesNotMatchSaga() {
+
+        // Given
+        Order order = createOrder(OrderState.PAYMENT_FAILED);
+
+        createSaga(order.getId(), OrderSagaStatus.COMPENSATING_RESERVATION);
+
+        UUID wrongReservationId = UUID.randomUUID();
+
+        String messageId = "result:saga:" + wrongReservationId + ":release-ticket";
+
+        TicketReleasedEvent event = new TicketReleasedEvent(messageId, order.getId(), wrongReservationId, TICKET_ID,
+                Instant.now());
+
+        // When / Then
+        assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Reservation result correlation mismatch")
+                .hasMessageContaining(RESERVATION_ID.toString()).hasMessageContaining(wrongReservationId.toString());
+
+        Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
+
+        assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.PAYMENT_FAILED);
+
+        OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
+
+        assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPENSATING_RESERVATION);
+
+        assertThat(processedEventCount(messageId)).isZero();
+    }
+
+    @Test
+    void shouldRollbackWhenTicketReleasedTicketIdDoesNotMatchOrder() {
+
+        // Given
+        Order order = createOrder(OrderState.PAYMENT_FAILED);
+
+        createSaga(order.getId(), OrderSagaStatus.COMPENSATING_RESERVATION);
+
+        UUID wrongTicketId = UUID.randomUUID();
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":release-ticket";
+
+        TicketReleasedEvent event = new TicketReleasedEvent(messageId, order.getId(), RESERVATION_ID, wrongTicketId,
+                Instant.now());
+
+        // When / Then
+        assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Reservation result ticket mismatch").hasMessageContaining(TICKET_ID.toString())
+                .hasMessageContaining(wrongTicketId.toString());
+
+        Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
+
+        assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.PAYMENT_FAILED);
+
+        OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
+
+        assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPENSATING_RESERVATION);
+
+        assertThat(processedEventCount(messageId)).isZero();
     }
 
     private Order createOrder(OrderState state) {

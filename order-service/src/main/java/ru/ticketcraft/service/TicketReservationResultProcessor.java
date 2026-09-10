@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 import ru.ticketcraft.model.Order;
@@ -76,6 +77,25 @@ public class TicketReservationResultProcessor {
         transitionSaga(saga.getOrderId(), OrderSagaStatus.WAITING_FOR_RESERVATION, OrderSagaStatus.FAILED);
 
         transitionOrder(order.getId(), OrderState.CREATED, OrderState.CANCELED);
+    }
+
+    @Transactional
+    public void process(TicketReleasedEvent event) {
+
+        if (!processedEventRepository.insertIfAbsent(event.messageId())) {
+
+            return;
+        }
+
+        OrderSaga saga = loadAndValidateSaga(event.orderId(), event.reservationId());
+
+        Order order = loadOrder(event.orderId());
+
+        validateReservationTarget(order, event.ticketId());
+
+        transitionSaga(saga.getOrderId(), OrderSagaStatus.COMPENSATING_RESERVATION, OrderSagaStatus.FAILED);
+
+        transitionOrder(order.getId(), OrderState.PAYMENT_FAILED, OrderState.CANCELED);
     }
 
     private OrderSaga loadAndValidateSaga(Long orderId, UUID reservationId) {

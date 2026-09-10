@@ -1,5 +1,6 @@
 package ru.ticketcraft.model;
 
+import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 
@@ -7,7 +8,9 @@ public enum OutboxEventType {
 
     TICKET_RESERVED("TicketReserved", TicketReservedEvent.class),
 
-    TICKET_RESERVATION_FAILED("TicketReservationFailed", TicketReservationFailedEvent.class);
+    TICKET_RESERVATION_FAILED("TicketReservationFailed", TicketReservationFailedEvent.class),
+
+    TICKET_RELEASED("TicketReleased", TicketReleasedEvent.class);
 
     private final String value;
     private final Class<?> payloadType;

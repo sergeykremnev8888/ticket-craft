@@ -46,4 +46,20 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
                AND t.reservedUntil < :now
             """)
     int releaseExpiredReservations(@Param("now") Instant now);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Ticket t
+               SET t.status = ru.ticketcraft.dto.TicketStatus.AVAILABLE,
+                   t.reservationId = NULL,
+                   t.reservedUntil = NULL,
+                   t.version = t.version + 1,
+                   t.updatedAt = CURRENT_TIMESTAMP
+             WHERE t.id = :ticketId
+               AND t.status = ru.ticketcraft.dto.TicketStatus.RESERVED
+               AND t.reservationId = :reservationId
+            """)
+    int releaseTicket(
+            @Param("ticketId") UUID ticketId,
+            @Param("reservationId") UUID reservationId);
 }

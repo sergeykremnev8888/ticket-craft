@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 import ru.ticketcraft.service.TicketReservationResultProcessor;
@@ -21,10 +22,7 @@ public class TicketReservationResultConsumer {
         this.processor = processor;
     }
 
-    @KafkaListener(
-            topics = "${ticketcraft.kafka.topics.ticket-reservation-results}",
-            containerFactory = "ticketReservationResultKafkaListenerContainerFactory"
-    )
+    @KafkaListener(topics = "${ticketcraft.kafka.topics.ticket-reservation-results}", containerFactory = "ticketReservationResultKafkaListenerContainerFactory")
     public void handle(Object event) {
 
         if (event instanceof TicketReservedEvent ticketReservedEvent) {
@@ -53,6 +51,13 @@ public class TicketReservationResultConsumer {
 
             log.info("Processed TicketReservationFailedEvent " + "[messageId={}, orderId={}, reason={}]",
                     failedEvent.messageId(), failedEvent.orderId(), failedEvent.reason());
+
+            return;
+        }
+
+        if (event instanceof TicketReleasedEvent releasedEvent) {
+
+            processor.process(releasedEvent);
 
             return;
         }

@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 import ru.ticketcraft.config.KafkaTopicsProperties;
+import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 import ru.ticketcraft.model.OutboxEventType;
@@ -43,6 +44,12 @@ public class OutboxService {
 
     public boolean existsByMessageId(String messageId) {
         return repository.existsByMessageId(messageId);
+    }
+
+    public boolean saveTicketReleasedEvent(TicketReleasedEvent event) {
+
+        return save(event.messageId(), event.orderId().toString(), OutboxEventType.TICKET_RELEASED, event,
+                event.occurredAt());
     }
 
     private boolean save(String messageId, String aggregateId, OutboxEventType eventType, Object payload,
