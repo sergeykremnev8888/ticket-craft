@@ -27,13 +27,13 @@ public class OutboxPublisher {
     private static final String PUBLISHER_ID_PREFIX = "order-service-";
 
     private final OutboxClaimService claimService;
-    private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final OutboxPublisherProperties properties;
 
     private final String publisherId;
 
-    public OutboxPublisher(OutboxClaimService claimService, KafkaTemplate<String, OrderEvent> kafkaTemplate,
+    public OutboxPublisher(OutboxClaimService claimService, KafkaTemplate<String, Object> kafkaTemplate,
             ObjectMapper objectMapper, OutboxPublisherProperties properties) {
         this.claimService = claimService;
         this.kafkaTemplate = kafkaTemplate;

@@ -1,0 +1,6 @@
+package ru.ticketcraft.saga;
+
+public enum OrderSagaStatus {
+
+    WAITING_FOR_RESERVATION, WAITING_FOR_PAYMENT, COMPENSATING_RESERVATION, COMPLETED, FAILED
+}

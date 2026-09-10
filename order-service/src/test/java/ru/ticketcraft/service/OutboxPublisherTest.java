@@ -51,7 +51,7 @@ class OutboxPublisherTest {
     private OutboxClaimService claimService;
 
     @Mock
-    private KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     private ObjectMapper objectMapper;
     private OutboxPublisherProperties properties;
@@ -101,7 +101,7 @@ class OutboxPublisherTest {
             return List.of(claimedEvent);
         });
 
-        CompletableFuture<SendResult<String, OrderEvent>> future = CompletableFuture.completedFuture(null);
+        CompletableFuture<SendResult<String, Object>> future = CompletableFuture.completedFuture(null);
 
         when(kafkaTemplate.send(eq(TOPIC), eq(ORDER_ID.toString()), any(OrderEvent.class))).thenReturn(future);
 
@@ -146,7 +146,7 @@ class OutboxPublisherTest {
             return List.of(createEventWithClaim(claimId));
         });
 
-        CompletableFuture<SendResult<String, OrderEvent>> future = new CompletableFuture<>();
+        CompletableFuture<SendResult<String, Object>> future = new CompletableFuture<>();
 
         future.completeExceptionally(new IllegalStateException("Kafka unavailable"));
 
