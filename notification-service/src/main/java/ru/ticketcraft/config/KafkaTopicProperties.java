@@ -20,7 +20,7 @@ public class KafkaTopicProperties {
     private int partitions = 1;
 
     @Min(1)
-    private short replicas = 1;
+    private int replicas = 1;
 
     public String getSourceTopic() {
         return sourceTopic;
@@ -46,11 +46,11 @@ public class KafkaTopicProperties {
         this.partitions = partitions;
     }
 
-    public short getReplicas() {
+    public int getReplicas() {
         return replicas;
     }
 
-    public void setReplicas(short replicas) {
+    public void setReplicas(int replicas) {
         this.replicas = replicas;
     }
 }

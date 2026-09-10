@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: payment-service
+
+  profiles:
+    default: local
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  sql:
+    init:
+      mode: never
+
+  kafka:
+    consumer:
+      group-id: ${PAYMENT_KAFKA_GROUP_ID:payment-group}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+
+    producer:
+      acks: all
+      enable-idempotence: true
+
+server:
+  port: ${SERVER_PORT:8084}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+logging:
+  level:
+    root: INFO
+    "[ru.ticketcraft]": INFO
+
+ticketcraft:
+  outbox:
+    batch-size: ${PAYMENT_OUTBOX_BATCH_SIZE:100}
+    claim-lease: ${PAYMENT_OUTBOX_CLAIM_LEASE:30s}
+    publish-delay: ${PAYMENT_OUTBOX_PUBLISH_DELAY:1s}
+  kafka:
+    request-topic: payment-requests
+    result-topic: payment-results
+    dlt-topic: payment-requests.DLT
+
+    concurrency: 1
+    poll-timeout: 1s
+
+    partitions: 1
+    replicas: 1
+
+    retry:
+      max-attempts: 3
+      back-off: 1s

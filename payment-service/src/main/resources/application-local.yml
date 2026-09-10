@@ -1,0 +1,22 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  datasource:
+    url: ${PAYMENT_DB_URL:jdbc:postgresql://localhost:5435/payment_db}
+    username: ${PAYMENT_DB_USERNAME:postgres}
+    password: ${PAYMENT_DB_PASSWORD:postgres}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+ticketcraft:
+  kafka:
+    concurrency: 1
+    partitions: 1
+    replicas: 1
+
+    retry:
+      max-attempts: 3
+      back-off: 1s
