@@ -34,6 +34,8 @@ ticketcraft:
       ticket-reservation-results: ticket-reservation-results
       ticket-reservation-results-dlt: ticket-reservation-results.DLT
       payment-requests: payment-requests
+      payment-results: payment-results
+      payment-results-dlt: payment-results.DLT
 
   outbox:
     publisher:

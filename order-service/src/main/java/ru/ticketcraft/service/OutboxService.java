@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import ru.ticketcraft.config.KafkaTopicsProperties;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.model.OutboxEventType;
@@ -72,6 +73,16 @@ public class OutboxService {
         return eventId;
     }
 
+    public UUID saveReleaseTicketCommand(Order order, ReleaseTicketCommand command) {
+
+        UUID eventId = UUID.randomUUID();
+
+        save(eventId, AGGREGATE_TYPE_ORDER, order.getId().toString(), OutboxEventType.RELEASE_TICKET,
+                topics.ticketReservationCommands(), command, command.occurredAt());
+
+        return eventId;
+    }
+
     private String serialize(Object payload) {
         try {
             return objectMapper.writeValueAsString(payload);
@@ -80,4 +91,5 @@ public class OutboxService {
                     e);
         }
     }
+
 }

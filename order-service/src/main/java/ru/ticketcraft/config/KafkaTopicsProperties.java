@@ -9,5 +9,7 @@ public record KafkaTopicsProperties(
         String ticketReservationCommands,
         String ticketReservationResults,
         String ticketReservationResultsDlt,
-        String paymentRequests) {
+        String paymentRequests,
+        String paymentResults,
+        String paymentResultsDlt) {
 }

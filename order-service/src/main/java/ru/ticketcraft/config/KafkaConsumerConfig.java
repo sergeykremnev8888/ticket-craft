@@ -88,7 +88,7 @@ public class KafkaConsumerConfig {
 
     @Bean
     DefaultErrorHandler ticketReservationResultErrorHandler(
-            DeadLetterPublishingRecoverer ticketReservationResultDeadLetterPublishingRecoverer) {
+            @Qualifier("ticketReservationResultDeadLetterPublishingRecoverer") DeadLetterPublishingRecoverer ticketReservationResultDeadLetterPublishingRecoverer) {
 
         FixedBackOff backOff = new FixedBackOff(RETRY_BACKOFF_MS, RETRY_ATTEMPTS);
 
@@ -97,14 +97,64 @@ public class KafkaConsumerConfig {
 
     @Bean
     ConcurrentKafkaListenerContainerFactory<String, Object> ticketReservationResultKafkaListenerContainerFactory(
-            ConsumerFactory<String, Object> ticketReservationResultConsumerFactory,
-            DefaultErrorHandler ticketReservationResultErrorHandler) {
+            @Qualifier("ticketReservationResultConsumerFactory") ConsumerFactory<String, Object> consumerFactory,
+            @Qualifier("ticketReservationResultErrorHandler") DefaultErrorHandler errorHandler) {
 
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
-        factory.setConsumerFactory(ticketReservationResultConsumerFactory);
+        factory.setConsumerFactory(consumerFactory);
 
-        factory.setCommonErrorHandler(ticketReservationResultErrorHandler);
+        factory.setCommonErrorHandler(errorHandler);
+
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+
+        return factory;
+    }
+
+    @Bean
+    ConsumerFactory<String, Object> paymentResultConsumerFactory(KafkaProperties kafkaProperties) {
+
+        Map<String, Object> properties = new HashMap<>(kafkaProperties.buildConsumerProperties());
+
+        properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+
+        properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+
+        properties.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JacksonJsonDeserializer.class);
+
+        properties.put(JacksonJsonDeserializer.TRUSTED_PACKAGES, "ru.ticketcraft.dto");
+
+        return new DefaultKafkaConsumerFactory<>(properties);
+    }
+
+    @Bean
+    DeadLetterPublishingRecoverer paymentResultDeadLetterPublishingRecoverer(
+            @Qualifier("ticketReservationResultDltKafkaTemplate") KafkaTemplate<String, Object> kafkaTemplate,
+            KafkaTopicsProperties topics) {
+
+        return new DeadLetterPublishingRecoverer(kafkaTemplate,
+                (record, exception) -> new TopicPartition(topics.paymentResultsDlt(), record.partition()));
+    }
+
+    @Bean
+    DefaultErrorHandler paymentResultErrorHandler(
+            @Qualifier("paymentResultDeadLetterPublishingRecoverer") DeadLetterPublishingRecoverer recoverer) {
+
+        FixedBackOff backOff = new FixedBackOff(1_000L, 2L);
+
+        return new DefaultErrorHandler(recoverer, backOff);
+    }
+
+    @Bean
+    ConcurrentKafkaListenerContainerFactory<String, Object> paymentResultKafkaListenerContainerFactory(
+            @Qualifier("paymentResultConsumerFactory") ConsumerFactory<String, Object> consumerFactory,
+            @Qualifier("paymentResultErrorHandler") DefaultErrorHandler errorHandler) {
+
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+
+        factory.setConsumerFactory(consumerFactory);
+
+        factory.setCommonErrorHandler(errorHandler);
 
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
 
