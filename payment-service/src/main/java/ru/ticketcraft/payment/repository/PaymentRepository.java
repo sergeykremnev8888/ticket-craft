@@ -66,8 +66,8 @@ public class PaymentRepository {
         });
     }
 
-    public void updateStatus(UUID paymentId, PaymentStatus status, Instant updatedAt) {
-        jdbcTemplate.update("""
+    public int updateStatus(UUID paymentId, PaymentStatus status, Instant updatedAt) {
+        return jdbcTemplate.update("""
                 UPDATE payments
                 SET status = ?,
                     updated_at = ?

@@ -5,30 +5,22 @@ spring:
   profiles:
     default: local
 
-  kafka:
-    listener:
-      ack-mode: manual
-
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
-
-    consumer:
-      enable-auto-commit: false
-      group-id: ${KAFKA_CONSUMER_GROUP:payment-group}
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
-      properties:
-        "[spring.json.trusted.packages]": ru.ticketcraft.dto
-
-  datasource:
-    hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:15}
-      minimum-idle: ${DB_POOL_MIN_IDLE:5}
-
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+  sql:
+    init:
+      mode: never
+
+  kafka:
+    consumer:
+      group-id: ${PAYMENT_KAFKA_GROUP_ID:payment-group}
+      enable-auto-commit: false
+
+    producer:
+      acks: all
+      enable-idempotence: true
 
 server:
   port: ${SERVER_PORT:8084}
@@ -39,18 +31,23 @@ management:
       exposure:
         include: health,info,prometheus
 
-ticketcraft:
-  kafka:
-    topic:
-      payment-requested: payment-requests
-      payment-results: payment-results
-
-    retry:
-      max-attempts: 3
-      backoff-ms: 1000
-      dlt-topic: payment-requests.DLT
-
 logging:
   level:
     root: INFO
-    "[ru.ticketcraft.payment]": INFO
+    "[ru.ticketcraft]": INFO
+
+ticketcraft:
+  kafka:
+    request-topic: payment-requests
+    result-topic: payment-results
+    dlt-topic: payment-requests.DLT
+
+    concurrency: 1
+    poll-timeout: 1s
+
+    partitions: 1
+    replicas: 1
+
+    retry:
+      max-attempts: 3
+      back-off: 1s

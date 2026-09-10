@@ -1,21 +1,40 @@
 spring:
+  config:
+    activate:
+      on-profile: prod
+
   datasource:
     url: ${PAYMENT_DB_URL}
     username: ${PAYMENT_DB_USERNAME}
     password: ${PAYMENT_DB_PASSWORD}
 
+    hikari:
+      maximum-pool-size: ${PAYMENT_DB_MAX_POOL_SIZE:20}
+      minimum-idle: ${PAYMENT_DB_MIN_IDLE:5}
+      connection-timeout: ${PAYMENT_DB_CONNECTION_TIMEOUT:30000}
+      idle-timeout: ${PAYMENT_DB_IDLE_TIMEOUT:600000}
+      max-lifetime: ${PAYMENT_DB_MAX_LIFETIME:1800000}
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
 
     consumer:
-      group-id: ${KAFKA_CONSUMER_GROUP:payment-group}
+      group-id: ${PAYMENT_KAFKA_GROUP_ID:payment-group}
+      auto-offset-reset: earliest
 
-    producer:
-      acks: all
-      retries: ${KAFKA_PRODUCER_RETRIES:10}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
 
 ticketcraft:
   kafka:
-    topic:
-      partitions: 3
-      replicas: 3
+    concurrency: ${PAYMENT_KAFKA_CONCURRENCY:3}
+
+    partitions: ${PAYMENT_KAFKA_PARTITIONS:3}
+    replicas: ${PAYMENT_KAFKA_REPLICAS:3}
+
+    retry:
+      max-attempts: ${PAYMENT_KAFKA_RETRY_MAX_ATTEMPTS:3}
+      back-off: ${PAYMENT_KAFKA_RETRY_BACK_OFF:1s}

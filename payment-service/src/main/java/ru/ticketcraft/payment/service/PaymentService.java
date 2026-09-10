@@ -1,53 +1,43 @@
 package ru.ticketcraft.payment.service;
 
-import java.time.Instant;
-import java.util.UUID;
-
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import ru.ticketcraft.dto.PaymentRequestedEvent;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;
 import ru.ticketcraft.payment.model.PaymentStatus;
-import ru.ticketcraft.payment.repository.PaymentRepository;
 
 @Service
 public class PaymentService {
 
-    private final PaymentRepository paymentRepository;
+    private final PaymentTransactionService paymentTransactionService;
     private final PaymentGateway paymentGateway;
 
-    public PaymentService(PaymentRepository paymentRepository, PaymentGateway paymentGateway) {
-
-        this.paymentRepository = paymentRepository;
+    public PaymentService(PaymentTransactionService paymentTransactionService, PaymentGateway paymentGateway) {
+        this.paymentTransactionService = paymentTransactionService;
         this.paymentGateway = paymentGateway;
     }
 
-    @Transactional
     public PaymentResult process(PaymentRequestedEvent event) {
-        Payment existingPayment = paymentRepository.findByOrderId(event.orderId()).orElse(null);
-        if (existingPayment != null) {
-            return existingPayment.getStatus() == PaymentStatus.SUCCEEDED ? PaymentResult.success()
-                    : PaymentResult.failure("Payment already exists: " + existingPayment.getStatus());
+        Payment payment = paymentTransactionService.getOrCreatePayment(event);
+
+        if (payment.getStatus() == PaymentStatus.SUCCEEDED) {
+            return PaymentResult.success();
         }
 
-        Instant now = Instant.now();
-
-        Payment payment = new Payment(UUID.randomUUID(), event.orderId(), event.userId(), event.amount(),
-                PaymentStatus.PENDING, event.messageId(), now, now);
-
-        boolean inserted = paymentRepository.insertIfAbsent(payment);
-        if (!inserted) {
-            return PaymentResult.failure("Payment already exists");
+        if (payment.getStatus() == PaymentStatus.FAILED) {
+            return PaymentResult.failure("Payment already failed");
         }
 
-        PaymentResult result = paymentGateway.charge(event.orderId(), event.userId(), event.amount());
+        PaymentResult result = paymentGateway.charge(payment.getId(), payment.getOrderId(), payment.getUserId(),
+                payment.getAmount());
+
         PaymentStatus status = result.successful() ? PaymentStatus.SUCCEEDED : PaymentStatus.FAILED;
 
-        paymentRepository.updateStatus(payment.getId(), status, Instant.now());
+        paymentTransactionService.updatePaymentStatus(payment.getId(), status);
 
         return result;
     }
+
 }
