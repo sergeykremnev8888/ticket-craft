@@ -9,6 +9,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -33,8 +34,9 @@ public class OutboxPublisher {
 
     private final String publisherId;
 
-    public OutboxPublisher(OutboxClaimService claimService, KafkaTemplate<String, Object> kafkaTemplate,
-            ObjectMapper objectMapper, OutboxPublisherProperties properties) {
+    public OutboxPublisher(OutboxClaimService claimService,
+            @Qualifier("kafkaTemplate") KafkaTemplate<String, Object> kafkaTemplate, ObjectMapper objectMapper,
+            OutboxPublisherProperties properties) {
 
         this.claimService = claimService;
         this.kafkaTemplate = kafkaTemplate;

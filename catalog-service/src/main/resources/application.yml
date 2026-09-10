@@ -50,6 +50,7 @@ ticketcraft:
   kafka:
     topics:
       ticket-reservation-commands: ticket-reservation-commands
+      ticket-reservation-commands-dlt: ticket-reservation-commands.DLT
       ticket-reservation-results: ticket-reservation-results
 
   outbox:
