@@ -1,11 +1,15 @@
 package ru.ticketcraft.payment.config;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +23,7 @@ import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.serializer.DelegatingByTypeSerializer;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
@@ -42,8 +47,14 @@ public class PaymentKafkaConfig {
     ProducerFactory<String, Object> paymentProducerFactory(KafkaProperties springKafkaProperties) {
         Map<String, Object> properties = new HashMap<>(springKafkaProperties.buildProducerProperties());
 
-        return new DefaultKafkaProducerFactory<>(properties,
-                new org.apache.kafka.common.serialization.StringSerializer(), new JacksonJsonSerializer<>());
+        Map<Class<?>, Serializer<?>> serializers = new LinkedHashMap<>();
+
+        serializers.put(byte[].class, new ByteArraySerializer());
+        serializers.put(Object.class, new JacksonJsonSerializer<>());
+
+        DelegatingByTypeSerializer valueSerializer = new DelegatingByTypeSerializer(serializers, true);
+
+        return new DefaultKafkaProducerFactory<>(properties, new StringSerializer(), valueSerializer);
     }
 
     @Bean
@@ -56,13 +67,9 @@ public class PaymentKafkaConfig {
         Map<String, Object> properties = new HashMap<>(springKafkaProperties.buildConsumerProperties());
 
         properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-
         properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
-
         properties.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JacksonJsonDeserializer.class);
-
         properties.put(JacksonJsonDeserializer.VALUE_DEFAULT_TYPE, PaymentRequestedEvent.class.getName());
-
         properties.put(JacksonJsonDeserializer.TRUSTED_PACKAGES, "ru.ticketcraft.dto");
 
         return new DefaultKafkaConsumerFactory<>(properties);

@@ -8,9 +8,11 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -22,7 +24,11 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +37,9 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
@@ -60,9 +68,6 @@ import ru.ticketcraft.payment.repository.PaymentRepository;
 
         "spring.kafka.consumer.properties.spring.json.trusted.packages=ru.ticketcraft.dto",
         "spring.kafka.consumer.properties.spring.json.value.default.type=ru.ticketcraft.dto.PaymentRequestedEvent",
-
-        "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer",
-        "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JacksonJsonSerializer",
 
         "spring.kafka.listener.ack-mode=manual", "spring.kafka.listener.auto-startup=true",
 
@@ -133,7 +138,8 @@ class PaymentKafkaIntegrationTest {
 
         ArgumentCaptor<UUID> paymentIdCaptor = ArgumentCaptor.forClass(UUID.class);
 
-        try (Consumer<String, PaymentRequestedEvent> dltConsumer = createDltConsumer("payment-dlt-test-group-retry")) {
+        try (Consumer<String, PaymentRequestedEvent> dltConsumer = createDltConsumer("payment-dlt-test-group-retry",
+                2)) {
 
             waitForListenerAssignment();
 
@@ -176,18 +182,19 @@ class PaymentKafkaIntegrationTest {
         when(paymentGateway.charge(any(UUID.class), eq(event.orderId()), eq(event.userId()), eq(event.amount())))
                 .thenReturn(PaymentResult.success());
 
-        try (Consumer<String, PaymentRequestedEvent> dltConsumer = createDltConsumer(
-                "payment-dlt-test-group-success")) {
+        try (Consumer<String, PaymentRequestedEvent> dltConsumer = createDltConsumer("payment-dlt-test-group-success",
+                0)) {
 
             waitForListenerAssignment();
 
-            kafkaTemplate.send(REQUEST_TOPIC, event.messageId(), event).join();
+            ProducerRecord<String, Object> record = new ProducerRecord<>(REQUEST_TOPIC, 0, event.messageId(), event);
+
+            kafkaTemplate.send(record).join();
 
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
                 Optional<Payment> payment = paymentRepository.findByOrderId(event.orderId());
 
                 assertThat(payment).isPresent();
-
                 assertThat(payment.get().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
             });
 
@@ -248,8 +255,8 @@ class PaymentKafkaIntegrationTest {
 
             kafkaTemplate.send(REQUEST_TOPIC, event.messageId(), event).join();
 
-            ConsumerRecord<String, PaymentSucceededEvent> resultRecord = KafkaTestUtils.getSingleRecord(resultConsumer,
-                    RESULT_TOPIC, Duration.ofSeconds(10));
+            ConsumerRecord<String, PaymentSucceededEvent> resultRecord = awaitRecordByKey(resultConsumer,
+                    event.orderId().toString(), Duration.ofSeconds(10));
 
             assertThat(resultRecord).isNotNull();
 
@@ -296,8 +303,8 @@ class PaymentKafkaIntegrationTest {
 
             kafkaTemplate.send(REQUEST_TOPIC, event.messageId(), event).join();
 
-            ConsumerRecord<String, PaymentFailedEvent> resultRecord = KafkaTestUtils.getSingleRecord(resultConsumer,
-                    RESULT_TOPIC, Duration.ofSeconds(10));
+            ConsumerRecord<String, PaymentFailedEvent> resultRecord = awaitRecordByKey(resultConsumer,
+                    event.orderId().toString(), Duration.ofSeconds(10));
 
             PaymentFailedEvent resultEvent = resultRecord.value();
 
@@ -330,6 +337,87 @@ class PaymentKafkaIntegrationTest {
         }
     }
 
+    @Test
+    void shouldPublishMalformedMessageToDltWithoutInvokingGateway() {
+        String messageKey = "malformed-payment-message";
+
+        byte[] malformedJson = """
+                {
+                  "messageId": "broken-message",
+                  "orderId":
+                }
+                """.getBytes(StandardCharsets.UTF_8);
+
+        try (Consumer<String, byte[]> dltConsumer = createRawDltConsumer("payment-dlt-test-group-malformed", 1)) {
+
+            waitForListenerAssignment();
+
+            sendRawMessage(REQUEST_TOPIC, messageKey, malformedJson, 1);
+
+            ConsumerRecord<String, byte[]> dltRecord = KafkaTestUtils.getSingleRecord(dltConsumer, DLT_TOPIC,
+                    Duration.ofSeconds(10));
+
+            assertThat(dltRecord.key()).isEqualTo(messageKey);
+            assertThat(dltRecord.partition()).isEqualTo(1);
+            assertThat(dltRecord.value()).isEqualTo(malformedJson);
+
+            verifyNoInteractions(paymentGateway);
+        }
+    }
+
+    private <T> ConsumerRecord<String, T> awaitRecordByKey(Consumer<String, T> consumer, String expectedKey,
+            Duration timeout) {
+
+        long deadline = System.nanoTime() + timeout.toNanos();
+
+        while (System.nanoTime() < deadline) {
+            ConsumerRecords<String, T> records = consumer.poll(Duration.ofMillis(250));
+
+            for (ConsumerRecord<String, T> record : records) {
+                if (expectedKey.equals(record.key())) {
+                    return record;
+                }
+            }
+        }
+
+        throw new AssertionError("No Kafka record found with key: " + expectedKey);
+    }
+
+    private void sendRawMessage(String topic, String key, byte[] value, int partition) {
+
+        Map<String, Object> producerProperties = KafkaTestUtils.producerProps(embeddedKafkaBroker);
+
+        ProducerFactory<String, byte[]> producerFactory = new DefaultKafkaProducerFactory<>(producerProperties,
+                new StringSerializer(), new ByteArraySerializer());
+
+        KafkaTemplate<String, byte[]> rawKafkaTemplate = new KafkaTemplate<>(producerFactory);
+
+        try {
+            ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, partition, key, value);
+
+            rawKafkaTemplate.send(record).join();
+        } finally {
+            rawKafkaTemplate.destroy();
+        }
+    }
+
+    private Consumer<String, byte[]> createRawDltConsumer(String groupId, int partition) {
+
+        Map<String, Object> consumerProperties = KafkaTestUtils.consumerProps(embeddedKafkaBroker, groupId, false);
+
+        ConsumerFactory<String, byte[]> consumerFactory = new DefaultKafkaConsumerFactory<>(consumerProperties,
+                new StringDeserializer(), new ByteArrayDeserializer());
+
+        Consumer<String, byte[]> consumer = consumerFactory.createConsumer();
+
+        TopicPartition topicPartition = new TopicPartition(DLT_TOPIC, partition);
+
+        consumer.assign(List.of(topicPartition));
+        consumer.seekToEnd(List.of(topicPartition));
+
+        return consumer;
+    }
+
     private <T> Consumer<String, T> createResultConsumer(String groupId, Class<T> eventType) {
         Map<String, Object> consumerProperties = KafkaTestUtils.consumerProps(embeddedKafkaBroker, groupId, false);
 
@@ -342,7 +430,7 @@ class PaymentKafkaIntegrationTest {
 
         Consumer<String, T> consumer = consumerFactory.createConsumer();
 
-        embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, true, RESULT_TOPIC);
+        embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, false, RESULT_TOPIC);
 
         return consumer;
     }
@@ -355,7 +443,7 @@ class PaymentKafkaIntegrationTest {
         ContainerTestUtils.waitForAssignment(container, 3);
     }
 
-    private Consumer<String, PaymentRequestedEvent> createDltConsumer(String groupId) {
+    private Consumer<String, PaymentRequestedEvent> createDltConsumer(String groupId, int partition) {
         Map<String, Object> consumerProperties = KafkaTestUtils.consumerProps(embeddedKafkaBroker, groupId, false);
 
         JacksonJsonDeserializer<PaymentRequestedEvent> valueDeserializer = new JacksonJsonDeserializer<>(
@@ -368,7 +456,10 @@ class PaymentKafkaIntegrationTest {
 
         Consumer<String, PaymentRequestedEvent> consumer = consumerFactory.createConsumer();
 
-        embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, true, DLT_TOPIC);
+        TopicPartition topicPartition = new TopicPartition(DLT_TOPIC, partition);
+
+        consumer.assign(List.of(topicPartition));
+        consumer.seekToEnd(List.of(topicPartition));
 
         return consumer;
     }

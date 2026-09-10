@@ -321,6 +321,73 @@ class PaymentTransactionServiceTest {
         verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
     }
 
+    @Test
+    void shouldReturnExistingPaymentForEquivalentRequest() {
+        PaymentRequestedEvent event = createEvent();
+
+        Payment existingPayment = createPayment(UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                PaymentStatus.PENDING);
+
+        when(paymentRepository.findByOrderId(event.orderId())).thenReturn(Optional.of(existingPayment));
+
+        Payment result = paymentTransactionService.getOrCreatePayment(event);
+
+        assertThat(result).isSameAs(existingPayment);
+
+        verify(paymentRepository).findByOrderId(event.orderId());
+        verify(paymentRepository, never()).insertIfAbsent(any(Payment.class));
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
+    }
+
+    @Test
+    void shouldRejectConflictingPaymentRequestForSameOrder() {
+        PaymentRequestedEvent event = new PaymentRequestedEvent("message-2", 100L, 200L, new BigDecimal("250.00"),
+                Instant.parse("2026-09-09T10:05:00Z"));
+
+        Payment existingPayment = createPayment(UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                PaymentStatus.PENDING);
+
+        when(paymentRepository.findByOrderId(event.orderId())).thenReturn(Optional.of(existingPayment));
+
+        assertThatThrownBy(() -> paymentTransactionService.getOrCreatePayment(event))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("Conflicting payment request")
+                .hasMessageContaining("100");
+
+        verify(paymentRepository).findByOrderId(event.orderId());
+        verify(paymentRepository, never()).insertIfAbsent(any(Payment.class));
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
+    }
+
+    @Test
+    void shouldRejectConflictingPaymentLoadedAfterConcurrentInsert() {
+        PaymentRequestedEvent event = createEvent();
+
+        Payment conflictingPayment = new Payment(UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                event.orderId(), event.userId(), new BigDecimal("250.00"), PaymentStatus.PENDING, "message-2",
+                Instant.parse("2026-09-09T10:00:00Z"), Instant.parse("2026-09-09T10:00:00Z"));
+
+        when(paymentRepository.findByOrderId(event.orderId())).thenReturn(Optional.empty())
+                .thenReturn(Optional.of(conflictingPayment));
+
+        when(paymentRepository.insertIfAbsent(any(Payment.class))).thenReturn(false);
+
+        assertThatThrownBy(() -> paymentTransactionService.getOrCreatePayment(event))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("Conflicting payment request")
+                .hasMessageContaining("100");
+
+        verify(paymentRepository, times(2)).findByOrderId(event.orderId());
+
+        verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
+
+        verify(paymentOutboxService, never()).addFailedEvent(any(PaymentFailedEvent.class));
+    }
+
     private PaymentRequestedEvent createEvent() {
         return new PaymentRequestedEvent("message-1", 100L, 200L, new BigDecimal("150.00"),
                 Instant.parse("2026-09-09T10:00:00Z"));

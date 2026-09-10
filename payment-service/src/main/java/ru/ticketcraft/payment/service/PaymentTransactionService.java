@@ -30,6 +30,7 @@ public class PaymentTransactionService {
         Payment existingPayment = paymentRepository.findByOrderId(event.orderId()).orElse(null);
 
         if (existingPayment != null) {
+            validateSamePayment(existingPayment, event);
             return existingPayment;
         }
 
@@ -43,8 +44,13 @@ public class PaymentTransactionService {
             return payment;
         }
 
-        return paymentRepository.findByOrderId(event.orderId()).orElseThrow(() -> new IllegalStateException(
-                "Payment was not found after failed insert for order " + event.orderId()));
+        Payment concurrentPayment = paymentRepository.findByOrderId(event.orderId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Payment was not found after failed insert for order " + event.orderId()));
+
+        validateSamePayment(concurrentPayment, event);
+
+        return concurrentPayment;
     }
 
     @Transactional
@@ -56,6 +62,14 @@ public class PaymentTransactionService {
     @Transactional
     public void markFailed(PaymentFailedEvent event) {
         transitionToTerminal(event.paymentId(), PaymentStatus.FAILED, () -> paymentOutboxService.addFailedEvent(event));
+    }
+
+    private void validateSamePayment(Payment existingPayment, PaymentRequestedEvent event) {
+        if (!existingPayment.getUserId().equals(event.userId())
+                || existingPayment.getAmount().compareTo(event.amount()) != 0) {
+            throw new IllegalStateException(
+                    "Conflicting payment request for order " + event.orderId());
+        }
     }
 
     private void transitionToTerminal(UUID paymentId, PaymentStatus targetStatus, Runnable outboxAction) {
