@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import ru.ticketcraft.config.KafkaTopicsProperties;
 import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.dto.PaymentRequestedEvent;
 import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.model.OutboxEventType;
@@ -59,6 +60,16 @@ public class OutboxService {
         if (inserted != 1) {
             throw new IllegalStateException("Failed to insert outbox event: " + eventId);
         }
+    }
+
+    public UUID savePaymentRequestedEvent(Order order, PaymentRequestedEvent event) {
+
+        UUID eventId = UUID.randomUUID();
+
+        save(eventId, AGGREGATE_TYPE_ORDER, order.getId().toString(), OutboxEventType.PAYMENT_REQUESTED,
+                topics.paymentRequests(), event, event.createdAt());
+
+        return eventId;
     }
 
     private String serialize(Object payload) {

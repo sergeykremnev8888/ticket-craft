@@ -52,7 +52,8 @@ class OutboxServiceTest {
 
     @BeforeEach
     void setUp() {
-        topics = new KafkaTopicsProperties("order-events", "ticket-reservation-commands", "payment-requests");
+        topics = new KafkaTopicsProperties("order-events", "ticket-reservation-commands", "ticket-reservation-results",
+                "ticket-reservation-results.DLT", "payment-requests");
 
         outboxService = new OutboxService(repository, objectMapper, topics);
     }

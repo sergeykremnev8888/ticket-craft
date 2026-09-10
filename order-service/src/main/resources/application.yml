@@ -13,6 +13,10 @@ spring:
     init:
       mode: never
 
+  kafka:
+    consumer:
+      group-id: order-ticket-reservation-results
+
 server:
   port: ${SERVER_PORT:8082}
 
@@ -27,6 +31,8 @@ ticketcraft:
     topics:
       order-events: order-events
       ticket-reservation-commands: ticket-reservation-commands
+      ticket-reservation-results: ticket-reservation-results
+      ticket-reservation-results-dlt: ticket-reservation-results.DLT
       payment-requests: payment-requests
 
   outbox:

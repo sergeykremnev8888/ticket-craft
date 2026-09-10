@@ -6,6 +6,7 @@ import java.util.Map;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,7 +41,8 @@ public class KafkaProducerConfig {
     }
 
     @Bean
-    KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> producerFactory) {
+    KafkaTemplate<String, Object> kafkaTemplate(
+            @Qualifier("producerFactory") ProducerFactory<String, Object> producerFactory) {
 
         return new KafkaTemplate<>(producerFactory);
     }
