@@ -68,7 +68,7 @@ public class PaymentKafkaProperties {
         return replicas;
     }
 
-    public void setReplicas(short replicas) {
+    public void setReplicas(int replicas) {
         this.replicas = replicas;
     }
 }

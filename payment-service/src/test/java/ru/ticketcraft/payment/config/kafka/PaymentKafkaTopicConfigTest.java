@@ -87,7 +87,7 @@ class PaymentKafkaTopicConfigTest {
 
         assertThat(kafkaProperties.getPartitions()).isEqualTo(3);
 
-        assertThat(kafkaProperties.getReplicas()).isEqualTo((short) 1);
+        assertThat(kafkaProperties.getReplicas()).isEqualTo(1);
     }
 
     @Test
