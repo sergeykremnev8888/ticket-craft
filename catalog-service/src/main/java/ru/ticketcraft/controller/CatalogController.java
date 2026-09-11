@@ -40,7 +40,7 @@ public class CatalogController {
      * Production cached endpoint.
      */
     @GetMapping("/events/{eventId}")
-    public ResponseEntity<EventSummaryResponse> getEvent( @PathVariable("eventId") UUID eventId) {
+    public ResponseEntity<EventSummaryResponse> getEvent(@PathVariable("eventId") UUID eventId) {
 
         return ResponseEntity.ok(eventCatalogService.getEvent(eventId));
     }

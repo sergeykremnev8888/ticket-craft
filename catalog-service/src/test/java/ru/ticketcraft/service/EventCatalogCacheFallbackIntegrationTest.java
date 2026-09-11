@@ -40,7 +40,8 @@ import ru.ticketcraft.repository.EventRepository;
          */
         "spring.data.redis.connect-timeout=100ms", "spring.data.redis.timeout=100ms",
 
-        "catalog.cache.events-ttl=5m" })
+        "catalog.cache.events-ttl=5m",
+        "ticketcraft.rate-limit.enabled=false" })
 @Import(EventCatalogCacheFallbackIntegrationTest.TestContainersConfiguration.class)
 class EventCatalogCacheFallbackIntegrationTest {
 
@@ -154,6 +155,7 @@ class EventCatalogCacheFallbackIntegrationTest {
 
         @Bean
         @ServiceConnection
+        @SuppressWarnings("resource")
         PostgreSQLContainer postgresContainer() {
             return new PostgreSQLContainer("postgres:16-alpine").withDatabaseName("catalog_db").withUsername("postgres")
                     .withPassword("postgres");

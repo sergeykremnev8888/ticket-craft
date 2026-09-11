@@ -27,7 +27,11 @@ import ru.ticketcraft.dto.EventSummaryResponse;
 import ru.ticketcraft.model.Event;
 import ru.ticketcraft.repository.EventRepository;
 
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false", "catalog.cache.events-ttl=5m" })
+@SpringBootTest(properties = {
+        "ticketcraft.outbox.publisher.enabled=false",
+        "catalog.cache.events-ttl=5m",
+        "ticketcraft.rate-limit.enabled=false"
+})
 @Import(EventCatalogCacheIntegrationTest.TestContainersConfiguration.class)
 class EventCatalogCacheIntegrationTest {
 
@@ -279,6 +283,7 @@ class EventCatalogCacheIntegrationTest {
 
         @Bean
         @ServiceConnection
+        @SuppressWarnings("resource")
         PostgreSQLContainer postgresContainer() {
             return new PostgreSQLContainer("postgres:16-alpine").withDatabaseName("catalog_db").withUsername("postgres")
                     .withPassword("postgres");
@@ -286,6 +291,7 @@ class EventCatalogCacheIntegrationTest {
 
         @Bean
         @ServiceConnection(name = "redis")
+        @SuppressWarnings("resource")
         GenericContainer<?> redisContainer() {
             return new GenericContainer<>("redis:7.4-alpine").withExposedPorts(6379);
         }

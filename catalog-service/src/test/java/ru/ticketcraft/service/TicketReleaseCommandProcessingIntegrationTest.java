@@ -28,7 +28,9 @@ import ru.ticketcraft.repository.TicketRepository;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false" })
+@SpringBootTest(properties = { 
+        "ticketcraft.outbox.publisher.enabled=false",
+        "ticketcraft.rate-limit.enabled=false" })
 class TicketReleaseCommandProcessingIntegrationTest {
 
     private static final Long ORDER_ID = 3001L;

@@ -29,7 +29,8 @@ import ru.ticketcraft.repository.EventRepository;
 import ru.ticketcraft.repository.TicketRepository;
 
 @Testcontainers
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false" })
+@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false",
+        "ticketcraft.rate-limit.enabled=false" })
 class TicketReservationCommandRollbackIntegrationTest {
 
     private static final Long ORDER_ID = 2001L;
