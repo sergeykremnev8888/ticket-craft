@@ -12,23 +12,21 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import ru.ticketcraft.config.CatalogCacheNames;
 import ru.ticketcraft.dto.EventSummaryResponse;
 import ru.ticketcraft.model.Event;
 import ru.ticketcraft.repository.EventRepository;
+import ru.ticketcraft.support.CatalogTestContainersConfiguration;
 
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false", "catalog.cache.events-ttl=5m" })
-@Import(EventCatalogCacheIntegrationTest.TestContainersConfiguration.class)
+@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false", "catalog.cache.events-ttl=5m",
+        "ticketcraft.rate-limit.enabled=false" })
+@Import(CatalogTestContainersConfiguration.class)
 class EventCatalogCacheIntegrationTest {
 
     private static final String EVENTS_CACHE_KEY = "ticketcraft:catalog:events::all";
@@ -47,6 +45,9 @@ class EventCatalogCacheIntegrationTest {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    @Autowired
+    private RedisConnectionFactory redisConnectionFactory;
+
     @BeforeEach
     void setUp() {
         clearRedis();
@@ -57,6 +58,26 @@ class EventCatalogCacheIntegrationTest {
     void cleanUp() {
         clearRedis();
         eventRepository.deleteAll();
+    }
+
+    @Test
+    void shouldUseSameRedisConnectionForCacheAndTemplate() {
+
+        String key = "ticketcraft:catalog:test:connection";
+
+        redisTemplate.opsForValue().set(key, "ok");
+
+        assertThat(redisTemplate.opsForValue().get(key)).isEqualTo("ok");
+
+        assertThat(redisConnectionFactory.getConnection().ping()).isEqualTo("PONG");
+    }
+
+    @Test
+    void shouldConnectToTestRedis() {
+
+        assertThat(redisConnectionFactory.getConnection().ping()).isEqualTo("PONG");
+
+        System.out.println("RedisConnectionFactory = " + redisConnectionFactory);
     }
 
     @Test
@@ -192,6 +213,15 @@ class EventCatalogCacheIntegrationTest {
 
         UUID eventId = savedEvent.getId();
 
+        Cache cache = cacheManager.getCache(CatalogCacheNames.EVENT_BY_ID);
+
+        assertThat(cache).as("event-by-id cache must be configured").isNotNull();
+
+        /*
+         * До вызова service cache должен быть пустым.
+         */
+        assertThat(cache.get(eventId)).as("Cache must be empty before first service call").isNull();
+
         // When
         EventSummaryResponse response = eventCatalogService.getEvent(eventId);
 
@@ -200,37 +230,42 @@ class EventCatalogCacheIntegrationTest {
 
         assertThat(response.title()).isEqualTo("Redis Serialization Conference");
 
-        String expectedRedisKey = EVENT_BY_ID_CACHE_KEY_PREFIX + eventId;
-
         /*
-         * Проверяем именно физическую запись, которую сделал RedisCacheManager
-         * после @Cacheable.
+         * Сначала проверяем Spring Cache abstraction.
+         *
+         * Если это падает — проблема именно в @Cacheable / cache PUT. Если проходит, но
+         * physical key ниже отсутствует — CacheManager и StringRedisTemplate подключены
+         * к разным Redis.
          */
-        assertThat(redisTemplate.hasKey(expectedRedisKey)).as("Redis must contain key %s", expectedRedisKey).isTrue();
-
-        String cachedJson = redisTemplate.opsForValue().get(expectedRedisKey);
-
-        assertThat(cachedJson).isNotNull().contains("ru.ticketcraft.dto.EventSummaryResponse")
-                .contains(eventId.toString()).contains("Redis Serialization Conference").contains("Serialization test")
-                .contains("Redis Hall");
-
-        /*
-         * Дополнительно убеждаемся, что значение можно прочитать через тот же Spring
-         * Cache abstraction.
-         */
-        Cache cache = cacheManager.getCache(CatalogCacheNames.EVENT_BY_ID);
-
-        assertThat(cache).isNotNull();
-
         Cache.ValueWrapper cached = cache.get(eventId);
 
-        assertThat(cached).as("Spring Cache must deserialize Redis value for key %s", eventId).isNotNull();
+        assertThat(cached).as("Spring Cache must contain event %s immediately after @Cacheable call", eventId)
+                .isNotNull();
 
         assertThat(cached.get()).isInstanceOf(EventSummaryResponse.class);
 
         EventSummaryResponse cachedResponse = (EventSummaryResponse) cached.get();
 
         assertThat(cachedResponse).isEqualTo(response);
+
+        String expectedRedisKey = EVENT_BY_ID_CACHE_KEY_PREFIX + eventId;
+
+        /*
+         * Теперь проверяем фактическое Redis keyspace.
+         */
+        Set<String> physicalKeys = redisTemplate.keys("ticketcraft:catalog:*");
+
+        assertThat(physicalKeys).as("Physical catalog Redis keys").isNotNull();
+
+        assertThat(physicalKeys)
+                .as("Redis must contain key %s. Actual catalog keys: %s", expectedRedisKey, physicalKeys)
+                .contains(expectedRedisKey);
+
+        String cachedJson = redisTemplate.opsForValue().get(expectedRedisKey);
+
+        assertThat(cachedJson).isNotNull().contains("ru.ticketcraft.dto.EventSummaryResponse")
+                .contains(eventId.toString()).contains("Redis Serialization Conference").contains("Serialization test")
+                .contains("Redis Hall");
     }
 
     @Test
@@ -274,20 +309,4 @@ class EventCatalogCacheIntegrationTest {
         }
     }
 
-    @TestConfiguration(proxyBeanMethods = false)
-    static class TestContainersConfiguration {
-
-        @Bean
-        @ServiceConnection
-        PostgreSQLContainer postgresContainer() {
-            return new PostgreSQLContainer("postgres:16-alpine").withDatabaseName("catalog_db").withUsername("postgres")
-                    .withPassword("postgres");
-        }
-
-        @Bean
-        @ServiceConnection(name = "redis")
-        GenericContainer<?> redisContainer() {
-            return new GenericContainer<>("redis:7.4-alpine").withExposedPorts(6379);
-        }
-    }
 }

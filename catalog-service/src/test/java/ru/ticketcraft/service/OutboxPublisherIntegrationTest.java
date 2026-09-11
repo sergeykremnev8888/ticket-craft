@@ -41,7 +41,8 @@ import tools.jackson.databind.ObjectMapper;
          * В тесте создадим OutboxPublisher вручную, чтобы полностью контролировать
          * момент publish.
          */
-        "ticketcraft.outbox.publisher.enabled=false" })
+        "ticketcraft.outbox.publisher.enabled=false",
+        "ticketcraft.rate-limit.enabled=false" })
 class OutboxPublisherIntegrationTest {
 
     private static final String RESULT_TOPIC = "ticket-reservation-results";

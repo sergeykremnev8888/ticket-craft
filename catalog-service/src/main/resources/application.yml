@@ -58,6 +58,17 @@ catalog:
     events-ttl: ${CATALOG_EVENTS_CACHE_TTL:5m}
 
 ticketcraft:
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    catalog-read:
+      capacity: ${CATALOG_READ_RATE_LIMIT_CAPACITY:120}
+      refill-tokens: ${CATALOG_READ_RATE_LIMIT_REFILL_TOKENS:120}
+      refill-period: ${CATALOG_READ_RATE_LIMIT_REFILL_PERIOD:1m}
+    reservation:
+      capacity: ${RESERVATION_RATE_LIMIT_CAPACITY:20}
+      refill-tokens: ${RESERVATION_RATE_LIMIT_REFILL_TOKENS:20}
+      refill-period: ${RESERVATION_RATE_LIMIT_REFILL_PERIOD:1m}
+
   kafka:
     topics:
       ticket-reservation-commands: ticket-reservation-commands

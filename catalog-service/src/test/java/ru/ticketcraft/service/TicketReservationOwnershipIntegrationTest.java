@@ -25,7 +25,7 @@ import ru.ticketcraft.exception.TicketAlreadyReservedException;
 import ru.ticketcraft.model.Ticket;
 import ru.ticketcraft.repository.TicketRepository;
 
-@SpringBootTest
+@SpringBootTest(properties = { "ticketcraft.rate-limit.enabled=false" })
 @Testcontainers
 @ActiveProfiles("test")
 class TicketReservationOwnershipIntegrationTest {

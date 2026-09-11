@@ -33,7 +33,7 @@ import ru.ticketcraft.repository.EventRepository;
 import ru.ticketcraft.repository.TicketRepository;
 
 @Testcontainers
-@SpringBootTest
+@SpringBootTest(properties = { "ticketcraft.rate-limit.enabled=false" })
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TicketReservationServiceConcurrencyTest {
 

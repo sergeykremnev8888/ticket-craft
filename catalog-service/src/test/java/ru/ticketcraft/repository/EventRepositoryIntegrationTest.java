@@ -26,6 +26,7 @@ class EventRepositoryIntegrationTest {
 
     @Container
     @ServiceConnection
+    @SuppressWarnings("resource")
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
             .withDatabaseName("catalog_db").withUsername("postgres").withPassword("postgres");
 
