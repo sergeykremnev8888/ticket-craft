@@ -15,8 +15,6 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
 
     List<Event> findAllByOrderByEventDateAsc();
 
-    List<Event> findAll();
-
     @EntityGraph(attributePaths = { "tickets" })
     @Query("SELECT e FROM Event e")
     List<Event> findAllWithTicketsGraph();

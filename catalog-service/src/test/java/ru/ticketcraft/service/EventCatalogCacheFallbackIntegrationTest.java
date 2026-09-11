@@ -7,23 +7,24 @@ import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import ru.ticketcraft.dto.EventSummaryResponse;
 import ru.ticketcraft.model.Event;
 import ru.ticketcraft.repository.EventRepository;
 
-@Testcontainers
 @SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false",
 
         /*
@@ -40,13 +41,8 @@ import ru.ticketcraft.repository.EventRepository;
         "spring.data.redis.connect-timeout=100ms", "spring.data.redis.timeout=100ms",
 
         "catalog.cache.events-ttl=5m" })
+@Import(EventCatalogCacheFallbackIntegrationTest.TestContainersConfiguration.class)
 class EventCatalogCacheFallbackIntegrationTest {
-
-    @Container
-    @ServiceConnection
-    @SuppressWarnings("resource")
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("catalog_db").withUsername("postgres").withPassword("postgres");
 
     @Autowired
     private EventCatalogService eventCatalogService;
@@ -108,5 +104,60 @@ class EventCatalogCacheFallbackIntegrationTest {
          * выполнит настоящий метод, который прочитает данные из PostgreSQL.
          */
         verify(eventRepository, times(1)).findAllByOrderByEventDateAsc();
+    }
+
+    @Test
+    void shouldFallBackToPostgresForEventByIdWhenRedisIsUnavailable() {
+
+        // Given
+        Event event = new Event();
+
+        event.setTitle("Redis Failure Single Event");
+        event.setDescription("Single event must be loaded from PostgreSQL when Redis is unavailable");
+        event.setEventDate(Instant.parse("2026-12-15T15:00:00Z"));
+        event.setVenue("Fallback Event Hall");
+
+        Event savedEvent = eventRepository.saveAndFlush(event);
+
+        UUID eventId = savedEvent.getId();
+
+        clearInvocations(eventRepository);
+
+        // When
+        EventSummaryResponse response = eventCatalogService.getEvent(eventId);
+
+        // Then
+        assertThat(response.id()).isEqualTo(eventId);
+
+        assertThat(response.title()).isEqualTo("Redis Failure Single Event");
+
+        assertThat(response.description())
+                .isEqualTo("Single event must be loaded from PostgreSQL when Redis is unavailable");
+
+        assertThat(response.eventDate())
+                .isEqualTo(Instant.parse("2026-12-15T15:00:00Z"));
+
+        assertThat(response.venue()).isEqualTo("Fallback Event Hall");
+
+        /*
+         * Redis GET завершится ошибкой.
+         *
+         * LoggingCacheErrorHandler обязан проглотить ошибку,
+         * после чего @Cacheable выполнит настоящий метод
+         * и прочитает event из PostgreSQL.
+         */
+        verify(eventRepository, times(1)).findById(eventId);
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class TestContainersConfiguration {
+
+        @Bean
+        @ServiceConnection
+        PostgreSQLContainer postgresContainer() {
+            return new PostgreSQLContainer("postgres:16-alpine").withDatabaseName("catalog_db").withUsername("postgres")
+                    .withPassword("postgres");
+        }
+
     }
 }
