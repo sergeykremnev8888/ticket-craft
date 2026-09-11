@@ -1,9 +1,7 @@
 package ru.ticketcraft.service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -39,9 +37,7 @@ public class EventCatalogService {
     @Cacheable(cacheNames = CatalogCacheNames.EVENTS, key = "'all'")
     @Transactional(readOnly = true)
     public List<EventSummaryResponse> getEvents() {
-
-        return eventRepository.findAllByOrderByEventDateAsc().stream().map(this::toSummaryResponse)
-                .collect(Collectors.toCollection(ArrayList::new));
+        return eventRepository.findAllSummaries();
     }
 
     /*
@@ -54,11 +50,11 @@ public class EventCatalogService {
     @Cacheable(cacheNames = CatalogCacheNames.EVENT_BY_ID)
     @Transactional(readOnly = true)
     public EventSummaryResponse getEvent(UUID eventId) {
-
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new EventNotFoundException("Event not found: " + eventId));
-
-        return toSummaryResponse(event);
+        return eventRepository.findSummaryById(eventId)
+                .orElseThrow(() ->
+                        new EventNotFoundException(
+                                "Event not found: " + eventId
+                        ));
     }
 
     @Transactional(readOnly = true)
@@ -70,12 +66,6 @@ public class EventCatalogService {
     @Transactional(readOnly = true)
     public List<Event> getEventsWithTicketsGraph() {
         return eventRepository.findAllWithTicketsGraph();
-    }
-
-    private EventSummaryResponse toSummaryResponse(Event event) {
-
-        return new EventSummaryResponse(event.getId(), event.getTitle(), event.getDescription(), event.getEventDate(),
-                event.getVenue());
     }
 
     private EventDto convertToDto(Event event) {
