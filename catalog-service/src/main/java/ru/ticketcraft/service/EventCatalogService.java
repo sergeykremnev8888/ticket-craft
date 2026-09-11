@@ -1,43 +1,89 @@
 package ru.ticketcraft.service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ru.ticketcraft.config.CatalogCacheNames;
 import ru.ticketcraft.dto.EventDto;
+import ru.ticketcraft.dto.EventSummaryResponse;
 import ru.ticketcraft.dto.TicketDto;
+import ru.ticketcraft.exception.EventNotFoundException;
 import ru.ticketcraft.model.Event;
 import ru.ticketcraft.repository.EventRepository;
 
 @Service
 public class EventCatalogService {
 
-	private final EventRepository eventRepository;
+    private final EventRepository eventRepository;
 
-	public EventCatalogService(EventRepository eventRepository) {
-		this.eventRepository = eventRepository;
-	}
+    public EventCatalogService(EventRepository eventRepository) {
 
-	/**
-	 * ДЕМОНСТРАЦИЯ ПРОБЛЕМЫ N+1: Сессия открыта благодаря @Transactional(readOnly =
-	 * true). При обходе event.getTickets() Hibernate выполнит N дополнительных
-	 * SELECT-запросов.
-	 */
-	@Transactional(readOnly = true)
-	public List<EventDto> getEventsLazy() {
-		return eventRepository.findAll().stream().map(this::convertToDto).toList();
-	}
+        this.eventRepository = eventRepository;
+    }
 
-	public List<Event> getEventsWithTicketsGraph() {
-		return eventRepository.findAllWithTicketsGraph();
-	}
+    /*
+     * Production read path.
+     *
+     * Cache-aside:
+     *
+     * 1. Spring сначала ищет key "all" в Redis. 2. Cache hit -> PostgreSQL не
+     * вызывается. 3. Cache miss -> выполняется метод. 4. Результат сохраняется в
+     * Redis.
+     */
+    @Cacheable(cacheNames = CatalogCacheNames.EVENTS, key = "'all'")
+    @Transactional(readOnly = true)
+    public List<EventSummaryResponse> getEvents() {
 
-	private EventDto convertToDto(Event event) {
-		List<TicketDto> tickets = event.getTickets().stream()
-				.map(t -> new TicketDto(t.getId(), t.getSeatNumber(), t.getPrice(), t.getStatus())).toList();
+        return eventRepository.findAllByOrderByEventDateAsc().stream().map(this::toSummaryResponse)
+                .collect(Collectors.toCollection(ArrayList::new));
+    }
 
-		return new EventDto(event.getId(), event.getTitle(), tickets);
-	}
+    /*
+     * Отдельный cache entry для конкретного event.
+     *
+     * Redis key будет примерно:
+     *
+     * ticketcraft:catalog:event-by-id::<UUID>
+     */
+    @Cacheable(cacheNames = CatalogCacheNames.EVENT_BY_ID)
+    @Transactional(readOnly = true)
+    public EventSummaryResponse getEvent(UUID eventId) {
 
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EventNotFoundException("Event not found: " + eventId));
+
+        return toSummaryResponse(event);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventDto> getEventsLazy() {
+
+        return eventRepository.findAll().stream().map(this::convertToDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Event> getEventsWithTicketsGraph() {
+        return eventRepository.findAllWithTicketsGraph();
+    }
+
+    private EventSummaryResponse toSummaryResponse(Event event) {
+
+        return new EventSummaryResponse(event.getId(), event.getTitle(), event.getDescription(), event.getEventDate(),
+                event.getVenue());
+    }
+
+    private EventDto convertToDto(Event event) {
+
+        List<TicketDto> tickets = event.getTickets().stream().map(
+                ticket -> new TicketDto(ticket.getId(), ticket.getSeatNumber(), ticket.getPrice(), ticket.getStatus()))
+                .toList();
+
+        return new EventDto(event.getId(), event.getTitle(), tickets);
+    }
 }

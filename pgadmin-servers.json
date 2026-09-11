@@ -17,6 +17,15 @@
       "MaintenanceDB": "order_db",
       "Username": "order_user",
       "SSLMode": "prefer"
+    },
+    "3": {
+      "Name": "Payment DB (payment_db)",
+      "Group": "TicketCraft Servers",
+      "Host": "postgres-payment",
+      "Port": 5432,
+      "MaintenanceDB": "payment_db",
+      "Username": "payment_user",
+      "SSLMode": "prefer"
     }
   }
 }

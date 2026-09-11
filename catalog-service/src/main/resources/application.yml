@@ -5,6 +5,14 @@ spring:
   profiles:
     default: local
 
+  cache:
+    type: redis
+
+  data:
+    redis:
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_TIMEOUT:1s}
+
   jpa:
     open-in-view: false
 
@@ -45,6 +53,9 @@ catalog:
   reservation:
     duration: ${RESERVATION_DURATION:10m}
     expiration-check-interval: ${RESERVATION_EXPIRATION_CHECK_INTERVAL:10s}
+
+  cache:
+    events-ttl: ${CATALOG_EVENTS_CACHE_TTL:5m}
 
 ticketcraft:
   kafka:

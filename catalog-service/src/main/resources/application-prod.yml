@@ -10,6 +10,10 @@ spring:
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
       validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:1000}
 
+  data:
+    redis:
+      url: ${REDIS_URL}
+
 logging:
   level:
     root: INFO
