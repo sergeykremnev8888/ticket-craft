@@ -103,7 +103,7 @@ class EventCatalogCacheFallbackIntegrationTest {
          * LoggingCacheErrorHandler обязан проглотить ошибку, после чего @Cacheable
          * выполнит настоящий метод, который прочитает данные из PostgreSQL.
          */
-        verify(eventRepository, times(1)).findAllByOrderByEventDateAsc();
+        verify(eventRepository, times(1)).findAllSummaries();
     }
 
     @Test
@@ -146,7 +146,7 @@ class EventCatalogCacheFallbackIntegrationTest {
          * после чего @Cacheable выполнит настоящий метод
          * и прочитает event из PostgreSQL.
          */
-        verify(eventRepository, times(1)).findById(eventId);
+        verify(eventRepository, times(1)).findSummaryById(eventId);
     }
 
     @TestConfiguration(proxyBeanMethods = false)
