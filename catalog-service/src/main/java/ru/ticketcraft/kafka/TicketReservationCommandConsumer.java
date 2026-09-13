@@ -21,6 +21,7 @@ public class TicketReservationCommandConsumer {
 
     @KafkaListener(
             topics = "${ticketcraft.kafka.topics.ticket-reservation-commands}",
+            groupId = "${spring.kafka.consumer.group-id}",
             containerFactory = "ticketReservationCommandKafkaListenerContainerFactory")
     public void handle(Object command) {
 

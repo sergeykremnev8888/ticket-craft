@@ -14,7 +14,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Testcontainers
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false", "spring.cache.type=none" })
+@SpringBootTest(properties = { 
+        "ticketcraft.outbox.publisher.enabled=false",
+        "spring.cache.type=none",
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false" })
 class CatalogDatabaseIndexesIntegrationTest {
 
     @Container

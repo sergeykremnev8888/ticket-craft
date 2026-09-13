@@ -1,12 +1,15 @@
 package ru.ticketcraft.config;
 
-import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
-import org.springframework.cache.interceptor.CacheErrorHandler;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.RedisSerializer;
 
@@ -19,12 +22,11 @@ public class CatalogCacheConfiguration implements CachingConfigurer {
     private final CatalogCacheProperties properties;
 
     public CatalogCacheConfiguration(CatalogCacheProperties properties) {
-
         this.properties = properties;
     }
 
     @Bean
-    RedisCacheManagerBuilderCustomizer catalogRedisCacheManagerBuilderCustomizer() {
+    CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
 
         RedisSerializer<Object> valueSerializer = RedisSerializer.json();
 
@@ -32,9 +34,13 @@ public class CatalogCacheConfiguration implements CachingConfigurer {
                 .entryTtl(properties.eventsTtl()).disableCachingNullValues().prefixCacheNameWith(CACHE_PREFIX)
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer));
 
-        return builder -> builder.withCacheConfiguration(CatalogCacheNames.EVENTS, configuration)
+        RedisCacheWriter cacheWriter = RedisCacheWriter.create(connectionFactory,
+                configurer -> configurer.immediateWrites());
+
+        return RedisCacheManager.builder(cacheWriter).cacheDefaults(configuration)
+                .withCacheConfiguration(CatalogCacheNames.EVENTS, configuration)
                 .withCacheConfiguration(CatalogCacheNames.EVENT_BY_ID, configuration).disableCreateOnMissingCache()
-                .enableStatistics();
+                .enableStatistics().build();
     }
 
     @Bean

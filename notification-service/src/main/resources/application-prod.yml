@@ -9,9 +9,12 @@ spring:
 
 ticketcraft:
   kafka:
+    consumer:
+      concurrency: ${NOTIFICATION_KAFKA_CONCURRENCY:3}
+
     topic:
-      partitions: 3
-      replicas: 3
+      partitions: ${KAFKA_TOPIC_PARTITIONS:3}
+      replicas: ${KAFKA_TOPIC_REPLICAS:3}
 
 logging:
   level:

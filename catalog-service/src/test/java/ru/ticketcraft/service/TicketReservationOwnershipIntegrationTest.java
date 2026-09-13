@@ -25,7 +25,11 @@ import ru.ticketcraft.exception.TicketAlreadyReservedException;
 import ru.ticketcraft.model.Ticket;
 import ru.ticketcraft.repository.TicketRepository;
 
-@SpringBootTest(properties = { "ticketcraft.rate-limit.enabled=false" })
+@SpringBootTest(properties = {
+        "ticketcraft.rate-limit.enabled=false",
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false"})
 @Testcontainers
 @ActiveProfiles("test")
 class TicketReservationOwnershipIntegrationTest {

@@ -8,9 +8,12 @@ spring:
   kafka:
     listener:
       ack-mode: manual
+
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      acks: all
+      "[enable.idempotence]": true
 
     consumer:
       enable-auto-commit: false
@@ -32,6 +35,9 @@ management:
 
 ticketcraft:
   kafka:
+    consumer:
+      concurrency: 1
+
     retry:
       max-attempts: 3
       backoff-ms: 1000

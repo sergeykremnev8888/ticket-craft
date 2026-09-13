@@ -9,6 +9,9 @@ spring:
 
 ticketcraft:
   kafka:
+    consumer:
+      concurrency: 1
+
     topic:
       partitions: 1
       replicas: 1

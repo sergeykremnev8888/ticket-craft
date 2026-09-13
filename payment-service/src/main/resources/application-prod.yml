@@ -28,8 +28,8 @@ ticketcraft:
   kafka:
     concurrency: ${PAYMENT_KAFKA_CONCURRENCY:3}
 
-    partitions: ${PAYMENT_KAFKA_PARTITIONS:3}
-    replicas: ${PAYMENT_KAFKA_REPLICAS:3}
+    partitions: ${KAFKA_TOPIC_PARTITIONS:3}
+    replicas: ${KAFKA_TOPIC_REPLICAS:3}
 
     retry:
       max-attempts: ${PAYMENT_KAFKA_RETRY_MAX_ATTEMPTS:3}

@@ -24,7 +24,12 @@ import ru.ticketcraft.repository.EventRepository;
 import ru.ticketcraft.repository.TicketRepository;
 
 @Testcontainers
-@SpringBootTest(properties = { "ticketcraft.rate-limit.enabled=false" })
+@SpringBootTest(properties = {
+        "ticketcraft.rate-limit.enabled=false",
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false"
+})
 class TicketReservationExpirationServiceTest {
 
     @Container

@@ -13,12 +13,20 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
 
     producer:
-      acks: all
       retries: ${KAFKA_PRODUCER_RETRIES:10}
 
 catalog:
   service:
     url: ${CATALOG_SERVICE_URL}
+
+ticketcraft:
+  kafka:
+    consumer:
+      concurrency: ${ORDER_KAFKA_CONCURRENCY:3}
+
+    topic:
+      partitions: ${KAFKA_TOPIC_PARTITIONS:3}
+      replicas: ${KAFKA_TOPIC_REPLICAS:3}
 
 logging:
   level:

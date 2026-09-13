@@ -18,6 +18,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
@@ -25,24 +26,21 @@ import ru.ticketcraft.dto.EventSummaryResponse;
 import ru.ticketcraft.model.Event;
 import ru.ticketcraft.repository.EventRepository;
 
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false",
+@SpringBootTest(properties = {
+        "ticketcraft.outbox.publisher.enabled=false",
 
-        /*
-         * Намеренно указываем недоступный Redis.
-         *
-         * Redis не является source of truth, поэтому Catalog API должен продолжить
-         * работу через PostgreSQL.
-         */
         "spring.data.redis.url=redis://127.0.0.1:1",
-
-        /*
-         * Не заставляем integration test ждать секунды.
-         */
-        "spring.data.redis.connect-timeout=100ms", "spring.data.redis.timeout=100ms",
+        "spring.data.redis.connect-timeout=100ms",
+        "spring.data.redis.timeout=100ms",
 
         "catalog.cache.events-ttl=5m",
-        "ticketcraft.rate-limit.enabled=false" })
+        "ticketcraft.rate-limit.enabled=false",
+
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false" })
 @Import(EventCatalogCacheFallbackIntegrationTest.TestContainersConfiguration.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class EventCatalogCacheFallbackIntegrationTest {
 
     @Autowired
