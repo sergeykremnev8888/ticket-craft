@@ -90,7 +90,11 @@ public class TicketReservationService {
          */
         if (updated == 1) {
 
-            saveTicketReservedResult(command, now);
+            Ticket ticket = ticketRepository.findById(command.ticketId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Reserved ticket disappeared: ticketId=" + command.ticketId()));
+
+            saveTicketReservedResult(command, ticket, now);
 
             return;
         }
@@ -122,7 +126,7 @@ public class TicketReservationService {
          */
         if (ticket.getStatus() == TicketStatus.RESERVED && command.reservationId().equals(ticket.getReservationId())) {
 
-            saveTicketReservedResult(command, now);
+            saveTicketReservedResult(command, ticket, now);
 
             return;
         }
@@ -243,12 +247,18 @@ public class TicketReservationService {
         throw new TicketAlreadyReservedException("Ticket is already reserved: " + ticketId);
     }
 
-    private void saveTicketReservedResult(ReserveTicketCommand command, Instant occurredAt) {
+    private void saveTicketReservedResult(ReserveTicketCommand command, Ticket ticket, Instant occurredAt) {
 
         String messageId = resultMessageId(command);
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, command.orderId(), command.reservationId(),
-                command.ticketId(), occurredAt);
+        TicketReservedEvent event = new TicketReservedEvent(
+                messageId,
+                command.orderId(),
+                command.reservationId(),
+                command.ticketId(),
+                ticket.getEvent().getId(),
+                ticket.getPrice(),
+                occurredAt);
 
         outboxService.saveTicketReservedEvent(event);
     }

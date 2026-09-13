@@ -14,6 +14,14 @@ spring:
     redis:
       url: ${REDIS_URL:redis://localhost:6379}
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:9000}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9000/oauth2/jwks}
+          audiences: ${JWT_AUDIENCE:ticketcraft-api}
+
 ticketcraft:
   kafka:
     consumer:

@@ -1,5 +1,8 @@
 package ru.ticketcraft.repository;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
 import org.springframework.data.jdbc.repository.query.Modifying;
 import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.CrudRepository;
@@ -19,6 +22,18 @@ public interface OrderRepository extends CrudRepository<Order, Long> {
             """)
     int updateStatusIfCurrent(@Param("orderId") Long orderId, @Param("expectedStatus") String expectedStatus,
             @Param("targetStatus") String targetStatus);
+
+    @Modifying
+    @Query("""
+            UPDATE orders
+            SET event_id = :eventId,
+                total_price = :totalPrice
+            WHERE id = :orderId
+            """)
+    int applyAuthoritativeReservationDetails(
+            @Param("orderId") Long orderId,
+            @Param("eventId") UUID eventId,
+            @Param("totalPrice") BigDecimal totalPrice);
 
     default boolean transitionStatus(Long orderId, OrderState expectedStatus, OrderState targetStatus) {
 

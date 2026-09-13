@@ -49,6 +49,8 @@ public class TicketReservationResultProcessor {
 
         validateReservationTarget(order, event.ticketId());
 
+        applyAuthoritativeReservationDetails(order, event);
+
         transitionSaga(saga.getOrderId(), OrderSagaStatus.WAITING_FOR_RESERVATION, OrderSagaStatus.WAITING_FOR_PAYMENT);
 
         transitionOrder(order.getId(), OrderState.CREATED, OrderState.TICKETS_RESERVED);
@@ -123,6 +125,25 @@ public class TicketReservationResultProcessor {
             throw new IllegalStateException("Reservation result ticket mismatch" + ": orderId=" + order.getId()
                     + ", expectedTicketId=" + order.getTicketId() + ", actualTicketId=" + ticketId);
         }
+    }
+
+
+    private void applyAuthoritativeReservationDetails(Order order, TicketReservedEvent event) {
+
+        if (event.eventId() == null || event.price() == null || event.price().signum() <= 0) {
+            throw new IllegalStateException("Reservation result contains invalid authoritative order details: orderId="
+                    + order.getId());
+        }
+
+        int updated = orderRepository.applyAuthoritativeReservationDetails(order.getId(), event.eventId(), event.price());
+
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Failed to apply authoritative reservation details for order " + order.getId());
+        }
+
+        order.setEventId(event.eventId());
+        order.setTotalPrice(event.price());
     }
 
     private void transitionSaga(Long orderId, OrderSagaStatus expected, OrderSagaStatus target) {
