@@ -1,5 +1,7 @@
 package ru.ticketcraft.security;
 
+import java.math.BigDecimal;
+
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
@@ -14,8 +16,7 @@ public class JwtUserIdResolver {
         Object claim = jwt.getClaims().get(USER_ID_CLAIM);
 
         if (claim instanceof Number number) {
-            long userId = number.longValue();
-            return requirePositive(userId);
+            return resolveNumericClaim(number);
         }
 
         if (claim instanceof String value) {
@@ -29,6 +30,18 @@ public class JwtUserIdResolver {
         throw invalidUserIdClaim();
     }
 
+    private static Long resolveNumericClaim(Number number) {
+
+        try {
+            BigDecimal decimal = new BigDecimal(number.toString());
+            long userId = decimal.longValueExact();
+
+            return requirePositive(userId);
+        } catch (NumberFormatException | ArithmeticException ex) {
+            throw invalidUserIdClaim();
+        }
+    }
+
     private static Long requirePositive(long userId) {
 
         if (userId <= 0) {
@@ -39,6 +52,6 @@ public class JwtUserIdResolver {
     }
 
     private static AccessDeniedException invalidUserIdClaim() {
-        return new AccessDeniedException("JWT claim 'user_id' must contain a positive numeric user identifier");
+        return new AccessDeniedException("JWT claim 'user_id' must contain a positive integer user identifier");
     }
 }
