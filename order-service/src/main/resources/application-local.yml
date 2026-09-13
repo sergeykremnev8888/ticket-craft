@@ -15,6 +15,14 @@ spring:
     producer:
       retries: 5
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:9000}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9000/oauth2/jwks}
+          audiences: ${JWT_AUDIENCE:ticketcraft-api}
+
 catalog:
   service:
     url: ${CATALOG_SERVICE_URL:http://localhost:8081}

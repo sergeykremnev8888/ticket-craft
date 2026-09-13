@@ -7,6 +7,7 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -110,7 +111,7 @@ class OutboxPublisherIntegrationTest {
         String messageId = "result:" + reservationId;
 
         TicketReservedEvent event = new TicketReservedEvent(messageId, ORDER_ID, reservationId, ticketId,
-                Instant.now());
+                UUID.fromString("11111111-1111-1111-1111-111111111111"), new BigDecimal("150.00"), Instant.now());
 
         boolean inserted = outboxService.saveTicketReservedEvent(event);
 
@@ -147,6 +148,11 @@ class OutboxPublisherIntegrationTest {
         assertThat(publishedEvent.reservationId()).isEqualTo(reservationId);
 
         assertThat(publishedEvent.ticketId()).isEqualTo(ticketId);
+
+        assertThat(publishedEvent.eventId())
+                .isEqualTo(UUID.fromString("11111111-1111-1111-1111-111111111111"));
+
+        assertThat(publishedEvent.price()).isEqualByComparingTo(new BigDecimal("150.00"));
 
         Map<String, Object> afterPublish = loadByMessageId(messageId);
 
@@ -223,7 +229,7 @@ class OutboxPublisherIntegrationTest {
         String messageId = "result:" + reservationId;
 
         TicketReservedEvent event = new TicketReservedEvent(messageId, ORDER_ID, reservationId, ticketId,
-                Instant.now());
+                UUID.fromString("11111111-1111-1111-1111-111111111111"), new BigDecimal("150.00"), Instant.now());
 
         boolean inserted = outboxService.saveTicketReservedEvent(event);
 

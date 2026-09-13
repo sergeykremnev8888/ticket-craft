@@ -97,7 +97,7 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID, EVENT_ID, PRICE,
                 Instant.now());
 
         processor.process(event);
@@ -187,6 +187,34 @@ class TicketReservationResultProcessorIntegrationTest {
     }
 
     @Test
+    void shouldUseAuthoritativeCatalogPriceAndEventForPayment() throws Exception {
+
+        Order order = createOrder(OrderState.CREATED);
+        order.setEventId(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+        order.setTotalPrice(new BigDecimal("1.00"));
+        orderRepository.save(order);
+
+        createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_RESERVATION);
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
+
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                EVENT_ID, PRICE, Instant.now());
+
+        processor.process(event);
+
+        Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertThat(persistedOrder.getEventId()).isEqualTo(EVENT_ID);
+        assertThat(persistedOrder.getTotalPrice()).isEqualByComparingTo(PRICE);
+
+        OutboxEvent outboxEvent = toList(outboxEventRepository.findAll()).getFirst();
+        PaymentRequestedEvent paymentRequestedEvent = objectMapper.readValue(outboxEvent.getPayload(),
+                PaymentRequestedEvent.class);
+
+        assertThat(paymentRequestedEvent.amount()).isEqualByComparingTo(PRICE);
+    }
+
+    @Test
     void shouldIgnoreDuplicateTicketReservedEvent() {
 
         Order order = createOrder(OrderState.CREATED);
@@ -195,7 +223,7 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID, EVENT_ID, PRICE,
                 Instant.now());
 
         processor.process(event);
@@ -241,7 +269,7 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID, EVENT_ID, PRICE,
                 Instant.now());
 
         assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
@@ -283,7 +311,7 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + wrongReservationId + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), wrongReservationId, TICKET_ID,
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), wrongReservationId, TICKET_ID, EVENT_ID, PRICE,
                 Instant.now());
 
         assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
@@ -313,7 +341,7 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, wrongTicketId,
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, wrongTicketId, EVENT_ID, PRICE,
                 Instant.now());
 
         assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)

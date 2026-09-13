@@ -17,6 +17,14 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI}
+          jwk-set-uri: ${JWT_JWK_SET_URI}
+          audiences: ${JWT_AUDIENCE:ticketcraft-api}
+
 ticketcraft:
   kafka:
     consumer:

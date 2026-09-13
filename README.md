@@ -194,6 +194,34 @@ notification-group
 
 ---
 
+# Security
+
+`catalog-service` и `order-service` работают как OAuth2 Resource Server и проверяют JWT, подписанные внешним Authorization Server. TicketCraft не хранит пароли пользователей и не выпускает access tokens самостоятельно.
+
+JWT должен проходить проверку подписи, `iss`, `exp`/`nbf` и audience `ticketcraft-api`. Для production задаются:
+
+```text
+JWT_ISSUER_URI=https://idp.example.com
+JWT_JWK_SET_URI=https://idp.example.com/.well-known/jwks.json
+JWT_AUDIENCE=ticketcraft-api
+```
+
+Используемые scopes:
+
+```text
+orders.write   — создание заказа
+catalog.write  — прямой служебный reserve endpoint catalog-service
+metrics.read   — доступ к /actuator/prometheus
+```
+
+`GET /api/v1/catalog/**`, `/actuator/health` и `/actuator/info` доступны без токена. Остальные неизвестные HTTP endpoints закрываются fail-closed.
+
+Для заказа JWT также обязан содержать claim `user_id` с положительным числовым идентификатором пользователя. `userId` больше не принимается из request body.
+
+`price` и `eventId`, пришедшие от клиента, не считаются авторитетными для оплаты: после успешной резервации `catalog-service` публикует фактические `eventId` и `price` из `catalog_db`, а `order-service` записывает их в заказ до создания `PaymentRequestedEvent`.
+
+---
+
 # API
 
 ## Получить каталог мероприятий
@@ -220,7 +248,8 @@ POST /api/v1/catalog/tickets/{ticketId}/reserve
 
 ```bash
 curl -X POST \
-  http://localhost:8081/api/v1/catalog/tickets/1/reserve
+  http://localhost:8081/api/v1/catalog/tickets/22222222-2222-2222-2222-222222222222/reserve \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
 На текущем этапе резервирование использует pessimistic locking.
@@ -235,24 +264,30 @@ curl -X POST \
 POST /api/v1/orders
 ```
 
-Пример:
+Пример body:
 
 ```json
 {
-  "userId": "user-123",
-  "ticketId": 1
+  "eventId": "11111111-1111-1111-1111-111111111111",
+  "ticketId": "22222222-2222-2222-2222-222222222222",
+  "price": 150.00
 }
 ```
+
+`userId` берётся из claim `user_id` проверенного JWT и не доверяется данным клиента.
 
 Пример запроса:
 
 ```bash
 curl -X POST \
   http://localhost:8082/api/v1/orders \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Idempotency-Key: 2f34a020-326d-4d34-b768-d76ec19f8f78" \
   -H "Content-Type: application/json" \
   -d '{
-    "userId": "user-123",
-    "ticketId": 1
+    "eventId": "11111111-1111-1111-1111-111111111111",
+    "ticketId": "22222222-2222-2222-2222-222222222222",
+    "price": 150.00
   }'
 ```
 

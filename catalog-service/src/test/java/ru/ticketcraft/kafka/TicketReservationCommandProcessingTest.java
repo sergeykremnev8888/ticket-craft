@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -21,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import ru.ticketcraft.config.ReservationProperties;
 import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.dto.TicketStatus;
+import ru.ticketcraft.model.Event;
 import ru.ticketcraft.model.Ticket;
 import ru.ticketcraft.repository.TicketRepository;
 import ru.ticketcraft.service.OutboxService;
@@ -56,12 +58,17 @@ public class TicketReservationCommandProcessingTest {
 
         when(ticketRepository.reserveTicket(eq(ticketId), eq(reservationId), any(Instant.class))).thenReturn(1);
 
+        Ticket ticket = reservedTicket(ticketId, reservationId);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+
         when(outboxService.existsByMessageId("result:" + command.messageId())).thenReturn(false);
 
         service.processReserveTicketCommand(command);
 
         verify(outboxService).saveTicketReservedEvent(argThat(event -> event.orderId().equals(100L)
                 && event.ticketId().equals(ticketId) && event.reservationId().equals(reservationId)
+                && event.eventId().equals(UUID.fromString("11111111-1111-1111-1111-111111111111"))
+                && event.price().compareTo(new BigDecimal("150.00")) == 0
                 && event.messageId().equals("result:" + command.messageId())));
 
         verify(outboxService, never()).saveTicketReservationFailedEvent(any());
@@ -78,11 +85,7 @@ public class TicketReservationCommandProcessingTest {
 
         when(ticketRepository.reserveTicket(eq(ticketId), eq(reservationId), any(Instant.class))).thenReturn(0);
 
-        Ticket ticket = new Ticket();
-
-        ticket.setId(ticketId);
-        ticket.setStatus(TicketStatus.RESERVED);
-        ticket.setReservationId(reservationId);
+        Ticket ticket = reservedTicket(ticketId, reservationId);
 
         when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
 
@@ -144,5 +147,19 @@ public class TicketReservationCommandProcessingTest {
                 .saveTicketReservationFailedEvent(argThat(event -> event.reason().equals("TICKET_NOT_FOUND")));
 
         verify(outboxService, never()).saveTicketReservedEvent(any());
+    }
+
+    private static Ticket reservedTicket(UUID ticketId, UUID reservationId) {
+        Event event = new Event();
+        event.setId(UUID.fromString("11111111-1111-1111-1111-111111111111"));
+
+        Ticket ticket = new Ticket();
+        ticket.setId(ticketId);
+        ticket.setEvent(event);
+        ticket.setPrice(new BigDecimal("150.00"));
+        ticket.setStatus(TicketStatus.RESERVED);
+        ticket.setReservationId(reservationId);
+
+        return ticket;
     }
 }
