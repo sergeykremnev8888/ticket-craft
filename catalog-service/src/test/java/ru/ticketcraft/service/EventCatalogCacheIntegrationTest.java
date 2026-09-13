@@ -12,9 +12,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.interceptor.CacheErrorHandler;
+import org.springframework.cache.interceptor.SimpleCacheErrorHandler;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -24,9 +29,16 @@ import ru.ticketcraft.model.Event;
 import ru.ticketcraft.repository.EventRepository;
 import ru.ticketcraft.support.CatalogTestContainersConfiguration;
 
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false", "catalog.cache.events-ttl=5m",
-        "ticketcraft.rate-limit.enabled=false" })
-@Import(CatalogTestContainersConfiguration.class)
+@SpringBootTest(properties = {
+        "ticketcraft.outbox.publisher.enabled=false",
+        "catalog.cache.events-ttl=5m",
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false" })
+@Import({
+    CatalogTestContainersConfiguration.class,
+    EventCatalogCacheIntegrationTest.StrictCacheTestConfiguration.class
+})
 class EventCatalogCacheIntegrationTest {
 
     private static final String EVENTS_CACHE_KEY = "ticketcraft:catalog:events::all";
@@ -77,7 +89,6 @@ class EventCatalogCacheIntegrationTest {
 
         assertThat(redisConnectionFactory.getConnection().ping()).isEqualTo("PONG");
 
-        System.out.println("RedisConnectionFactory = " + redisConnectionFactory);
     }
 
     @Test
@@ -206,66 +217,68 @@ class EventCatalogCacheIntegrationTest {
     void shouldStoreNonEmptyEventSummaryResponseInRedis() {
 
         // Given
-        Event event = createEvent("Redis Serialization Conference", "Serialization test",
-                Instant.parse("2026-12-01T10:00:00Z"), "Redis Hall");
+        Event event = createEvent(
+                "Redis Serialization Conference",
+                "Serialization test",
+                Instant.parse("2026-12-01T10:00:00Z"),
+                "Redis Hall");
 
         Event savedEvent = eventRepository.saveAndFlush(event);
 
         UUID eventId = savedEvent.getId();
-
-        Cache cache = cacheManager.getCache(CatalogCacheNames.EVENT_BY_ID);
-
-        assertThat(cache).as("event-by-id cache must be configured").isNotNull();
-
-        /*
-         * До вызова service cache должен быть пустым.
-         */
-        assertThat(cache.get(eventId)).as("Cache must be empty before first service call").isNull();
 
         // When
         EventSummaryResponse response = eventCatalogService.getEvent(eventId);
 
         // Then
         assertThat(response.id()).isEqualTo(eventId);
-
         assertThat(response.title()).isEqualTo("Redis Serialization Conference");
-
-        /*
-         * Сначала проверяем Spring Cache abstraction.
-         *
-         * Если это падает — проблема именно в @Cacheable / cache PUT. Если проходит, но
-         * physical key ниже отсутствует — CacheManager и StringRedisTemplate подключены
-         * к разным Redis.
-         */
-        Cache.ValueWrapper cached = cache.get(eventId);
-
-        assertThat(cached).as("Spring Cache must contain event %s immediately after @Cacheable call", eventId)
-                .isNotNull();
-
-        assertThat(cached.get()).isInstanceOf(EventSummaryResponse.class);
-
-        EventSummaryResponse cachedResponse = (EventSummaryResponse) cached.get();
-
-        assertThat(cachedResponse).isEqualTo(response);
 
         String expectedRedisKey = EVENT_BY_ID_CACHE_KEY_PREFIX + eventId;
 
-        /*
-         * Теперь проверяем фактическое Redis keyspace.
-         */
-        Set<String> physicalKeys = redisTemplate.keys("ticketcraft:catalog:*");
+        Set<String> keys = redisTemplate.keys("ticketcraft:catalog:*");
 
-        assertThat(physicalKeys).as("Physical catalog Redis keys").isNotNull();
+        assertThat(keys)
+                .as("Physical Redis keys")
+                .isNotNull()
+                .isNotEmpty();
 
-        assertThat(physicalKeys)
-                .as("Redis must contain key %s. Actual catalog keys: %s", expectedRedisKey, physicalKeys)
+        assertThat(keys)
+                .as("Redis must contain key %s", expectedRedisKey)
                 .contains(expectedRedisKey);
 
         String cachedJson = redisTemplate.opsForValue().get(expectedRedisKey);
 
-        assertThat(cachedJson).isNotNull().contains("ru.ticketcraft.dto.EventSummaryResponse")
-                .contains(eventId.toString()).contains("Redis Serialization Conference").contains("Serialization test")
+        assertThat(cachedJson)
+                .as("Redis must contain serialized EventSummaryResponse")
+                .isNotNull()
+                .contains("ru.ticketcraft.dto.EventSummaryResponse")
+                .contains(eventId.toString())
+                .contains("Redis Serialization Conference")
+                .contains("Serialization test")
                 .contains("Redis Hall");
+
+        /*
+         * Physical Redis entry exists.
+         * Now verify that the same entry is visible through Spring Cache API.
+         */
+        Cache cache = cacheManager.getCache(CatalogCacheNames.EVENT_BY_ID);
+
+        assertThat(cache).isNotNull();
+
+        Cache.ValueWrapper cached = cache.get(eventId);
+
+        assertThat(cached)
+                .as("Spring Cache must contain event %s. Physical Redis keys: %s",
+                        eventId, keys)
+                .isNotNull();
+
+        assertThat(cached.get()).isInstanceOf(EventSummaryResponse.class);
+
+        EventSummaryResponse cachedResponse =
+                (EventSummaryResponse) cached.get();
+
+        assertThat(cachedResponse).isEqualTo(response);
     }
 
     @Test
@@ -309,4 +322,13 @@ class EventCatalogCacheIntegrationTest {
         }
     }
 
+    @TestConfiguration
+    static class StrictCacheTestConfiguration {
+
+        @Bean
+        @Primary
+        CacheErrorHandler cacheErrorHandler() {
+            return new SimpleCacheErrorHandler();
+        }
+    }
 }

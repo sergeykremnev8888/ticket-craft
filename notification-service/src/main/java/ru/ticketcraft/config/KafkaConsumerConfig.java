@@ -15,7 +15,7 @@ import org.springframework.util.backoff.FixedBackOff;
 import ru.ticketcraft.dto.OrderEvent;
 
 @Configuration
-@EnableConfigurationProperties(KafkaRetryProperties.class)
+@EnableConfigurationProperties({KafkaRetryProperties.class, KafkaConsumerProperties.class})
 public class KafkaConsumerConfig {
 
     @Bean
@@ -39,12 +39,15 @@ public class KafkaConsumerConfig {
 
     @Bean
     ConcurrentKafkaListenerContainerFactory<String, OrderEvent> kafkaListenerContainerFactory(
-            ConsumerFactory<String, OrderEvent> consumerFactory, DefaultErrorHandler kafkaErrorHandler) {
+            ConsumerFactory<String, OrderEvent> consumerFactory,
+            DefaultErrorHandler kafkaErrorHandler,
+            KafkaConsumerProperties consumerProperties) {
 
         ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(consumerFactory);
         factory.setCommonErrorHandler(kafkaErrorHandler);
+        factory.setConcurrency(consumerProperties.concurrency());
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
 
         return factory;

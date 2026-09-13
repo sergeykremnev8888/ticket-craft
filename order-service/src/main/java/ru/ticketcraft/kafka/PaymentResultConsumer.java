@@ -21,7 +21,7 @@ public class PaymentResultConsumer {
         this.processor = processor;
     }
 
-    @KafkaListener(topics = "${ticketcraft.kafka.topics.payment-results}", groupId = "order-payment-results", containerFactory = "paymentResultKafkaListenerContainerFactory")
+    @KafkaListener(topics = "${ticketcraft.kafka.topics.payment-results}", groupId = "${ticketcraft.kafka.consumer.payment-results-group-id}", containerFactory = "paymentResultKafkaListenerContainerFactory")
     public void handle(Object event) {
 
         if (event instanceof PaymentSucceededEvent succeededEvent) {

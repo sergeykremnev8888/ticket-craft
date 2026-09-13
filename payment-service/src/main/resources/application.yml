@@ -21,7 +21,7 @@ spring:
 
     producer:
       acks: all
-      enable-idempotence: true
+      "[enable.idempotence]": true
 
 server:
   port: ${SERVER_PORT:8084}

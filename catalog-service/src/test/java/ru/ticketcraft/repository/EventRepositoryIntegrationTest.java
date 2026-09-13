@@ -21,7 +21,12 @@ import ru.ticketcraft.dto.EventSummaryResponse;
 import ru.ticketcraft.model.Event;
 
 @Testcontainers
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false", "spring.cache.type=none" })
+@SpringBootTest(properties = {
+        "ticketcraft.outbox.publisher.enabled=false",
+        "spring.cache.type=none",
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false" })
 class EventRepositoryIntegrationTest {
 
     @Container

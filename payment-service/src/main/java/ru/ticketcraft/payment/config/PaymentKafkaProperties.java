@@ -3,17 +3,35 @@ package ru.ticketcraft.payment.config;
 import java.time.Duration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 @ConfigurationProperties(prefix = "ticketcraft.kafka")
+@Validated
 public class PaymentKafkaProperties {
 
+    @NotBlank
     private String requestTopic;
+
+    @NotBlank
     private String resultTopic;
+
+    @NotBlank
     private String dltTopic;
+
+    @Min(1)
     private int concurrency = 1;
+
+    @NotNull
     private Duration pollTimeout = Duration.ofSeconds(1);
 
-    private int partitions = 3;
+    @Min(1)
+    private int partitions = 1;
+
+    @Min(1)
     private int replicas = 1;
 
     public String getRequestTopic() {

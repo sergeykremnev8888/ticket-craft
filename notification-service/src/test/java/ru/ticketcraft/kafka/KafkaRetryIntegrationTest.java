@@ -32,6 +32,7 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
@@ -65,6 +66,7 @@ import ru.ticketcraft.service.IdempotentNotificationProcessor;
 
         "ticketcraft.kafka.topic.source-topic=order-events",
         "ticketcraft.kafka.topic.dlt-topic=order-events.DLT",
+        "ticketcraft.kafka.consumer.concurrency=3",
         "ticketcraft.kafka.topic.partitions=3",
         "ticketcraft.kafka.topic.replicas=1",
 
@@ -101,6 +103,22 @@ class KafkaRetryIntegrationTest {
 
     @MockitoBean
     private IdempotentNotificationProcessor processor;
+
+
+    @Test
+    void shouldStartThreeConcurrentNotificationConsumers() {
+        MessageListenerContainer container =
+                listenerRegistry.getListenerContainer("notificationConsumer");
+
+        assertThat(container)
+                .isInstanceOf(ConcurrentMessageListenerContainer.class);
+
+        @SuppressWarnings("unchecked")
+        ConcurrentMessageListenerContainer<String, OrderEvent> concurrentContainer =
+                (ConcurrentMessageListenerContainer<String, OrderEvent>) container;
+
+        assertThat(concurrentContainer.getContainers()).hasSize(3);
+    }
 
     @Test
     void shouldHaveDltTopic() throws Exception {

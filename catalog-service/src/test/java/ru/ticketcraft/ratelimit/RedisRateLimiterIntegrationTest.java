@@ -34,7 +34,10 @@ import ru.ticketcraft.support.CatalogTestContainersConfiguration;
 
         "ticketcraft.rate-limit.reservation.capacity=3",
         "ticketcraft.rate-limit.reservation.refill-tokens=3",
-        "ticketcraft.rate-limit.reservation.refill-period=1h"
+        "ticketcraft.rate-limit.reservation.refill-period=1h",
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false"
 })
 @Import(CatalogTestContainersConfiguration.class)
 class RedisRateLimiterIntegrationTest {

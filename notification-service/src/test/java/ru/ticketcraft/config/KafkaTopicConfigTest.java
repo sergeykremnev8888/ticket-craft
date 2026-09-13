@@ -8,23 +8,28 @@ import org.junit.jupiter.api.Test;
 class KafkaTopicConfigTest {
 
     @Test
-    void shouldCreateDltTopicWithConfiguredTopology() {
-        KafkaRetryProperties retryProperties = new KafkaRetryProperties();
-        retryProperties.setMaxAttempts(3);
-        retryProperties.setBackoffMs(1000L);
-
+    void shouldConfigureSourceAndDltWithSamePartitionCount() {
         KafkaTopicProperties topicProperties = new KafkaTopicProperties();
-        topicProperties.setPartitions(3);
-        topicProperties.setReplicas((short) 1);
         topicProperties.setSourceTopic("order-events");
         topicProperties.setDltTopic("order-events.DLT");
+        topicProperties.setPartitions(3);
+        topicProperties.setReplicas(2);
 
         KafkaTopicConfig config = new KafkaTopicConfig();
 
-        NewTopic topic = config.orderEventsDltTopic(topicProperties);
+        NewTopic sourceTopic = config.orderEventsTopic(topicProperties);
+        NewTopic dltTopic = config.orderEventsDltTopic(topicProperties);
 
-        assertThat(topic.name()).isEqualTo("order-events.DLT");
+        assertTopic(sourceTopic, "order-events");
+        assertTopic(dltTopic, "order-events.DLT");
+    }
+
+    private void assertTopic(
+            NewTopic topic,
+            String expectedName) {
+
+        assertThat(topic.name()).isEqualTo(expectedName);
         assertThat(topic.numPartitions()).isEqualTo(3);
-        assertThat(topic.replicationFactor()).isEqualTo((short) 1);
+        assertThat(topic.replicationFactor()).isEqualTo((short) 2);
     }
 }

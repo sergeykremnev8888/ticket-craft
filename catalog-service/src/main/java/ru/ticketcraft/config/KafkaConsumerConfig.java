@@ -98,13 +98,16 @@ public class KafkaConsumerConfig {
     @Bean
     ConcurrentKafkaListenerContainerFactory<String, Object> ticketReservationCommandKafkaListenerContainerFactory(
             @Qualifier("ticketReservationCommandConsumerFactory") ConsumerFactory<String, Object> consumerFactory,
-            @Qualifier("ticketReservationCommandErrorHandler") DefaultErrorHandler errorHandler) {
+            @Qualifier("ticketReservationCommandErrorHandler") DefaultErrorHandler errorHandler,
+            KafkaConsumerProperties consumerProperties) {
 
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(consumerFactory);
 
         factory.setCommonErrorHandler(errorHandler);
+
+        factory.setConcurrency(consumerProperties.concurrency());
 
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
 

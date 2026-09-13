@@ -15,7 +15,12 @@ spring:
 
   kafka:
     consumer:
-      group-id: order-ticket-reservation-results
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+
+    producer:
+      acks: all
+      "[enable.idempotence]": true
 
 server:
   port: ${SERVER_PORT:8082}
@@ -28,6 +33,15 @@ management:
 
 ticketcraft:
   kafka:
+    consumer:
+      concurrency: 1
+      ticket-reservation-results-group-id: ${ORDER_RESERVATION_RESULTS_GROUP_ID:order-ticket-reservation-results}
+      payment-results-group-id: ${ORDER_PAYMENT_RESULTS_GROUP_ID:order-payment-results}
+
+    topic:
+      partitions: 1
+      replicas: 1
+
     topics:
       order-events: order-events
       ticket-reservation-commands: ticket-reservation-commands

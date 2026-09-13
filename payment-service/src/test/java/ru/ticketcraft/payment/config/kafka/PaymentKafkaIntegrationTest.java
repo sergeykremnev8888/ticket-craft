@@ -40,7 +40,9 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
@@ -72,12 +74,13 @@ import ru.ticketcraft.payment.repository.PaymentRepository;
         "spring.kafka.listener.ack-mode=manual", "spring.kafka.listener.auto-startup=true",
 
         "ticketcraft.kafka.request-topic=payment-requests", "ticketcraft.kafka.result-topic=payment-results",
-        "ticketcraft.kafka.dlt-topic=payment-requests.DLT", "ticketcraft.kafka.partitions=3",
-        "ticketcraft.kafka.replicas=1",
+        "ticketcraft.kafka.dlt-topic=payment-requests.DLT", "ticketcraft.kafka.concurrency=3",
+        "ticketcraft.kafka.partitions=3", "ticketcraft.kafka.replicas=1",
 
         "ticketcraft.kafka.retry.max-attempts=3", "ticketcraft.kafka.retry.back-off=100ms" })
 @EmbeddedKafka(partitions = 3, topics = { PaymentKafkaIntegrationTest.REQUEST_TOPIC,
-        PaymentKafkaIntegrationTest.RESULT_TOPIC, PaymentKafkaIntegrationTest.DLT_TOPIC })
+        PaymentKafkaIntegrationTest.RESULT_TOPIC, PaymentKafkaIntegrationTest.DLT_TOPIC,
+        PaymentKafkaIntegrationTest.PARTITIONING_TOPIC })
 @Testcontainers
 @ActiveProfiles("test")
 class PaymentKafkaIntegrationTest {
@@ -85,6 +88,7 @@ class PaymentKafkaIntegrationTest {
     static final String REQUEST_TOPIC = "payment-requests";
     static final String RESULT_TOPIC = "payment-results";
     static final String DLT_TOPIC = "payment-requests.DLT";
+    static final String PARTITIONING_TOPIC = "payment-partitioning-test";
 
     @Container
     @ServiceConnection
@@ -106,6 +110,45 @@ class PaymentKafkaIntegrationTest {
 
     @MockitoBean
     private PaymentGateway paymentGateway;
+
+
+    @Test
+    void shouldStartThreeConcurrentPaymentConsumers() {
+        MessageListenerContainer container =
+                listenerRegistry.getListenerContainer("paymentConsumer");
+
+        assertThat(container)
+                .isInstanceOf(ConcurrentMessageListenerContainer.class);
+
+        @SuppressWarnings("unchecked")
+        ConcurrentMessageListenerContainer<String, PaymentRequestedEvent> concurrentContainer =
+                (ConcurrentMessageListenerContainer<String, PaymentRequestedEvent>) container;
+
+        assertThat(concurrentContainer.getContainers()).hasSize(3);
+    }
+
+    @Test
+    void shouldMapSameKafkaKeyToSamePartitionInOrder() {
+        String key = "order-partition-key-" + UUID.randomUUID();
+
+        PaymentRequestedEvent firstEvent =
+                createEvent(2001L, "partition-message-1");
+
+        PaymentRequestedEvent secondEvent =
+                createEvent(2002L, "partition-message-2");
+
+        SendResult<String, Object> firstResult =
+                kafkaTemplate.send(PARTITIONING_TOPIC, key, firstEvent).join();
+
+        SendResult<String, Object> secondResult =
+                kafkaTemplate.send(PARTITIONING_TOPIC, key, secondEvent).join();
+
+        assertThat(secondResult.getRecordMetadata().partition())
+                .isEqualTo(firstResult.getRecordMetadata().partition());
+
+        assertThat(secondResult.getRecordMetadata().offset())
+                .isGreaterThan(firstResult.getRecordMetadata().offset());
+    }
 
     @Test
     void shouldProcessPaymentSuccessfully() {

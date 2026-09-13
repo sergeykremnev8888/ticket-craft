@@ -11,8 +11,26 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaTopicConfig {
 
     @Bean
+    NewTopic orderEventsTopic(KafkaTopicProperties topicProperties) {
+        return topic(
+                topicProperties.getSourceTopic(),
+                topicProperties);
+    }
+
+    @Bean
     NewTopic orderEventsDltTopic(KafkaTopicProperties topicProperties) {
-        return TopicBuilder.name(topicProperties.getDltTopic()).partitions(topicProperties.getPartitions())
-                .replicas(topicProperties.getReplicas()).build();
+        return topic(
+                topicProperties.getDltTopic(),
+                topicProperties);
+    }
+
+    private NewTopic topic(
+            String name,
+            KafkaTopicProperties properties) {
+
+        return TopicBuilder.name(name)
+                .partitions(properties.getPartitions())
+                .replicas(properties.getReplicas())
+                .build();
     }
 }

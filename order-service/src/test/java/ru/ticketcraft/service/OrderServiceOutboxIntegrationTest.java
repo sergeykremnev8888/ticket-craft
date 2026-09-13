@@ -32,7 +32,12 @@ import ru.ticketcraft.saga.OrderSagaStatus;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false" })
+@SpringBootTest(properties = { 
+        "ticketcraft.outbox.publisher.enabled=false",
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false"
+})
 class OrderServiceOutboxIntegrationTest {
 
     private static final String IDEMPOTENCY_KEY = "order-service-outbox-integration-key";

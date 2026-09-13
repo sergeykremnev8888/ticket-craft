@@ -31,9 +31,15 @@ spring:
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
     consumer:
-      group-id: catalog-ticket-reservation
+      group-id: ${CATALOG_KAFKA_GROUP_ID:catalog-ticket-reservation}
       auto-offset-reset: earliest
+      enable-auto-commit: false
+
+    producer:
+      acks: all
+      "[enable.idempotence]": true
 
 server:
   port: ${SERVER_PORT:8081}
@@ -70,6 +76,13 @@ ticketcraft:
       refill-period: ${RESERVATION_RATE_LIMIT_REFILL_PERIOD:1m}
 
   kafka:
+    consumer:
+      concurrency: 1
+
+    topic:
+      partitions: 1
+      replicas: 1
+
     topics:
       ticket-reservation-commands: ticket-reservation-commands
       ticket-reservation-commands-dlt: ticket-reservation-commands.DLT

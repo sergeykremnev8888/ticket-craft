@@ -22,7 +22,7 @@ public class TicketReservationResultConsumer {
         this.processor = processor;
     }
 
-    @KafkaListener(topics = "${ticketcraft.kafka.topics.ticket-reservation-results}", containerFactory = "ticketReservationResultKafkaListenerContainerFactory")
+    @KafkaListener(topics = "${ticketcraft.kafka.topics.ticket-reservation-results}", groupId = "${ticketcraft.kafka.consumer.ticket-reservation-results-group-id}", containerFactory = "ticketReservationResultKafkaListenerContainerFactory")
     public void handle(Object event) {
 
         if (event instanceof TicketReservedEvent ticketReservedEvent) {
@@ -62,6 +62,7 @@ public class TicketReservationResultConsumer {
             return;
         }
 
-        throw new IllegalArgumentException("Unsupported ticket reservation result type: " + event.getClass().getName());
+        log.warn("Ignoring unsupported ticket reservation result event [type={}]",
+                event == null ? "null" : event.getClass().getName());
     }
 }
