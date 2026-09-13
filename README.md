@@ -790,3 +790,69 @@ enable-idempotence: true
 Kafka consumer использует manual acknowledgement.
 
 ---
+
+## Observability
+
+TicketCraft использует Spring Boot Actuator, Micrometer, Prometheus и OpenTelemetry для production-oriented observability baseline.
+
+### Метрики
+
+Каждый runtime-сервис публикует метрики через `/actuator/prometheus` и добавляет low-cardinality tag `application` со значением `spring.application.name`.
+
+Для `catalog-service` и `order-service` включены histogram buckets для `http.server.requests`, чтобы p95/p99 можно было агрегировать между несколькими экземплярами приложения. Дополнительно публикуются бизнес-метрики:
+
+- `ticketcraft.outbox.events` — успешные и неуспешные публикации outbox events с bounded tags `event_type` и `result`;
+- `ticketcraft.outbox.publish.duration` — время публикации outbox event;
+- `ticketcraft.saga.completed`, `ticketcraft.saga.failed`, `ticketcraft.saga.compensated` — terminal outcomes order saga;
+- `ticketcraft.consumer.duplicates` — повторные Kafka messages, отброшенные persistent consumer idempotency;
+- существующие rate-limit metrics `catalog-service` сохраняются.
+
+Metric labels должны содержать только значения с ограниченной кардинальностью. В labels нельзя добавлять `userId`, `orderId`, `ticketId`, `reservationId`, `messageId`, `traceId`, UUID или другие business identifiers. Такие значения должны оставаться в logs/traces.
+
+### Distributed tracing
+
+Все четыре runtime-сервиса используют OpenTelemetry через `spring-boot-starter-opentelemetry`. Traces экспортируются по OTLP/HTTP в Tempo. По умолчанию local profile использует sampling `1.0`, production — `0.1`; оба значения можно переопределить через `TRACING_SAMPLING_PROBABILITY`.
+
+Kafka observation включён для `KafkaTemplate` и listener containers, поэтому producer/consumer spans и trace-context propagation создаются Spring Kafka/Micrometer автоматически.
+
+Transactional outbox является намеренной асинхронной границей: запись outbox создаётся в бизнес-транзакции, а отдельный scheduler публикует её позже. Trace context исходного HTTP request в durable outbox row не сохраняется, поэтому публикация из outbox может начинать новую trace chain. Для correlation через эту границу используются business IDs в structured logs. Сохранять `traceparent` в бизнес-схеме БД в текущем scope проекта намеренно не стали.
+
+### Logging
+
+Local profile оставляет человекочитаемые console logs. В correlation pattern автоматически выводятся `application`, `traceId` и `spanId`. Production profile использует Spring Boot structured logging в ECS JSON format, куда также попадают MDC correlation fields.
+
+### Health probes
+
+Во всех сервисах включены:
+
+```text
+/actuator/health
+/actuator/health/liveness
+/actuator/health/readiness
+```
+
+Эти endpoints будут использоваться Kubernetes probes в следующей infrastructure issue.
+
+### Security метрик
+
+В local profile `/actuator/prometheus` у `catalog-service` и `order-service` открыт для локального Prometheus (`ticketcraft.security.metrics-public=true`). В production значение принудительно `false`, и endpoint остаётся защищён authority `SCOPE_metrics.read`. Health/info остаются public согласно security baseline.
+
+### Локальный observability stack
+
+`docker compose up -d` поднимает:
+
+```text
+Prometheus  http://localhost:9090
+Grafana     http://localhost:3000
+Tempo       http://localhost:3200
+OTLP HTTP   http://localhost:4318
+OTLP gRPC   localhost:4317
+```
+
+Prometheus scrape-конфигурация находится в `observability/prometheus/prometheus.yml`. Grafana автоматически получает Prometheus и Tempo datasources, а dashboard `TicketCraft Overview` provisioned из `observability/grafana/dashboards/ticketcraft-overview.json`.
+
+Dashboard показывает service availability, HTTP request/error rate, p95 latency, outbox metrics, saga outcomes, duplicate consumer messages, JVM heap и HikariCP connections.
+
+### Production ограничения
+
+Локальные Prometheus/Grafana/Tempo containers предназначены только для development/demo. В production telemetry backend должен быть изолирован сетью и защищён отдельной инфраструктурной политикой. Tempo local filesystem storage не является production storage backend.

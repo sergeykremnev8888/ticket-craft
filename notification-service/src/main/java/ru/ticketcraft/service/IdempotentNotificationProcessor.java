@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
 import ru.ticketcraft.repository.ProcessedEventRepository;
 
 @Service
@@ -15,11 +16,13 @@ public class IdempotentNotificationProcessor {
 
     private final ProcessedEventRepository processedEventRepository;
     private final NotificationService notificationService;
+    private final ConsumerDuplicateMetrics duplicateMetrics;
 
     public IdempotentNotificationProcessor(ProcessedEventRepository processedEventRepository,
-            NotificationService notificationService) {
+            NotificationService notificationService, ConsumerDuplicateMetrics duplicateMetrics) {
         this.processedEventRepository = processedEventRepository;
         this.notificationService = notificationService;
+        this.duplicateMetrics = duplicateMetrics;
     }
 
     @Transactional
@@ -27,6 +30,7 @@ public class IdempotentNotificationProcessor {
         int inserted = processedEventRepository.insertIfAbsent(event.getMessageId());
 
         if (inserted == 0) {
+            duplicateMetrics.recordDuplicate();
             log.info("Пропускаем повторное событие. messageId={}", event.getMessageId());
             return;
         }

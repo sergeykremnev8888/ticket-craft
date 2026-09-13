@@ -29,9 +29,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import ru.ticketcraft.config.OutboxPublisherProperties;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
+import ru.ticketcraft.observability.OutboxMetrics;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
@@ -91,7 +93,8 @@ class OutboxPublisherIntegrationTest {
          * Spring-managed publisher при этом disabled, поэтому scheduler не мешает
          * тесту.
          */
-        publisher = new OutboxPublisher(outboxClaimService, kafkaTemplate, objectMapper, properties);
+        publisher = new OutboxPublisher(outboxClaimService, kafkaTemplate, objectMapper, properties,
+                new OutboxMetrics(new SimpleMeterRegistry()));
     }
 
     @AfterEach

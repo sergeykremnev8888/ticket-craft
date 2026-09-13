@@ -1,5 +1,6 @@
 package ru.ticketcraft.payment.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -17,6 +18,7 @@ import ru.ticketcraft.payment.config.PaymentOutboxProperties;
 import ru.ticketcraft.payment.outbox.PaymentOutboxEventType;
 import ru.ticketcraft.payment.outbox.PaymentOutboxRecord;
 import ru.ticketcraft.payment.outbox.PaymentOutboxRepository;
+import ru.ticketcraft.payment.observability.OutboxMetrics;
 import tools.jackson.databind.ObjectMapper;
 
 @Component
@@ -31,15 +33,17 @@ public class PaymentOutboxPublisher {
     private final PaymentKafkaProperties kafkaProperties;
     private final ObjectMapper objectMapper;
     private final PaymentOutboxProperties outboxProperties;
+    private final OutboxMetrics outboxMetrics;
 
     public PaymentOutboxPublisher(PaymentOutboxRepository outboxRepository, KafkaTemplate<String, Object> kafkaTemplate,
             PaymentKafkaProperties kafkaProperties, PaymentOutboxProperties outboxProperties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper, OutboxMetrics outboxMetrics) {
         this.outboxRepository = outboxRepository;
         this.kafkaTemplate = kafkaTemplate;
         this.kafkaProperties = kafkaProperties;
         this.outboxProperties = outboxProperties;
         this.objectMapper = objectMapper;
+        this.outboxMetrics = outboxMetrics;
     }
 
     @Scheduled(fixedDelayString = "${ticketcraft.outbox.publish-delay:1s}")
@@ -55,8 +59,13 @@ public class PaymentOutboxPublisher {
     }
 
     private void publishRecord(PaymentOutboxRecord record) {
+        long startedAt = System.nanoTime();
+        PaymentOutboxEventType eventType = null;
+
         try {
-            Object event = deserializeEvent(record);
+            eventType = PaymentOutboxEventType.fromPersistedValue(record.eventType());
+            Object event = deserializeEvent(record, eventType);
+            PaymentOutboxEventType publishedEventType = eventType;
 
             kafkaTemplate.send(kafkaProperties.getResultTopic(), record.orderId().toString(), event)
                     .whenComplete((result, exception) -> {
@@ -68,15 +77,21 @@ public class PaymentOutboxPublisher {
                                         + "[id={}, messageId={}]", record.id(), record.messageId());
                             }
 
+                            outboxMetrics.recordPublished(publishedEventType,
+                                    Duration.ofNanos(System.nanoTime() - startedAt));
                             return;
                         }
 
+                        outboxMetrics.recordFailed(publishedEventType);
                         log.error("Failed to publish payment outbox event " + "[id={}, messageId={}]", record.id(),
                                 record.messageId(), exception);
 
                         outboxRepository.releaseClaim(record.id(), instanceId);
                     });
         } catch (RuntimeException exception) {
+            if (eventType != null) {
+                outboxMetrics.recordFailed(eventType);
+            }
             log.error("Failed to prepare payment outbox event " + "[id={}, messageId={}]", record.id(),
                     record.messageId(), exception);
 
@@ -84,9 +99,7 @@ public class PaymentOutboxPublisher {
         }
     }
 
-    private Object deserializeEvent(PaymentOutboxRecord record) {
-        PaymentOutboxEventType eventType = PaymentOutboxEventType.fromPersistedValue(record.eventType());
-
+    private Object deserializeEvent(PaymentOutboxRecord record, PaymentOutboxEventType eventType) {
         return switch (eventType) {
         case PAYMENT_SUCCEEDED -> objectMapper.readValue(record.payload(), PaymentSucceededEvent.class);
 

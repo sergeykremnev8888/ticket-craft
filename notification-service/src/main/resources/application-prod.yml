@@ -3,30 +3,31 @@ spring:
     url: ${NOTIFICATION_DB_URL}
     username: ${NOTIFICATION_DB_USERNAME}
     password: ${NOTIFICATION_DB_PASSWORD}
-
     hikari:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
       minimum-idle: ${DB_POOL_MIN_IDLE:5}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
-
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
-
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP:notification-group}
       auto-offset-reset: earliest
       enable-auto-commit: false
-
 ticketcraft:
   kafka:
     consumer:
       concurrency: ${NOTIFICATION_KAFKA_CONCURRENCY:3}
-
     topic:
       partitions: ${KAFKA_TOPIC_PARTITIONS:3}
       replicas: ${KAFKA_TOPIC_REPLICAS:3}
-
 logging:
   level:
     root: INFO
-    "[ru.ticketcraft]": INFO
+    '[ru.ticketcraft]': INFO
+  structured:
+    format:
+      console: ecs
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}

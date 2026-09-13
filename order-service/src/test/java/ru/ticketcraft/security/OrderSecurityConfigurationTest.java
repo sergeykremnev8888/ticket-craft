@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,6 +43,7 @@ import ru.ticketcraft.service.OrderService;
     JwtUserIdResolver.class,
     OrderSecurityConfigurationTest.ActuatorTestController.class
 })
+@TestPropertySource(properties = "ticketcraft.security.metrics-public=false")
 class OrderSecurityConfigurationTest {
 
     private static final UUID EVENT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
