@@ -50,6 +50,23 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-notification:
+    image: postgres:16-alpine
+    container_name: postgres-notification
+    environment:
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME}
+      POSTGRES_USER: ${NOTIFICATION_DB_USERNAME}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+    ports:
+      - "5434:5432"
+    volumes:
+      - pg_notification_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7.4-alpine
     container_name: ticketcraft-redis
@@ -132,6 +149,9 @@ volumes:
 
   pg_payment_data:
     name: ticketcraft_pg_payment_data
+
+  pg_notification_data:
+    name: ticketcraft_pg_notification_data
 
   redis_data:
     name: ticketcraft_redis_data
