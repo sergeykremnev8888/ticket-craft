@@ -116,7 +116,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     ports:
-    - 8080:8080
+    - 8070:8080
     environment:
       KAFKA_CLUSTERS_0_NAME: ticketcraft-kafka
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
