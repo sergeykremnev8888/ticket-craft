@@ -3,18 +3,14 @@ spring:
     url: jdbc:postgresql://localhost:5433/order_db
     username: ${ORDER_DB_USERNAME:postgres}
     password: ${ORDER_DB_PASSWORD:postgres}
-
     hikari:
       maximum-pool-size: 15
       minimum-idle: 5
       connection-timeout: 5000
-
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-
     producer:
       retries: 5
-
   security:
     oauth2:
       resourceserver:
@@ -22,22 +18,20 @@ spring:
           issuer-uri: ${JWT_ISSUER_URI:http://localhost:9000}
           jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9000/oauth2/jwks}
           audiences: ${JWT_AUDIENCE:ticketcraft-api}
-
 catalog:
   service:
     url: ${CATALOG_SERVICE_URL:http://localhost:8081}
-
 ticketcraft:
   kafka:
     consumer:
       concurrency: 1
-
     topic:
       partitions: 1
       replicas: 1
-
+  security:
+    metrics-public: ${METRICS_PUBLIC:true}
 logging:
   level:
-    "[ru.ticketcraft]": DEBUG
-    "[org.hibernate.SQL]": DEBUG
-    "[org.hibernate.orm.jdbc.bind]": TRACE
+    '[ru.ticketcraft]': DEBUG
+    '[org.hibernate.SQL]': DEBUG
+    '[org.hibernate.orm.jdbc.bind]': TRACE

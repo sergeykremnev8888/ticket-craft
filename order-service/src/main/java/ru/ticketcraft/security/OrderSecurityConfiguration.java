@@ -2,6 +2,7 @@ package ru.ticketcraft.security;
 
 import java.io.IOException;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -34,17 +35,29 @@ public class OrderSecurityConfiguration {
 
     private static final BearerTokenAccessDeniedHandler ACCESS_DENIED_HANDLER = new BearerTokenAccessDeniedHandler();
 
+    private final boolean metricsPublic;
+
+    public OrderSecurityConfiguration(@Value("${ticketcraft.security.metrics-public:false}") boolean metricsPublic) {
+        this.metricsPublic = metricsPublic;
+    }
+
     @Bean
     SecurityFilterChain orderSecurityFilterChain(HttpSecurity http) throws Exception {
 
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                        .requestMatchers("/actuator/prometheus").hasAuthority(METRICS_READ_AUTHORITY)
+                .authorizeHttpRequests(authorize -> {
+                    authorize.requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll();
+                    if (metricsPublic) {
+                        authorize.requestMatchers("/actuator/prometheus").permitAll();
+                    } else {
+                        authorize.requestMatchers("/actuator/prometheus").hasAuthority(METRICS_READ_AUTHORITY);
+                    }
+                    authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasAuthority(ORDERS_WRITE_AUTHORITY)
-                        .anyRequest().denyAll())
+                        .anyRequest().denyAll();
+                })
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(OrderSecurityConfiguration::handleUnauthorized)
                         .accessDeniedHandler(OrderSecurityConfiguration::handleForbidden))

@@ -7,15 +7,16 @@ services:
       POSTGRES_USER: ${CATALOG_DB_USERNAME}
       POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD}
     ports:
-      - "5432:5432"
+    - 5432:5432
     volumes:
-      - pg_catalog_data:/var/lib/postgresql/data
+    - pg_catalog_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U catalog_user -d catalog_db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U catalog_user -d catalog_db
       interval: 10s
       timeout: 5s
       retries: 5
-
   postgres-order:
     image: postgres:16-alpine
     container_name: postgres-order
@@ -24,15 +25,16 @@ services:
       POSTGRES_USER: ${ORDER_DB_USERNAME}
       POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD}
     ports:
-      - "5433:5432"
+    - 5433:5432
     volumes:
-      - pg_order_data:/var/lib/postgresql/data
+    - pg_order_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U order_user -d order_db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U order_user -d order_db
       interval: 10s
       timeout: 5s
       retries: 5
-
   postgres-payment:
     image: postgres:16-alpine
     container_name: postgres-payment
@@ -41,15 +43,16 @@ services:
       POSTGRES_USER: ${PAYMENT_DB_USERNAME}
       POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
     ports:
-      - "5435:5432"
+    - 5435:5432
     volumes:
-      - pg_payment_data:/var/lib/postgresql/data
+    - pg_payment_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U payment_user -d payment_db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U payment_user -d payment_db
       interval: 10s
       timeout: 5s
       retries: 5
-
   postgres-notification:
     image: postgres:16-alpine
     container_name: postgres-notification
@@ -58,80 +61,80 @@ services:
       POSTGRES_USER: ${NOTIFICATION_DB_USERNAME}
       POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
     ports:
-      - "5434:5432"
+    - 5434:5432
     volumes:
-      - pg_notification_data:/var/lib/postgresql/data
+    - pg_notification_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U notification_user -d notification_db
       interval: 10s
       timeout: 5s
       retries: 5
-
   redis:
     image: redis:7.4-alpine
     container_name: ticketcraft-redis
     ports:
-      - "6379:6379"
+    - 6379:6379
     volumes:
-      - redis_data:/data
+    - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+      - CMD
+      - redis-cli
+      - ping
       interval: 5s
       timeout: 3s
       retries: 5
-
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: kafka
     ports:
-      - "9092:9092"
+    - 9092:9092
     environment:
       KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: 'broker,controller'
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
-
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
-      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
-      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
-
-      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
-
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 29092 || exit 1"]
+      test:
+      - CMD-SHELL
+      - nc -z localhost 29092 || exit 1
       interval: 10s
       timeout: 5s
       retries: 5
-
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     ports:
-      - "8080:8080"
+    - 8070:8080
     environment:
       KAFKA_CLUSTERS_0_NAME: ticketcraft-kafka
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
     depends_on:
       kafka:
         condition: service_healthy
-
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
     ports:
-      - "5050:80"
+    - 5050:80
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
-      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+    - pgadmin_data:/var/lib/pgadmin
+    - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
     depends_on:
       postgres-catalog:
         condition: service_healthy
@@ -139,22 +142,63 @@ services:
         condition: service_healthy
       postgres-payment:
         condition: service_healthy
-
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: ticketcraft-prometheus
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.retention.time=1d
+    ports:
+    - 9090:9090
+    volumes:
+    - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - prometheus_data:/prometheus
+    extra_hosts:
+    - host.docker.internal:host-gateway
+  tempo:
+    image: grafana/tempo:2.8.2
+    container_name: ticketcraft-tempo
+    command:
+    - -config.file=/etc/tempo.yml
+    ports:
+    - 3200:3200
+    - 4317:4317
+    - 4318:4318
+    volumes:
+    - ./observability/tempo/tempo.yml:/etc/tempo.yml:ro
+    - tempo_data:/var/tempo
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: ticketcraft-grafana
+    ports:
+    - 3000:3000
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+    - prometheus
+    - tempo
 volumes:
   pg_catalog_data:
     name: ticketcraft_pg_catalog_data
-
   pg_order_data:
     name: ticketcraft_pg_order_data
-
   pg_payment_data:
     name: ticketcraft_pg_payment_data
-
   pg_notification_data:
     name: ticketcraft_pg_notification_data
-
   redis_data:
     name: ticketcraft_redis_data
-
   pgadmin_data:
     name: ticketcraft_pgadmin_data
+  prometheus_data:
+    name: ticketcraft_prometheus_data
+  tempo_data:
+    name: ticketcraft_tempo_data
+  grafana_data:
+    name: ticketcraft_grafana_data

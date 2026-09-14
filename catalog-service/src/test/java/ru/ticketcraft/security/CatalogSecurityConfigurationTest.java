@@ -13,6 +13,7 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +32,7 @@ import ru.ticketcraft.ratelimit.RateLimitFilter;
         CatalogSecurityConfiguration.class,
         CatalogSecurityConfigurationTest.TestController.class
 })
+@TestPropertySource(properties = "ticketcraft.security.metrics-public=false")
 class CatalogSecurityConfigurationTest {
 
     @Autowired

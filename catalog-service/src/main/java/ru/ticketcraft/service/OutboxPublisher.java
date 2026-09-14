@@ -1,5 +1,6 @@
 package ru.ticketcraft.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 import ru.ticketcraft.config.OutboxPublisherProperties;
 import ru.ticketcraft.model.OutboxEvent;
 import ru.ticketcraft.model.OutboxEventType;
+import ru.ticketcraft.observability.OutboxMetrics;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -31,17 +33,19 @@ public class OutboxPublisher {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final OutboxPublisherProperties properties;
+    private final OutboxMetrics outboxMetrics;
 
     private final String publisherId;
 
     public OutboxPublisher(OutboxClaimService claimService,
             @Qualifier("kafkaTemplate") KafkaTemplate<String, Object> kafkaTemplate, ObjectMapper objectMapper,
-            OutboxPublisherProperties properties) {
+            OutboxPublisherProperties properties, OutboxMetrics outboxMetrics) {
 
         this.claimService = claimService;
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.outboxMetrics = outboxMetrics;
 
         this.publisherId = PUBLISHER_ID_PREFIX + UUID.randomUUID();
     }
@@ -74,9 +78,13 @@ public class OutboxPublisher {
 
     private void publishEvent(OutboxEvent event, UUID claimId) {
 
+        long startedAt = System.nanoTime();
+        OutboxEventType eventType = null;
+
         try {
 
-            Object payload = deserialize(event);
+            eventType = OutboxEventType.fromValue(event.getEventType());
+            Object payload = deserialize(event, eventType);
 
             kafkaTemplate.send(event.getTopic(), event.getAggregateId(), payload)
                     .get(properties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
@@ -87,34 +95,38 @@ public class OutboxPublisher {
 
                 log.warn("Outbox event was published to Kafka, " + "but database claim was lost. "
                         + "eventId={}, claimId={}", event.getId(), claimId);
+                return;
             }
+
+            outboxMetrics.recordPublished(eventType, Duration.ofNanos(System.nanoTime() - startedAt));
 
         } catch (InterruptedException e) {
 
             Thread.currentThread().interrupt();
 
-            handlePublishFailure(event, claimId, e);
+            handlePublishFailure(event, claimId, eventType, e);
 
         } catch (ExecutionException e) {
 
             Throwable cause = e.getCause() != null ? e.getCause() : e;
 
-            handlePublishFailure(event, claimId, cause);
+            handlePublishFailure(event, claimId, eventType, cause);
 
         } catch (TimeoutException | RuntimeException e) {
 
-            handlePublishFailure(event, claimId, e);
+            handlePublishFailure(event, claimId, eventType, e);
         }
     }
 
-    private Object deserialize(OutboxEvent event) throws JacksonException {
-
-        OutboxEventType eventType = OutboxEventType.fromValue(event.getEventType());
-
+    private Object deserialize(OutboxEvent event, OutboxEventType eventType) throws JacksonException {
         return objectMapper.readValue(event.getPayload(), eventType.getPayloadType());
     }
 
-    private void handlePublishFailure(OutboxEvent event, UUID claimId, Throwable cause) {
+    private void handlePublishFailure(OutboxEvent event, UUID claimId, OutboxEventType eventType, Throwable cause) {
+
+        if (eventType != null) {
+            outboxMetrics.recordFailed(eventType);
+        }
 
         Instant nextAttemptAt = Instant.now().plus(properties.retryDelay());
 

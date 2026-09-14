@@ -12,6 +12,8 @@ import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 import ru.ticketcraft.model.Order;
+import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
+import ru.ticketcraft.observability.OrderSagaMetrics;
 import ru.ticketcraft.repository.OrderRepository;
 import ru.ticketcraft.repository.OrderSagaRepository;
 import ru.ticketcraft.repository.ProcessedEventRepository;
@@ -25,21 +27,26 @@ public class TicketReservationResultProcessor {
     private final OrderRepository orderRepository;
     private final OrderSagaRepository orderSagaRepository;
     private final OutboxService outboxService;
+    private final ConsumerDuplicateMetrics duplicateMetrics;
+    private final OrderSagaMetrics sagaMetrics;
 
     public TicketReservationResultProcessor(ProcessedEventRepository processedEventRepository,
-            OrderRepository orderRepository, OrderSagaRepository orderSagaRepository, OutboxService outboxService) {
+            OrderRepository orderRepository, OrderSagaRepository orderSagaRepository, OutboxService outboxService,
+            ConsumerDuplicateMetrics duplicateMetrics, OrderSagaMetrics sagaMetrics) {
 
         this.processedEventRepository = processedEventRepository;
         this.orderRepository = orderRepository;
         this.orderSagaRepository = orderSagaRepository;
         this.outboxService = outboxService;
+        this.duplicateMetrics = duplicateMetrics;
+        this.sagaMetrics = sagaMetrics;
     }
 
     @Transactional
     public void process(TicketReservedEvent event) {
 
         if (!processedEventRepository.insertIfAbsent(event.messageId())) {
-
+            duplicateMetrics.recordReservationResultDuplicate();
             return;
         }
 
@@ -66,7 +73,7 @@ public class TicketReservationResultProcessor {
     public void process(TicketReservationFailedEvent event) {
 
         if (!processedEventRepository.insertIfAbsent(event.messageId())) {
-
+            duplicateMetrics.recordReservationResultDuplicate();
             return;
         }
 
@@ -79,13 +86,15 @@ public class TicketReservationResultProcessor {
         transitionSaga(saga.getOrderId(), OrderSagaStatus.WAITING_FOR_RESERVATION, OrderSagaStatus.FAILED);
 
         transitionOrder(order.getId(), OrderState.CREATED, OrderState.CANCELED);
+
+        sagaMetrics.recordFailedAfterCommit();
     }
 
     @Transactional
     public void process(TicketReleasedEvent event) {
 
         if (!processedEventRepository.insertIfAbsent(event.messageId())) {
-
+            duplicateMetrics.recordReservationResultDuplicate();
             return;
         }
 
@@ -98,6 +107,8 @@ public class TicketReservationResultProcessor {
         transitionSaga(saga.getOrderId(), OrderSagaStatus.COMPENSATING_RESERVATION, OrderSagaStatus.FAILED);
 
         transitionOrder(order.getId(), OrderState.PAYMENT_FAILED, OrderState.CANCELED);
+
+        sagaMetrics.recordCompensatedAfterCommit();
     }
 
     private OrderSaga loadAndValidateSaga(Long orderId, UUID reservationId) {

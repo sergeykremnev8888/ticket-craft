@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -31,6 +33,7 @@ import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.model.OutboxEvent;
 import ru.ticketcraft.model.OutboxStatus;
+import ru.ticketcraft.observability.OutboxMetrics;
 import tools.jackson.databind.ObjectMapper;
 
 class OutboxPublisherTest {
@@ -68,7 +71,8 @@ class OutboxPublisherTest {
         properties = new OutboxPublisherProperties(true, BATCH_SIZE, Duration.ofSeconds(1), Duration.ofSeconds(30),
                 Duration.ofSeconds(5), Duration.ofSeconds(10));
 
-        publisher = new OutboxPublisher(claimService, kafkaTemplate, objectMapper, properties);
+        publisher = new OutboxPublisher(claimService, kafkaTemplate, objectMapper, properties,
+                new OutboxMetrics(new SimpleMeterRegistry()));
     }
 
     @Test

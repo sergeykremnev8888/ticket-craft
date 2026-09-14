@@ -9,12 +9,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.repository.ProcessedEventRepository;
 
@@ -44,7 +47,8 @@ class IdempotentNotificationProcessorTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
 
-        processor = new IdempotentNotificationProcessor(processedEventRepository, notificationService);
+        processor = new IdempotentNotificationProcessor(processedEventRepository, notificationService,
+                new ConsumerDuplicateMetrics(new SimpleMeterRegistry()));
     }
 
     @Test

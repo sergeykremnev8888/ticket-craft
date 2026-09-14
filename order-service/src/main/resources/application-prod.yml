@@ -3,18 +3,14 @@ spring:
     url: ${ORDER_DB_URL}
     username: ${ORDER_DB_USERNAME}
     password: ${ORDER_DB_PASSWORD}
-
     hikari:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:30}
       minimum-idle: ${DB_POOL_MIN_IDLE:10}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
-
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
-
     producer:
       retries: ${KAFKA_PRODUCER_RETRIES:10}
-
   security:
     oauth2:
       resourceserver:
@@ -22,23 +18,34 @@ spring:
           issuer-uri: ${JWT_ISSUER_URI}
           jwk-set-uri: ${JWT_JWK_SET_URI}
           audiences: ${JWT_AUDIENCE:ticketcraft-api}
-
 catalog:
   service:
     url: ${CATALOG_SERVICE_URL}
-
 ticketcraft:
   kafka:
     consumer:
       concurrency: ${ORDER_KAFKA_CONCURRENCY:3}
-
     topic:
       partitions: ${KAFKA_TOPIC_PARTITIONS:3}
       replicas: ${KAFKA_TOPIC_REPLICAS:3}
-
+  security:
+    metrics-public: ${METRICS_PUBLIC:false}
 logging:
   level:
     root: INFO
-    "[ru.ticketcraft]": INFO
-    "[org.hibernate.SQL]": OFF
-    "[org.hibernate.orm.jdbc.bind]": OFF
+    '[ru.ticketcraft]': INFO
+    '[org.hibernate.SQL]': 'OFF'
+    '[org.hibernate.orm.jdbc.bind]': 'OFF'
+  structured:
+    format:
+      console: ecs
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}

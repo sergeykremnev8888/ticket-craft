@@ -20,6 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
 import ru.ticketcraft.repository.ProcessedEventRepository;
 
 @DataJdbcTest
@@ -43,6 +44,9 @@ class IdempotentNotificationProcessorIntegrationTest {
 
     @MockitoBean
     private NotificationService notificationService;
+
+    @MockitoBean
+    private ConsumerDuplicateMetrics duplicateMetrics;
 
     @BeforeEach
     void setUp() {

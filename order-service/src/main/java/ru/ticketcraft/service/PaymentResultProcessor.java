@@ -10,6 +10,8 @@ import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.model.Order;
+import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
+import ru.ticketcraft.observability.OrderSagaMetrics;
 import ru.ticketcraft.repository.OrderRepository;
 import ru.ticketcraft.repository.OrderSagaRepository;
 import ru.ticketcraft.repository.ProcessedEventRepository;
@@ -23,20 +25,26 @@ public class PaymentResultProcessor {
     private final OrderRepository orderRepository;
     private final OrderSagaRepository orderSagaRepository;
     private final OutboxService outboxService;
+    private final ConsumerDuplicateMetrics duplicateMetrics;
+    private final OrderSagaMetrics sagaMetrics;
 
     public PaymentResultProcessor(ProcessedEventRepository processedEventRepository, OrderRepository orderRepository,
-            OrderSagaRepository orderSagaRepository, OutboxService outboxService) {
+            OrderSagaRepository orderSagaRepository, OutboxService outboxService,
+            ConsumerDuplicateMetrics duplicateMetrics, OrderSagaMetrics sagaMetrics) {
 
         this.processedEventRepository = processedEventRepository;
         this.orderRepository = orderRepository;
         this.orderSagaRepository = orderSagaRepository;
         this.outboxService = outboxService;
+        this.duplicateMetrics = duplicateMetrics;
+        this.sagaMetrics = sagaMetrics;
     }
 
     @Transactional
     public void process(PaymentSucceededEvent event) {
 
         if (!processedEventRepository.insertIfAbsent(event.messageId())) {
+            duplicateMetrics.recordPaymentResultDuplicate();
             return;
         }
 
@@ -49,12 +57,15 @@ public class PaymentResultProcessor {
         transitionSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT, OrderSagaStatus.COMPLETED);
 
         transitionOrder(order.getId(), OrderState.PAYMENT_PENDING, OrderState.CONFIRMED);
+
+        sagaMetrics.recordCompletedAfterCommit();
     }
 
     @Transactional
     public void process(PaymentFailedEvent event) {
 
         if (!processedEventRepository.insertIfAbsent(event.messageId())) {
+            duplicateMetrics.recordPaymentResultDuplicate();
             return;
         }
 

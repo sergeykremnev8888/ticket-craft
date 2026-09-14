@@ -2,6 +2,7 @@ package ru.ticketcraft.security;
 
 import java.io.IOException;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -34,19 +35,31 @@ public class CatalogSecurityConfiguration {
 
     private static final BearerTokenAccessDeniedHandler ACCESS_DENIED_HANDLER = new BearerTokenAccessDeniedHandler();
 
+    private final boolean metricsPublic;
+
+    public CatalogSecurityConfiguration(@Value("${ticketcraft.security.metrics-public:false}") boolean metricsPublic) {
+        this.metricsPublic = metricsPublic;
+    }
+
     @Bean
     SecurityFilterChain catalogSecurityFilterChain(HttpSecurity http) throws Exception {
 
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                        .requestMatchers("/actuator/prometheus").hasAuthority(METRICS_READ_AUTHORITY)
+                .authorizeHttpRequests(authorize -> {
+                    authorize.requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll();
+                    if (metricsPublic) {
+                        authorize.requestMatchers("/actuator/prometheus").permitAll();
+                    } else {
+                        authorize.requestMatchers("/actuator/prometheus").hasAuthority(METRICS_READ_AUTHORITY);
+                    }
+                    authorize
                         .requestMatchers(HttpMethod.GET, "/api/v1/catalog/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/catalog/tickets/*/reserve")
                         .hasAuthority(CATALOG_WRITE_AUTHORITY)
-                        .anyRequest().denyAll())
+                        .anyRequest().denyAll();
+                })
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(CatalogSecurityConfiguration::handleUnauthorized)
                         .accessDeniedHandler(CatalogSecurityConfiguration::handleForbidden))
