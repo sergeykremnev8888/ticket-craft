@@ -114,7 +114,10 @@ class PaymentResultProcessorIntegrationTest {
 
         assertThat(processedEventCount(messageId)).isEqualTo(1);
 
-        assertThat(toList(outboxEventRepository.findAll())).isEmpty();
+        List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
+        assertThat(outboxEvents).hasSize(1);
+        assertThat(outboxEvents.get(0).getEventType()).isEqualTo("OrderConfirmed");
+        assertThat(outboxEvents.get(0).getTopic()).isEqualTo("order-events");
     }
 
     @Test
@@ -196,7 +199,9 @@ class PaymentResultProcessorIntegrationTest {
 
         assertThat(processedEventCount(messageId)).isEqualTo(1);
 
-        assertThat(toList(outboxEventRepository.findAll())).isEmpty();
+        List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
+        assertThat(outboxEvents).hasSize(1);
+        assertThat(outboxEvents.get(0).getEventType()).isEqualTo("OrderConfirmed");
     }
 
     @Test

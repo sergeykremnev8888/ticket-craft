@@ -77,10 +77,6 @@ ticketcraft:
       capacity: ${CATALOG_READ_RATE_LIMIT_CAPACITY:120}
       refill-tokens: ${CATALOG_READ_RATE_LIMIT_REFILL_TOKENS:120}
       refill-period: ${CATALOG_READ_RATE_LIMIT_REFILL_PERIOD:1m}
-    reservation:
-      capacity: ${RESERVATION_RATE_LIMIT_CAPACITY:20}
-      refill-tokens: ${RESERVATION_RATE_LIMIT_REFILL_TOKENS:20}
-      refill-period: ${RESERVATION_RATE_LIMIT_REFILL_PERIOD:1m}
   kafka:
     consumer:
       concurrency: 1

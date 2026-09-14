@@ -10,7 +10,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,7 +23,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.ReserveTicketCommand;
-import ru.ticketcraft.exception.InvalidOrderStateTransitionException;
 import ru.ticketcraft.exception.OrderNotFoundException;
 import ru.ticketcraft.idempotency.CanonicalOrderRequest;
 import ru.ticketcraft.model.IdempotencyKey;
@@ -38,13 +36,15 @@ import ru.ticketcraft.saga.OrderSagaStatus;
 class OrderServiceTest {
 
     private static final String IDEMPOTENCY_KEY = "test-idempotency-key";
+
     private static final String REQUEST_HASH = "test-request-hash";
 
     private static final Long ORDER_ID = 123L;
+
     private static final Long USER_ID = 10L;
-    private static final UUID EVENT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
     private static final UUID TICKET_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
-    private static final BigDecimal PRICE = new BigDecimal("100.00");
+
     private static final Instant CREATED_AT = Instant.parse("2026-09-10T12:00:00Z");
 
     @Mock
@@ -60,9 +60,6 @@ class OrderServiceTest {
     private RequestHashService requestHashService;
 
     @Mock
-    private OrderStateMachine orderStateMachine;
-
-    @Mock
     private OrderSagaRepository orderSagaRepository;
 
     private OrderService orderService;
@@ -70,58 +67,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         orderService = new OrderService(orderRepository, outboxService, idempotencyService, requestHashService,
-                orderStateMachine, orderSagaRepository);
-    }
-
-    @Test
-    void shouldTransitionOrderToTargetState() {
-        Order order = createOrder(OrderState.CREATED);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-
-        when(orderRepository.save(order)).thenReturn(order);
-
-        Order result = orderService.transitionTo(ORDER_ID, OrderState.TICKETS_RESERVED);
-
-        verify(orderStateMachine).validateTransition(OrderState.CREATED, OrderState.TICKETS_RESERVED);
-
-        verify(orderRepository).save(order);
-
-        assertThat(result.getStatus()).isEqualTo(OrderState.TICKETS_RESERVED);
-    }
-
-    @Test
-    void shouldRejectInvalidStateTransition() {
-        Order order = createOrder(OrderState.CREATED);
-
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
-
-        org.mockito.Mockito
-                .doThrow(new InvalidOrderStateTransitionException(
-                        "Invalid order state transition: CREATED -> CONFIRMED"))
-                .when(orderStateMachine).validateTransition(OrderState.CREATED, OrderState.CONFIRMED);
-
-        assertThatThrownBy(() -> orderService.transitionTo(ORDER_ID, OrderState.CONFIRMED))
-                .isInstanceOf(InvalidOrderStateTransitionException.class)
-                .hasMessage("Invalid order state transition: CREATED -> CONFIRMED");
-
-        verify(orderStateMachine).validateTransition(OrderState.CREATED, OrderState.CONFIRMED);
-
-        verify(orderRepository, never()).save(any(Order.class));
-
-        assertThat(order.getStatus()).isEqualTo(OrderState.CREATED);
-    }
-
-    @Test
-    void shouldThrowWhenOrderDoesNotExist() {
-        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> orderService.transitionTo(ORDER_ID, OrderState.TICKETS_RESERVED))
-                .isInstanceOf(OrderNotFoundException.class).hasMessage("Order not found: " + ORDER_ID);
-
-        verify(orderStateMachine, never()).validateTransition(any(), any());
-
-        verify(orderRepository, never()).save(any(Order.class));
+                orderSagaRepository);
     }
 
     @Test
@@ -129,7 +75,7 @@ class OrderServiceTest {
         IdempotencyKey idempotencyKey = new IdempotencyKey(IDEMPOTENCY_KEY, USER_ID, REQUEST_HASH, null,
                 IdempotencyStatus.IN_PROGRESS, CREATED_AT);
 
-        Order savedOrder = new Order(ORDER_ID, USER_ID, EVENT_ID, TICKET_ID, PRICE, OrderState.CREATED, CREATED_AT);
+        Order savedOrder = new Order(ORDER_ID, USER_ID, null, TICKET_ID, null, OrderState.CREATED, CREATED_AT);
 
         when(requestHashService.hash(any(CanonicalOrderRequest.class))).thenReturn(REQUEST_HASH);
 
@@ -141,9 +87,47 @@ class OrderServiceTest {
                 eq(OrderSagaStatus.WAITING_FOR_RESERVATION.name()), any(Instant.class), any(Instant.class)))
                 .thenReturn(1);
 
-        Order result = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE);
+        Order result = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, TICKET_ID);
 
         assertThat(result).isSameAs(savedOrder);
+
+        /*
+         * eventId и totalPrice больше не принимаются от клиента. Они будут заполнены
+         * позже после TicketReservedEvent.
+         */
+        assertThat(result.getEventId()).isNull();
+
+        assertThat(result.getTotalPrice()).isNull();
+
+        assertThat(result.getTicketId()).isEqualTo(TICKET_ID);
+
+        assertThat(result.getStatus()).isEqualTo(OrderState.CREATED);
+
+        ArgumentCaptor<CanonicalOrderRequest> requestCaptor = ArgumentCaptor.forClass(CanonicalOrderRequest.class);
+
+        verify(requestHashService).hash(requestCaptor.capture());
+
+        CanonicalOrderRequest canonicalRequest = requestCaptor.getValue();
+
+        assertThat(canonicalRequest.userId()).isEqualTo(USER_ID);
+
+        assertThat(canonicalRequest.ticketId()).isEqualTo(TICKET_ID);
+
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+
+        verify(orderRepository).save(orderCaptor.capture());
+
+        Order newOrder = orderCaptor.getValue();
+
+        assertThat(newOrder.getUserId()).isEqualTo(USER_ID);
+
+        assertThat(newOrder.getTicketId()).isEqualTo(TICKET_ID);
+
+        assertThat(newOrder.getEventId()).isNull();
+
+        assertThat(newOrder.getTotalPrice()).isNull();
+
+        assertThat(newOrder.getStatus()).isEqualTo(OrderState.CREATED);
 
         ArgumentCaptor<UUID> sagaIdCaptor = ArgumentCaptor.forClass(UUID.class);
 
@@ -155,13 +139,20 @@ class OrderServiceTest {
         verify(outboxService).saveReserveTicketCommand(eq(savedOrder), commandCaptor.capture());
 
         UUID sagaId = sagaIdCaptor.getValue();
+
         ReserveTicketCommand command = commandCaptor.getValue();
 
         assertThat(command.orderId()).isEqualTo(ORDER_ID);
+
         assertThat(command.ticketId()).isEqualTo(TICKET_ID);
+
         assertThat(command.userId()).isEqualTo(USER_ID);
+
         assertThat(command.reservationId()).isEqualTo(sagaId);
+
         assertThat(command.messageId()).isEqualTo("saga:" + sagaId + ":reserve-ticket");
+
+        assertThat(command.occurredAt()).isNotNull();
 
         verify(idempotencyService).complete(IDEMPOTENCY_KEY, ORDER_ID);
     }
@@ -171,7 +162,7 @@ class OrderServiceTest {
         IdempotencyKey processingKey = new IdempotencyKey(IDEMPOTENCY_KEY, USER_ID, REQUEST_HASH, null,
                 IdempotencyStatus.IN_PROGRESS, CREATED_AT);
 
-        Order savedOrder = new Order(ORDER_ID, USER_ID, EVENT_ID, TICKET_ID, PRICE, OrderState.CREATED, CREATED_AT);
+        Order savedOrder = new Order(ORDER_ID, USER_ID, null, TICKET_ID, null, OrderState.CREATED, CREATED_AT);
 
         when(requestHashService.hash(any(CanonicalOrderRequest.class))).thenReturn(REQUEST_HASH);
 
@@ -183,7 +174,7 @@ class OrderServiceTest {
                 eq(OrderSagaStatus.WAITING_FOR_RESERVATION.name()), any(Instant.class), any(Instant.class)))
                 .thenReturn(0);
 
-        assertThatThrownBy(() -> orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE))
+        assertThatThrownBy(() -> orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, TICKET_ID))
                 .isInstanceOf(IllegalStateException.class).hasMessage("Failed to create saga for order: " + ORDER_ID);
 
         verify(outboxService, never()).saveReserveTicketCommand(any(), any());
@@ -191,7 +182,52 @@ class OrderServiceTest {
         verify(idempotencyService, never()).complete(anyString(), anyLong());
     }
 
-    private Order createOrder(OrderState state) {
-        return new Order(ORDER_ID, USER_ID, EVENT_ID, TICKET_ID, PRICE, state, Instant.now());
+    @Test
+    void shouldReturnExistingOrderForCompletedIdempotencyKey() {
+        IdempotencyKey completedKey = new IdempotencyKey(IDEMPOTENCY_KEY, USER_ID, REQUEST_HASH, ORDER_ID,
+                IdempotencyStatus.COMPLETED, CREATED_AT);
+
+        Order existingOrder = new Order(ORDER_ID, USER_ID, null, TICKET_ID, null, OrderState.CREATED, CREATED_AT);
+
+        when(requestHashService.hash(any(CanonicalOrderRequest.class))).thenReturn(REQUEST_HASH);
+
+        when(idempotencyService.checkAndRegister(IDEMPOTENCY_KEY, USER_ID, REQUEST_HASH)).thenReturn(completedKey);
+
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(existingOrder));
+
+        Order result = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, TICKET_ID);
+
+        assertThat(result).isSameAs(existingOrder);
+
+        verify(orderRepository, never()).save(any(Order.class));
+
+        verify(orderSagaRepository, never()).insertIfAbsent(any(UUID.class), anyLong(), anyString(), any(Instant.class),
+                any(Instant.class));
+
+        verify(outboxService, never()).saveReserveTicketCommand(any(), any());
+
+        verify(idempotencyService, never()).complete(anyString(), anyLong());
+    }
+
+    @Test
+    void shouldReturnOrderWhenItBelongsToUser() {
+        Order order = new Order(ORDER_ID, USER_ID, null, TICKET_ID, null, OrderState.CREATED, CREATED_AT);
+
+        when(orderRepository.findByIdAndUserId(ORDER_ID, USER_ID)).thenReturn(Optional.of(order));
+
+        Order result = orderService.getOrder(ORDER_ID, USER_ID);
+
+        assertThat(result).isSameAs(order);
+
+        verify(orderRepository).findByIdAndUserId(ORDER_ID, USER_ID);
+    }
+
+    @Test
+    void shouldThrowWhenOrderDoesNotBelongToUserOrDoesNotExist() {
+        when(orderRepository.findByIdAndUserId(ORDER_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.getOrder(ORDER_ID, USER_ID)).isInstanceOf(OrderNotFoundException.class);
+
+        verify(orderRepository).findByIdAndUserId(ORDER_ID, USER_ID);
     }
 }

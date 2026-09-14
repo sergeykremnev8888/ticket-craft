@@ -26,8 +26,6 @@ import jakarta.servlet.http.HttpServletResponse;
 @EnableWebSecurity
 public class CatalogSecurityConfiguration {
 
-    private static final String CATALOG_WRITE_AUTHORITY = "SCOPE_catalog.write";
-
     private static final String METRICS_READ_AUTHORITY = "SCOPE_metrics.read";
 
     private static final BearerTokenAuthenticationEntryPoint AUTHENTICATION_ENTRY_POINT =
@@ -56,8 +54,6 @@ public class CatalogSecurityConfiguration {
                     }
                     authorize
                         .requestMatchers(HttpMethod.GET, "/api/v1/catalog/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/catalog/tickets/*/reserve")
-                        .hasAuthority(CATALOG_WRITE_AUTHORITY)
                         .anyRequest().denyAll();
                 })
                 .exceptionHandling(exceptions -> exceptions

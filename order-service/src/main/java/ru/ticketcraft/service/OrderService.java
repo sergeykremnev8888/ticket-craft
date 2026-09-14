@@ -1,6 +1,5 @@
 package ru.ticketcraft.service;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -25,23 +24,21 @@ public class OrderService {
     private final OutboxService outboxService;
     private final IdempotencyService idempotencyService;
     private final RequestHashService requestHashService;
-    private final OrderStateMachine orderStateMachine;
     private final OrderSagaRepository orderSagaRepository;
 
     public OrderService(OrderRepository orderRepository, OutboxService outboxService,
             IdempotencyService idempotencyService, RequestHashService requestHashService,
-            OrderStateMachine orderStateMachine, OrderSagaRepository orderSagaRepository) {
+            OrderSagaRepository orderSagaRepository) {
         this.orderRepository = orderRepository;
         this.outboxService = outboxService;
         this.idempotencyService = idempotencyService;
         this.requestHashService = requestHashService;
-        this.orderStateMachine = orderStateMachine;
         this.orderSagaRepository = orderSagaRepository;
     }
 
     @Transactional
-    public Order createOrder(String idempotencyKey, Long userId, UUID eventId, UUID ticketId, BigDecimal price) {
-        CanonicalOrderRequest request = new CanonicalOrderRequest(userId, eventId, ticketId, price);
+    public Order createOrder(String idempotencyKey, Long userId, UUID ticketId) {
+        CanonicalOrderRequest request = new CanonicalOrderRequest(userId, ticketId);
         String requestHash = requestHashService.hash(request);
 
         IdempotencyKey key = idempotencyService.checkAndRegister(idempotencyKey, userId, requestHash);
@@ -51,7 +48,7 @@ public class OrderService {
         }
 
         Instant now = Instant.now();
-        Order order = new Order(null, userId, eventId, ticketId, price, OrderState.CREATED, now);
+        Order order = new Order(null, userId, null, ticketId, null, OrderState.CREATED, now);
         Order savedOrder = orderRepository.save(order);
 
         UUID sagaId = UUID.randomUUID();
@@ -70,14 +67,11 @@ public class OrderService {
         return savedOrder;
     }
 
-    @Transactional
-    public Order transitionTo(Long orderId, OrderState targetState) {
-        Order order = orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
-
-        orderStateMachine.validateTransition(order.getStatus(), targetState);
-
-        order.setStatus(targetState);
-
-        return orderRepository.save(order);
+    @Transactional(readOnly = true)
+    public Order getOrder(Long orderId, Long userId) {
+        return orderRepository.findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
     }
+
+
 }

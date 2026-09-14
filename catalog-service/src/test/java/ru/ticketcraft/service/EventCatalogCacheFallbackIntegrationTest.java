@@ -7,7 +7,6 @@ import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +37,8 @@ import ru.ticketcraft.repository.EventRepository;
 
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",
-        "spring.kafka.admin.enabled=false" })
+        "spring.kafka.admin.enabled=false"
+})
 @Import(EventCatalogCacheFallbackIntegrationTest.TestContainersConfiguration.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class EventCatalogCacheFallbackIntegrationTest {
@@ -65,8 +65,6 @@ class EventCatalogCacheFallbackIntegrationTest {
 
     @Test
     void shouldFallBackToPostgresWhenRedisIsUnavailable() {
-
-        // Given
         Event event = new Event();
 
         event.setTitle("Redis Failure Conference");
@@ -78,10 +76,8 @@ class EventCatalogCacheFallbackIntegrationTest {
 
         clearInvocations(eventRepository);
 
-        // When
         List<EventSummaryResponse> result = eventCatalogService.getEvents();
 
-        // Then
         assertThat(result).hasSize(1);
 
         EventSummaryResponse response = result.getFirst();
@@ -97,55 +93,12 @@ class EventCatalogCacheFallbackIntegrationTest {
         assertThat(response.venue()).isEqualTo("Fallback Hall");
 
         /*
-         * Redis GET завершится ошибкой.
+         * Redis GET завершается ошибкой.
          *
-         * LoggingCacheErrorHandler обязан проглотить ошибку, после чего @Cacheable
-         * выполнит настоящий метод, который прочитает данные из PostgreSQL.
+         * LoggingCacheErrorHandler должен обработать ошибку cache read, после
+         * чего @Cacheable выполнит настоящий метод и загрузит данные из PostgreSQL.
          */
         verify(eventRepository, times(1)).findAllSummaries();
-    }
-
-    @Test
-    void shouldFallBackToPostgresForEventByIdWhenRedisIsUnavailable() {
-
-        // Given
-        Event event = new Event();
-
-        event.setTitle("Redis Failure Single Event");
-        event.setDescription("Single event must be loaded from PostgreSQL when Redis is unavailable");
-        event.setEventDate(Instant.parse("2026-12-15T15:00:00Z"));
-        event.setVenue("Fallback Event Hall");
-
-        Event savedEvent = eventRepository.saveAndFlush(event);
-
-        UUID eventId = savedEvent.getId();
-
-        clearInvocations(eventRepository);
-
-        // When
-        EventSummaryResponse response = eventCatalogService.getEvent(eventId);
-
-        // Then
-        assertThat(response.id()).isEqualTo(eventId);
-
-        assertThat(response.title()).isEqualTo("Redis Failure Single Event");
-
-        assertThat(response.description())
-                .isEqualTo("Single event must be loaded from PostgreSQL when Redis is unavailable");
-
-        assertThat(response.eventDate())
-                .isEqualTo(Instant.parse("2026-12-15T15:00:00Z"));
-
-        assertThat(response.venue()).isEqualTo("Fallback Event Hall");
-
-        /*
-         * Redis GET завершится ошибкой.
-         *
-         * LoggingCacheErrorHandler обязан проглотить ошибку,
-         * после чего @Cacheable выполнит настоящий метод
-         * и прочитает event из PostgreSQL.
-         */
-        verify(eventRepository, times(1)).findSummaryById(eventId);
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -158,6 +111,5 @@ class EventCatalogCacheFallbackIntegrationTest {
             return new PostgreSQLContainer("postgres:16-alpine").withDatabaseName("catalog_db").withUsername("postgres")
                     .withPassword("postgres");
         }
-
     }
 }

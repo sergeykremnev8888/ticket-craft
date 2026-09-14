@@ -2,7 +2,6 @@ package ru.ticketcraft.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,11 +42,9 @@ class OrderSagaCreationIntegrationTest {
 
     private static final Long USER_ID = 10L;
 
-    private static final UUID EVENT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     private static final UUID TICKET_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
-    private static final BigDecimal PRICE = new BigDecimal("100.00");
 
     @Container
     @ServiceConnection
@@ -84,13 +81,13 @@ class OrderSagaCreationIntegrationTest {
     @Test
     void shouldCreateOrderSagaAndReservationCommandAtomically() throws Exception {
 
-        Order result = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE);
+        Order result = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, TICKET_ID);
 
         assertThat(result.getId()).isNotNull();
         assertThat(result.getUserId()).isEqualTo(USER_ID);
-        assertThat(result.getEventId()).isEqualTo(EVENT_ID);
+        assertThat(result.getEventId()).isNull();
         assertThat(result.getTicketId()).isEqualTo(TICKET_ID);
-        assertThat(result.getTotalPrice()).isEqualByComparingTo(PRICE);
+        assertThat(result.getTotalPrice()).isNull();
         assertThat(result.getStatus()).isEqualTo(OrderState.CREATED);
 
         /*

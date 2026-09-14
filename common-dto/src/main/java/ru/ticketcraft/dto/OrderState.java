@@ -33,10 +33,5 @@ public enum OrderState {
     /**
      * Заказ отменён.
      */
-    CANCELED,
-
-    /**
-     * Билеты доставлены клиенту.
-     */
-    DELIVERED
+    CANCELED
 }

@@ -31,11 +31,11 @@ public class OutboxService {
         this.topics = topics;
     }
 
-    public UUID saveOrderCreatedEvent(Order order, OrderEvent event) {
-        UUID eventId = event.getEventId();
+    public UUID saveOrderConfirmedEvent(Order order, OrderEvent event) {
+        UUID eventId = UUID.randomUUID();
 
-        save(eventId, AGGREGATE_TYPE_ORDER, order.getId().toString(), OutboxEventType.ORDER_CREATED,
-                topics.orderEvents(), event, order.getCreatedAt());
+        save(eventId, AGGREGATE_TYPE_ORDER, order.getId().toString(), OutboxEventType.ORDER_CONFIRMED,
+                topics.orderEvents(), event, event.getCreatedAt());
 
         return eventId;
     }

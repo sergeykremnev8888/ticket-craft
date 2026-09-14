@@ -7,7 +7,7 @@ import ru.ticketcraft.dto.ReserveTicketCommand;
 
 public enum OutboxEventType {
 
-    ORDER_CREATED("OrderCreated", OrderEvent.class),
+    ORDER_CONFIRMED("OrderConfirmed", OrderEvent.class),
 
     RESERVE_TICKET("ReserveTicket", ReserveTicketCommand.class),
 

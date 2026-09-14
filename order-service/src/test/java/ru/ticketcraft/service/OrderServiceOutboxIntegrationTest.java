@@ -3,7 +3,6 @@ package ru.ticketcraft.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,9 +41,7 @@ class OrderServiceOutboxIntegrationTest {
 
     private static final String IDEMPOTENCY_KEY = "order-service-outbox-integration-key";
     private static final Long USER_ID = 123L;
-    private static final UUID EVENT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID TICKET_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
-    private static final BigDecimal PRICE = new BigDecimal("100.00");
 
     @Container
     @ServiceConnection
@@ -82,7 +79,7 @@ class OrderServiceOutboxIntegrationTest {
     @Test
     void shouldCreateOrderSagaAndReserveTicketCommandInSameTransaction() throws Exception {
 
-        Order order = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE);
+        Order order = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, TICKET_ID);
 
         /*
          * Order.
@@ -91,11 +88,11 @@ class OrderServiceOutboxIntegrationTest {
 
         assertEquals(USER_ID, order.getUserId());
 
-        assertEquals(EVENT_ID, order.getEventId());
+        assertEquals(null, order.getEventId());
 
         assertEquals(TICKET_ID, order.getTicketId());
 
-        assertEquals(0, PRICE.compareTo(order.getTotalPrice()));
+        assertEquals(null, order.getTotalPrice());
 
         assertEquals(OrderState.CREATED, order.getStatus());
 

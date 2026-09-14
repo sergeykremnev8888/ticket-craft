@@ -1,6 +1,7 @@
 package ru.ticketcraft.repository;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jdbc.repository.query.Modifying;
@@ -12,6 +13,8 @@ import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.model.Order;
 
 public interface OrderRepository extends CrudRepository<Order, Long> {
+
+    Optional<Order> findByIdAndUserId(Long id, Long userId);
 
     @Modifying
     @Query("""

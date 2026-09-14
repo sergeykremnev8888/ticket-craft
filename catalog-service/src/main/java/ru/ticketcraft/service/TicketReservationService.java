@@ -3,7 +3,6 @@ package ru.ticketcraft.service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,8 +14,6 @@ import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 import ru.ticketcraft.dto.TicketStatus;
-import ru.ticketcraft.exception.TicketAlreadyReservedException;
-import ru.ticketcraft.exception.TicketNotFoundException;
 import ru.ticketcraft.model.Ticket;
 import ru.ticketcraft.repository.TicketRepository;
 
@@ -37,32 +34,6 @@ public class TicketReservationService {
         this.ticketRepository = ticketRepository;
         this.outboxService = outboxService;
         this.reservationDuration = properties.duration();
-    }
-
-    /*
-     * Existing REST flow.
-     *
-     * Здесь reservationId генерируется самим catalog-service.
-     */
-    @Transactional
-    public UUID reserveTicket(UUID ticketId) {
-
-        UUID reservationId = UUID.randomUUID();
-
-        reserve(ticketId, reservationId);
-
-        return reservationId;
-    }
-
-    /*
-     * Existing direct reservation flow.
-     *
-     * Сохраняем exception semantics для REST/tests.
-     */
-    @Transactional
-    public void reserveTicket(UUID ticketId, UUID reservationId) {
-
-        reserve(ticketId, reservationId);
     }
 
     /*
@@ -219,32 +190,6 @@ public class TicketReservationService {
     private String resultMessageId(ReleaseTicketCommand command) {
 
         return "result:" + command.messageId();
-    }
-
-    private void reserve(UUID ticketId, UUID reservationId) {
-
-        Instant reservedUntil = Instant.now().plus(reservationDuration);
-
-        int updated = ticketRepository.reserveTicket(ticketId, reservationId, reservedUntil);
-
-        if (updated == 1) {
-            return;
-        }
-
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new TicketNotFoundException("Ticket not found: " + ticketId));
-
-        /*
-         * Kafka redelivery той же Saga-команды.
-         *
-         * Билет уже зарезервирован именно нами — считаем операцию успешно выполненной.
-         */
-        if (ticket.getStatus() == TicketStatus.RESERVED && reservationId.equals(ticket.getReservationId())) {
-
-            return;
-        }
-
-        throw new TicketAlreadyReservedException("Ticket is already reserved: " + ticketId);
     }
 
     private void saveTicketReservedResult(ReserveTicketCommand command, Ticket ticket, Instant occurredAt) {

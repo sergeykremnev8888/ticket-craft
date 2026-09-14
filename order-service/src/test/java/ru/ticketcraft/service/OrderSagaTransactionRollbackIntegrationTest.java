@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -38,11 +37,7 @@ class OrderSagaTransactionRollbackIntegrationTest {
 
     private static final Long USER_ID = 10L;
 
-    private static final UUID EVENT_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
-
     private static final UUID TICKET_ID = UUID.fromString("44444444-4444-4444-4444-444444444444");
-
-    private static final BigDecimal PRICE = new BigDecimal("100.00");
 
     @Container
     @ServiceConnection
@@ -88,7 +83,7 @@ class OrderSagaTransactionRollbackIntegrationTest {
         doThrow(new IllegalStateException("Simulated outbox failure")).when(outboxService)
                 .saveReserveTicketCommand(any(Order.class), any(ReserveTicketCommand.class));
 
-        assertThatThrownBy(() -> orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, EVENT_ID, TICKET_ID, PRICE))
+        assertThatThrownBy(() -> orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, TICKET_ID))
                 .isInstanceOf(IllegalStateException.class).hasMessage("Simulated outbox failure");
 
         /*

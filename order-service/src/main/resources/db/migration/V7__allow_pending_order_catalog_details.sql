@@ -1,0 +1,3 @@
+ALTER TABLE orders
+    ALTER COLUMN event_id DROP NOT NULL,
+    ALTER COLUMN total_price DROP NOT NULL;

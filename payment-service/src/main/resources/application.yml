@@ -55,6 +55,12 @@ logging:
     correlation: '[${spring.application.name:},%X{traceId:-},%X{spanId:-}] '
   include-application-name: false
 ticketcraft:
+  payment:
+    provider:
+      base-url: ${PAYMENT_PROVIDER_BASE_URL:http://localhost:8090}
+      charge-path: ${PAYMENT_PROVIDER_CHARGE_PATH:/api/v1/payments/charges}
+      connect-timeout: ${PAYMENT_PROVIDER_CONNECT_TIMEOUT:2s}
+      read-timeout: ${PAYMENT_PROVIDER_READ_TIMEOUT:5s}
   outbox:
     batch-size: ${PAYMENT_OUTBOX_BATCH_SIZE:100}
     claim-lease: ${PAYMENT_OUTBOX_CLAIM_LEASE:30s}

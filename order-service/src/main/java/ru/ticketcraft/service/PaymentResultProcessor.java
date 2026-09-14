@@ -1,10 +1,12 @@
 package ru.ticketcraft.service;
 
 import java.time.Instant;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentSucceededEvent;
@@ -48,7 +50,7 @@ public class PaymentResultProcessor {
             return;
         }
 
-        loadSaga(event.orderId());
+        OrderSaga saga = loadSaga(event.orderId());
 
         Order order = loadOrder(event.orderId());
 
@@ -57,6 +59,9 @@ public class PaymentResultProcessor {
         transitionSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT, OrderSagaStatus.COMPLETED);
 
         transitionOrder(order.getId(), OrderState.PAYMENT_PENDING, OrderState.CONFIRMED);
+
+        OrderEvent confirmedEvent = createOrderConfirmedEvent(saga, order);
+        outboxService.saveOrderConfirmedEvent(order, confirmedEvent);
 
         sagaMetrics.recordCompletedAfterCommit();
     }
@@ -131,4 +136,10 @@ public class PaymentResultProcessor {
 
         return new ReleaseTicketCommand(messageId, order.getId(), saga.getId(), order.getTicketId(), Instant.now());
     }
+    private OrderEvent createOrderConfirmedEvent(OrderSaga saga, Order order) {
+        String messageId = "saga:" + saga.getId() + ":order-confirmed";
+        return new OrderEvent(messageId, order.getId(), order.getUserId(), order.getEventId(),
+                List.of(order.getTicketId()), order.getTotalPrice(), OrderState.CONFIRMED, Instant.now());
+    }
+
 }

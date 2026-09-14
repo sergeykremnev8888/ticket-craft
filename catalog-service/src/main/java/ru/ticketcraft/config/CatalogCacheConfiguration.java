@@ -39,7 +39,7 @@ public class CatalogCacheConfiguration implements CachingConfigurer {
 
         return RedisCacheManager.builder(cacheWriter).cacheDefaults(configuration)
                 .withCacheConfiguration(CatalogCacheNames.EVENTS, configuration)
-                .withCacheConfiguration(CatalogCacheNames.EVENT_BY_ID, configuration).disableCreateOnMissingCache()
+                .disableCreateOnMissingCache()
                 .enableStatistics().build();
     }
 

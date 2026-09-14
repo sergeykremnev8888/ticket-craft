@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.dto.OrderState;
 
 @Service
 public class NotificationService {
@@ -12,9 +13,11 @@ public class NotificationService {
     private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     public void process(OrderEvent event) {
-        log.info(
-                ">>>> [УВЕДОМЛЕНИЕ] Пользователь №{} успешно забронировал билеты {} "
-                        + "на мероприятие {}. Итоговая сумма: {} руб.",
-                event.getUserId(), event.getTicketIds(), event.getEventId(), event.getTotalPrice());
+        if (event.getState() != OrderState.CONFIRMED) {
+            throw new IllegalArgumentException("Unsupported order event state: " + event.getState());
+        }
+
+        log.info("Order confirmed notification: orderId={}, userId={}, eventId={}, ticketIds={}, totalPrice={}",
+                event.getOrderId(), event.getUserId(), event.getEventId(), event.getTicketIds(), event.getTotalPrice());
     }
 }

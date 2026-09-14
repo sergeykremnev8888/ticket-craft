@@ -28,6 +28,8 @@ public class OrderSecurityConfiguration {
 
     private static final String ORDERS_WRITE_AUTHORITY = "SCOPE_orders.write";
 
+    private static final String ORDERS_READ_AUTHORITY = "SCOPE_orders.read";
+
     private static final String METRICS_READ_AUTHORITY = "SCOPE_metrics.read";
 
     private static final BearerTokenAuthenticationEntryPoint AUTHENTICATION_ENTRY_POINT =
@@ -56,6 +58,7 @@ public class OrderSecurityConfiguration {
                     }
                     authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasAuthority(ORDERS_WRITE_AUTHORITY)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders/*").hasAuthority(ORDERS_READ_AUTHORITY)
                         .anyRequest().denyAll();
                 })
                 .exceptionHandling(exceptions -> exceptions

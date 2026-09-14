@@ -86,7 +86,7 @@ class OrderSecurityConfigurationTest {
 
         Order order = new Order(10L, 42L, EVENT_ID, TICKET_ID, PRICE, OrderState.CREATED, Instant.now());
 
-        when(orderService.createOrder(eq("idem-1"), eq(42L), eq(EVENT_ID), eq(TICKET_ID), eq(PRICE))).thenReturn(order);
+        when(orderService.createOrder(eq("idem-1"), eq(42L), eq(TICKET_ID))).thenReturn(order);
 
         mockMvc.perform(post("/api/v1/orders")
                 .with(jwt().jwt(token -> token.claim("user_id", 42L))
@@ -94,7 +94,7 @@ class OrderSecurityConfigurationTest {
                 .header("Idempotency-Key", "idem-1").contentType(MediaType.APPLICATION_JSON).content(orderRequest()))
                 .andExpect(status().isCreated());
 
-        verify(orderService).createOrder("idem-1", 42L, EVENT_ID, TICKET_ID, PRICE);
+        verify(orderService).createOrder("idem-1", 42L, TICKET_ID);
     }
 
     @Test
@@ -105,6 +105,27 @@ class OrderSecurityConfigurationTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(orderService);
+    }
+
+
+    @Test
+    void shouldRequireOrdersReadScopeForOrderRead() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/10")
+                .with(jwt().jwt(token -> token.claim("user_id", 42L))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldReturnOwnedOrderWithOrdersReadScope() throws Exception {
+        Order order = new Order(10L, 42L, EVENT_ID, TICKET_ID, PRICE, OrderState.CONFIRMED, Instant.now());
+        when(orderService.getOrder(10L, 42L)).thenReturn(order);
+
+        mockMvc.perform(get("/api/v1/orders/10")
+                .with(jwt().jwt(token -> token.claim("user_id", 42L))
+                        .authorities(new SimpleGrantedAuthority("SCOPE_orders.read"))))
+                .andExpect(status().isOk());
+
+        verify(orderService).getOrder(10L, 42L);
     }
 
     @Test
@@ -127,11 +148,9 @@ class OrderSecurityConfigurationTest {
 
         return """
                 {
-                  "eventId": "%s",
-                  "ticketId": "%s",
-                  "price": %s
+                  "ticketId": "%s"
                 }
-                """.formatted(EVENT_ID, TICKET_ID, PRICE);
+                """.formatted(TICKET_ID);
     }
 
     @RestController

@@ -14,8 +14,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import ru.ticketcraft.exception.EventNotFoundException;
-import ru.ticketcraft.exception.TicketAlreadyReservedException;
-import ru.ticketcraft.exception.TicketNotFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -31,27 +29,7 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
-    @ExceptionHandler(TicketNotFoundException.class)
-    public ProblemDetail handleTicketNotFound(TicketNotFoundException ex) {
 
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
-
-        problem.setTitle("Ticket not found");
-        problem.setDetail(ex.getMessage());
-
-        return problem;
-    }
-
-    @ExceptionHandler(TicketAlreadyReservedException.class)
-    public ProblemDetail handleTicketAlreadyReserved(TicketAlreadyReservedException ex) {
-
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
-
-        problem.setTitle("Ticket already reserved");
-        problem.setDetail(ex.getMessage());
-
-        return problem;
-    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {

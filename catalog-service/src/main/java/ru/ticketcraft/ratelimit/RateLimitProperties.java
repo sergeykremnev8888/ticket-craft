@@ -8,26 +8,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ticketcraft.rate-limit")
 public record RateLimitProperties(
         boolean enabled,
-        Policy catalogRead,
-        Policy reservation) {
+        Policy catalogRead) {
 
     public RateLimitProperties {
         Objects.requireNonNull(catalogRead, "catalogRead must not be null");
-        Objects.requireNonNull(reservation, "reservation must not be null");
     }
 
     public Policy policyFor(RateLimitPolicy policy) {
-        return switch (policy) {
-            case CATALOG_READ -> catalogRead;
-            case TICKET_RESERVATION -> reservation;
-        };
+        return catalogRead;
     }
 
-    public record Policy(
-            long capacity,
-            long refillTokens,
-            Duration refillPeriod) {
-
+    public record Policy(long capacity, long refillTokens, Duration refillPeriod) {
         public Policy {
             if (capacity <= 0) {
                 throw new IllegalArgumentException("capacity must be positive");

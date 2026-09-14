@@ -56,7 +56,7 @@ class OutboxEventRepositoryTest {
     void setUp() {
         jdbcTemplate.update("DELETE FROM outbox_events");
 
-        repository.insert(EVENT_ID, "ORDER", "123", "OrderCreated", "order-events", "{\"orderId\":123}", CREATED_AT);
+        repository.insert(EVENT_ID, "ORDER", "123", "OrderConfirmed", "order-events", "{\"orderId\":123}", CREATED_AT);
     }
 
     @Test
@@ -267,10 +267,10 @@ class OutboxEventRepositoryTest {
         UUID secondEventId = UUID.randomUUID();
         UUID thirdEventId = UUID.randomUUID();
 
-        repository.insert(secondEventId, "ORDER", "124", "OrderCreated", "order-events", "{\"orderId\":124}",
+        repository.insert(secondEventId, "ORDER", "124", "OrderConfirmed", "order-events", "{\"orderId\":124}",
                 CREATED_AT.plusSeconds(1));
 
-        repository.insert(thirdEventId, "ORDER", "125", "OrderCreated", "order-events", "{\"orderId\":125}",
+        repository.insert(thirdEventId, "ORDER", "125", "OrderConfirmed", "order-events", "{\"orderId\":125}",
                 CREATED_AT.plusSeconds(2));
 
         int claimed = repository.claimPending(FIRST_CLAIM_ID, NOW, LOCK_EXPIRATION, LOCKED_AT, "publisher-1", 2);

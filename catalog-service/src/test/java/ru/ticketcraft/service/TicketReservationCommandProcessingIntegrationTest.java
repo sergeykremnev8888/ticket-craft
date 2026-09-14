@@ -27,7 +27,7 @@ import ru.ticketcraft.repository.TicketRepository;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
-@SpringBootTest(properties = { 
+@SpringBootTest(properties = {
         "ticketcraft.outbox.publisher.enabled=false",
         "ticketcraft.rate-limit.enabled=false",
         "spring.kafka.admin.auto-create=false",
@@ -37,6 +37,7 @@ import tools.jackson.databind.ObjectMapper;
 class TicketReservationCommandProcessingIntegrationTest {
 
     private static final Long ORDER_ID = 1001L;
+
     private static final Long USER_ID = 501L;
 
     @Container
@@ -62,7 +63,6 @@ class TicketReservationCommandProcessingIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-
         jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM tickets");
         jdbcTemplate.update("DELETE FROM events");
@@ -70,8 +70,6 @@ class TicketReservationCommandProcessingIntegrationTest {
 
     @Test
     void shouldReserveTicketAndCreateSuccessOutboxEvent() {
-
-        // Given
         Ticket ticket = createAvailableTicket("A-1");
 
         UUID reservationId = UUID.randomUUID();
@@ -80,17 +78,15 @@ class TicketReservationCommandProcessingIntegrationTest {
 
         String expectedResultMessageId = resultMessageId(command);
 
-        // When
         reservationService.processReserveTicketCommand(command);
 
-        // Then
         Ticket persistedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
 
         assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.RESERVED);
 
         assertThat(persistedTicket.getReservationId()).isEqualTo(reservationId);
 
-        assertThat(persistedTicket.getReservedUntil()).isNotNull();
+        assertThat(persistedTicket.getReservedUntil()).isNotNull().isAfter(Instant.now());
 
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -124,9 +120,7 @@ class TicketReservationCommandProcessingIntegrationTest {
     }
 
     @Test
-    void shouldNotCreateDuplicateSuccessOutboxEventForSameReservation() {
-
-        // Given
+    void shouldTreatDuplicateReservationCommandAsIdempotentSuccess() {
         Ticket ticket = createAvailableTicket("A-2");
 
         UUID reservationId = UUID.randomUUID();
@@ -135,17 +129,35 @@ class TicketReservationCommandProcessingIntegrationTest {
 
         String expectedResultMessageId = resultMessageId(command);
 
-        // When
         reservationService.processReserveTicketCommand(command);
 
+        Ticket afterFirstProcessing = ticketRepository.findById(ticket.getId()).orElseThrow();
+
+        assertThat(afterFirstProcessing.getStatus()).isEqualTo(TicketStatus.RESERVED);
+
+        assertThat(afterFirstProcessing.getReservationId()).isEqualTo(reservationId);
+
+        assertThat(afterFirstProcessing.getReservedUntil()).isNotNull();
+
+        Instant originalReservedUntil = afterFirstProcessing.getReservedUntil();
+
+        /*
+         * Kafka может повторно доставить ту же ReserveTicketCommand.
+         *
+         * Повторная обработка должна быть idempotent:
+         *
+         * - ownership не меняется; - reservation TTL не продлевается; - второй result
+         * event в outbox не создаётся.
+         */
         reservationService.processReserveTicketCommand(command);
 
-        // Then
-        Ticket persistedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
+        Ticket afterDuplicate = ticketRepository.findById(ticket.getId()).orElseThrow();
 
-        assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.RESERVED);
+        assertThat(afterDuplicate.getStatus()).isEqualTo(TicketStatus.RESERVED);
 
-        assertThat(persistedTicket.getReservationId()).isEqualTo(reservationId);
+        assertThat(afterDuplicate.getReservationId()).isEqualTo(reservationId);
+
+        assertThat(afterDuplicate.getReservedUntil()).isEqualTo(originalReservedUntil);
 
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -157,9 +169,8 @@ class TicketReservationCommandProcessingIntegrationTest {
     }
 
     @Test
-    void shouldCreateFailureOutboxEventWhenTicketBelongsToAnotherReservation() throws Exception {
+    void shouldCreateFailureOutboxEventAndPreserveOwnerWhenTicketBelongsToAnotherReservation() throws Exception {
 
-        // Given
         Ticket ticket = createAvailableTicket("A-3");
 
         UUID firstReservationId = UUID.randomUUID();
@@ -168,21 +179,41 @@ class TicketReservationCommandProcessingIntegrationTest {
 
         reservationService.processReserveTicketCommand(firstCommand);
 
+        Ticket afterFirstReservation = ticketRepository.findById(ticket.getId()).orElseThrow();
+
+        assertThat(afterFirstReservation.getStatus()).isEqualTo(TicketStatus.RESERVED);
+
+        assertThat(afterFirstReservation.getReservationId()).isEqualTo(firstReservationId);
+
+        assertThat(afterFirstReservation.getReservedUntil()).isNotNull();
+
+        Instant originalReservedUntil = afterFirstReservation.getReservedUntil();
+
         UUID conflictingReservationId = UUID.randomUUID();
 
         ReserveTicketCommand conflictingCommand = createCommand(ticket.getId(), conflictingReservationId);
 
         String expectedResultMessageId = resultMessageId(conflictingCommand);
 
-        // When
+        /*
+         * Другая saga пытается зарезервировать уже занятый ticket.
+         *
+         * Это ожидаемый business conflict, поэтому service не бросает exception наружу.
+         * Результат конфликта записывается в outbox как TicketReservationFailedEvent.
+         */
         reservationService.processReserveTicketCommand(conflictingCommand);
 
-        // Then
         Ticket persistedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
 
+        /*
+         * Конфликтующая saga не должна изменить reservation ownership или продлить
+         * существующий reservation TTL.
+         */
         assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.RESERVED);
 
         assertThat(persistedTicket.getReservationId()).isEqualTo(firstReservationId);
+
+        assertThat(persistedTicket.getReservedUntil()).isEqualTo(originalReservedUntil);
 
         String payload = jdbcTemplate.queryForObject("""
                 SELECT payload
@@ -216,7 +247,6 @@ class TicketReservationCommandProcessingIntegrationTest {
     @Test
     void shouldCreateFailureOutboxEventWhenTicketDoesNotExist() throws Exception {
 
-        // Given
         UUID ticketId = UUID.randomUUID();
 
         UUID reservationId = UUID.randomUUID();
@@ -225,10 +255,8 @@ class TicketReservationCommandProcessingIntegrationTest {
 
         String expectedResultMessageId = resultMessageId(command);
 
-        // When
         reservationService.processReserveTicketCommand(command);
 
-        // Then
         Integer ticketCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM tickets
@@ -260,8 +288,6 @@ class TicketReservationCommandProcessingIntegrationTest {
 
     @Test
     void shouldIgnoreRedeliveredCommandAfterReservationWasReleased() {
-
-        // Given
         Ticket ticket = createAvailableTicket("A-4");
 
         UUID reservationId = UUID.randomUUID();
@@ -270,9 +296,6 @@ class TicketReservationCommandProcessingIntegrationTest {
 
         String expectedResultMessageId = resultMessageId(command);
 
-        /*
-         * Первая обработка команды.
-         */
         reservationService.processReserveTicketCommand(command);
 
         Ticket reservedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
@@ -298,15 +321,16 @@ class TicketReservationCommandProcessingIntegrationTest {
 
         assertThat(releasedTicket.getReservationId()).isNull();
 
+        assertThat(releasedTicket.getReservedUntil()).isNull();
+
         /*
-         * Kafka redelivery ТОЙ ЖЕ команды.
+         * Kafka redelivery ТОЙ ЖЕ команды после release.
          *
-         * Она уже была обработана, поэтому TicketReservationService должен сделать
-         * no-op.
+         * Result с таким messageId уже существует в outbox, поэтому команда считается
+         * обработанной и не должна повторно резервировать ticket.
          */
         reservationService.processReserveTicketCommand(command);
 
-        // Then
         Ticket afterRedelivery = ticketRepository.findById(ticket.getId()).orElseThrow();
 
         assertThat(afterRedelivery.getStatus()).isEqualTo(TicketStatus.AVAILABLE);
@@ -325,18 +349,15 @@ class TicketReservationCommandProcessingIntegrationTest {
     }
 
     private ReserveTicketCommand createCommand(UUID ticketId, UUID reservationId) {
-
         return new ReserveTicketCommand("saga:" + reservationId + ":reserve-ticket", ORDER_ID, reservationId, ticketId,
                 USER_ID, Instant.now());
     }
 
     private String resultMessageId(ReserveTicketCommand command) {
-
         return "result:" + command.messageId();
     }
 
     private Ticket createAvailableTicket(String seatNumber) {
-
         Event event = new Event();
 
         event.setTitle("Saga integration test");

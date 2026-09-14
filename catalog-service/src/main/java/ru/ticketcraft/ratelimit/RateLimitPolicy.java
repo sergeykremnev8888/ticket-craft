@@ -2,8 +2,7 @@ package ru.ticketcraft.ratelimit;
 
 public enum RateLimitPolicy {
 
-    CATALOG_READ("catalog-read"),
-    TICKET_RESERVATION("ticket-reservation");
+    CATALOG_READ("catalog-read");
 
     private final String key;
 

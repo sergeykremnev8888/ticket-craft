@@ -32,9 +32,6 @@ import ru.ticketcraft.support.CatalogTestContainersConfiguration;
         "ticketcraft.rate-limit.catalog-read.refill-tokens=10",
         "ticketcraft.rate-limit.catalog-read.refill-period=1h",
 
-        "ticketcraft.rate-limit.reservation.capacity=3",
-        "ticketcraft.rate-limit.reservation.refill-tokens=3",
-        "ticketcraft.rate-limit.reservation.refill-period=1h",
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",
         "spring.kafka.admin.enabled=false"
@@ -66,24 +63,19 @@ class RedisRateLimiterIntegrationTest {
     void shouldAllowRequestsUntilCapacityAndThenReject() {
         String clientKey = uniqueClientKey();
 
-        RateLimitResult first = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
+        for (int expectedRemaining = 9; expectedRemaining >= 0; expectedRemaining--) {
+            RateLimitResult result = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, clientKey);
 
-        RateLimitResult second = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
+            assertThat(result.allowed()).isTrue();
+            assertThat(result.limit()).isEqualTo(10);
+            assertThat(result.remaining()).isEqualTo(expectedRemaining);
+            assertThat(result.retryAfter()).isZero();
+        }
 
-        RateLimitResult third = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
-
-        RateLimitResult rejected = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
-
-        assertThat(first.allowed()).isTrue();
-        assertThat(first.remaining()).isEqualTo(2);
-
-        assertThat(second.allowed()).isTrue();
-        assertThat(second.remaining()).isEqualTo(1);
-
-        assertThat(third.allowed()).isTrue();
-        assertThat(third.remaining()).isZero();
+        RateLimitResult rejected = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, clientKey);
 
         assertThat(rejected.allowed()).isFalse();
+        assertThat(rejected.limit()).isEqualTo(10);
         assertThat(rejected.remaining()).isZero();
 
         assertThat(rejected.retryAfter().toMillis()).isGreaterThan(0L)
@@ -97,40 +89,40 @@ class RedisRateLimiterIntegrationTest {
         /*
          * Полностью исчерпываем bucket:
          *
-         * capacity = 3 refill = 3 tokens / 1 hour
+         * capacity = 10 refill = 10 tokens / 1 hour
+         *
+         * То есть один token восстанавливается примерно каждые 6 минут.
          */
-        for (int i = 0; i < 3; i++) {
-            RateLimitResult result = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
+        for (int i = 0; i < 10; i++) {
+            RateLimitResult result = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, clientKey);
 
             assertThat(result.allowed()).isTrue();
         }
 
-        RateLimitResult rejected = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
+        RateLimitResult rejected = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, clientKey);
 
         assertThat(rejected.allowed()).isFalse();
 
-        String redisKey = redisKey(RateLimitPolicy.TICKET_RESERVATION, clientKey);
+        String redisKey = redisKey(RateLimitPolicy.CATALOG_READ, clientKey);
 
         /*
-         * Делаем состояние полностью детерминированным.
+         * Проверяем refill детерминированно без Thread.sleep().
          *
-         * 3 tokens / 60 minutes = 1 token / 20 minutes.
+         * 10 tokens / 60 minutes = 1 token / 6 minutes.
          *
-         * За 41 минуту должно восстановиться чуть больше 2 tokens. После consume одного
+         * За 13 минут должно восстановиться чуть больше 2 tokens. После consume одного
          * token remaining должен быть 1.
-         *
-         * Это позволяет реально проверить refill Lua-скрипта без Thread.sleep().
          */
         redisTemplate.opsForHash().put(redisKey, "tokens", "0");
 
-        long fortyOneMinutesAgo = Instant.now().minus(Duration.ofMinutes(41)).toEpochMilli();
+        long thirteenMinutesAgo = Instant.now().minus(Duration.ofMinutes(13)).toEpochMilli();
 
-        redisTemplate.opsForHash().put(redisKey, "last_refill_ms", Long.toString(fortyOneMinutesAgo));
+        redisTemplate.opsForHash().put(redisKey, "last_refill_ms", Long.toString(thirteenMinutesAgo));
 
-        RateLimitResult afterRefill = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
+        RateLimitResult afterRefill = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, clientKey);
 
         assertThat(afterRefill.allowed()).isTrue();
-        assertThat(afterRefill.limit()).isEqualTo(3);
+        assertThat(afterRefill.limit()).isEqualTo(10);
         assertThat(afterRefill.remaining()).isEqualTo(1);
         assertThat(afterRefill.retryAfter()).isZero();
     }
@@ -139,9 +131,9 @@ class RedisRateLimiterIntegrationTest {
     void shouldSetExpirationOnBucketKey() {
         String clientKey = uniqueClientKey();
 
-        rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
+        rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, clientKey);
 
-        String redisKey = redisKey(RateLimitPolicy.TICKET_RESERVATION, clientKey);
+        String redisKey = redisKey(RateLimitPolicy.CATALOG_READ, clientKey);
 
         Boolean exists = redisTemplate.hasKey(redisKey);
 
@@ -152,11 +144,14 @@ class RedisRateLimiterIntegrationTest {
         assertThat(ttlMillis).isNotNull().isPositive();
 
         /*
-         * Для reservation policy:
+         * catalog-read:
          *
-         * capacity = 3 refillTokens = 3 refillPeriod = 1h
+         * capacity = 10 refillTokens = 10 refillPeriod = 1h
          *
-         * timeToFull = 1h bucket TTL = max(2h, 2h) = 2h
+         * Полное восстановление bucket занимает 1 час.
+         *
+         * Текущая RedisRateLimiter implementation устанавливает bucket TTL максимум на
+         * 2 часа для этой policy.
          */
         assertThat(ttlMillis).isLessThanOrEqualTo(Duration.ofHours(2).toMillis());
     }
@@ -166,50 +161,28 @@ class RedisRateLimiterIntegrationTest {
         String firstClient = uniqueClientKey();
         String secondClient = uniqueClientKey();
 
-        for (int i = 0; i < 3; i++) {
-            RateLimitResult result = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, firstClient);
+        for (int i = 0; i < 10; i++) {
+            RateLimitResult result = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, firstClient);
 
             assertThat(result.allowed()).isTrue();
         }
 
-        RateLimitResult firstClientRejected = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, firstClient);
+        RateLimitResult firstClientRejected = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, firstClient);
 
         assertThat(firstClientRejected.allowed()).isFalse();
 
-        RateLimitResult secondClientResult = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, secondClient);
+        RateLimitResult secondClientResult = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, secondClient);
 
         assertThat(secondClientResult.allowed()).isTrue();
-        assertThat(secondClientResult.remaining()).isEqualTo(2);
-    }
-
-    @Test
-    void shouldKeepPoliciesIndependentForSameClient() {
-        String clientKey = uniqueClientKey();
-
-        for (int i = 0; i < 3; i++) {
-            RateLimitResult result = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
-
-            assertThat(result.allowed()).isTrue();
-        }
-
-        RateLimitResult reservationRejected = rateLimiter.acquire(RateLimitPolicy.TICKET_RESERVATION, clientKey);
-
-        assertThat(reservationRejected.allowed()).isFalse();
-
-        RateLimitResult catalogResult = rateLimiter.acquire(RateLimitPolicy.CATALOG_READ, clientKey);
-
-        assertThat(catalogResult.allowed()).isTrue();
-        assertThat(catalogResult.remaining()).isEqualTo(9);
+        assertThat(secondClientResult.remaining()).isEqualTo(9);
     }
 
     @Test
     void shouldNeverAllowMoreThanCapacityUnderConcurrency() throws Exception {
-
         String clientKey = uniqueClientKey();
         int requestCount = 100;
 
         ExecutorService executor = Executors.newFixedThreadPool(32);
-
         CountDownLatch start = new CountDownLatch(1);
 
         List<Future<Boolean>> futures = new ArrayList<>();
@@ -246,7 +219,6 @@ class RedisRateLimiterIntegrationTest {
     }
 
     private String redisKey(RateLimitPolicy policy, String clientKey) {
-
         return RATE_LIMIT_KEY_PREFIX + policy.key() + ":" + clientKey;
     }
 
@@ -261,5 +233,4 @@ class RedisRateLimiterIntegrationTest {
     private String uniqueClientKey() {
         return "integration-test-" + UUID.randomUUID();
     }
-
 }
