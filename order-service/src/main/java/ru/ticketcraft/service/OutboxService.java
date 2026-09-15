@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 import ru.ticketcraft.config.KafkaTopicsProperties;
+import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
@@ -26,6 +27,7 @@ public class OutboxService {
     private final KafkaTopicsProperties topics;
 
     public OutboxService(OutboxEventRepository repository, ObjectMapper objectMapper, KafkaTopicsProperties topics) {
+
         this.repository = repository;
         this.objectMapper = objectMapper;
         this.topics = topics;
@@ -50,25 +52,22 @@ public class OutboxService {
         return eventId;
     }
 
-    public void save(UUID eventId, String aggregateType, String aggregateId, OutboxEventType eventType, String topic,
-            Object payload, Instant createdAt) {
-
-        String serializedPayload = serialize(payload);
-
-        int inserted = repository.insert(eventId, aggregateType, aggregateId, eventType.getValue(), topic,
-                serializedPayload, createdAt);
-
-        if (inserted != 1) {
-            throw new IllegalStateException("Failed to insert outbox event: " + eventId);
-        }
-    }
-
     public UUID savePaymentRequestedEvent(Order order, PaymentRequestedEvent event) {
 
         UUID eventId = UUID.randomUUID();
 
         save(eventId, AGGREGATE_TYPE_ORDER, order.getId().toString(), OutboxEventType.PAYMENT_REQUESTED,
                 topics.paymentRequests(), event, event.createdAt());
+
+        return eventId;
+    }
+
+    public UUID saveConfirmTicketCommand(Order order, ConfirmTicketCommand command) {
+
+        UUID eventId = UUID.randomUUID();
+
+        save(eventId, AGGREGATE_TYPE_ORDER, order.getId().toString(), OutboxEventType.CONFIRM_TICKET,
+                topics.ticketReservationCommands(), command, command.occurredAt());
 
         return eventId;
     }
@@ -83,6 +82,19 @@ public class OutboxService {
         return eventId;
     }
 
+    public void save(UUID eventId, String aggregateType, String aggregateId, OutboxEventType eventType, String topic,
+            Object payload, Instant createdAt) {
+
+        String serializedPayload = serialize(payload);
+
+        int inserted = repository.insert(eventId, aggregateType, aggregateId, eventType.getValue(), topic,
+                serializedPayload, createdAt);
+
+        if (inserted != 1) {
+            throw new IllegalStateException("Failed to insert outbox event: " + eventId);
+        }
+    }
+
     private String serialize(Object payload) {
         try {
             return objectMapper.writeValueAsString(payload);
@@ -91,5 +103,4 @@ public class OutboxService {
                     e);
         }
     }
-
 }

@@ -8,8 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ru.ticketcraft.config.ReservationProperties;
+import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
@@ -61,9 +63,8 @@ public class TicketReservationService {
          */
         if (updated == 1) {
 
-            Ticket ticket = ticketRepository.findById(command.ticketId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Reserved ticket disappeared: ticketId=" + command.ticketId()));
+            Ticket ticket = ticketRepository.findById(command.ticketId()).orElseThrow(
+                    () -> new IllegalStateException("Reserved ticket disappeared: ticketId=" + command.ticketId()));
 
             saveTicketReservedResult(command, ticket, now);
 
@@ -177,6 +178,69 @@ public class TicketReservationService {
                 + ticket.getReservationId());
     }
 
+    @Transactional
+    public void processConfirmTicketCommand(ConfirmTicketCommand command) {
+
+        String resultMessageId = resultMessageId(command);
+
+        if (outboxService.existsByMessageId(resultMessageId)) {
+            return;
+        }
+
+        Instant now = Instant.now();
+
+        int updated = ticketRepository.confirmTicket(command.ticketId(), command.reservationId());
+
+        if (updated == 1) {
+            saveTicketConfirmedResult(command, now);
+            return;
+        }
+
+        Optional<Ticket> optionalTicket = ticketRepository.findById(command.ticketId());
+
+        if (optionalTicket.isEmpty()) {
+            throw new IllegalStateException("Cannot confirm ticket: ticket not found" + ": ticketId="
+                    + command.ticketId() + ", reservationId=" + command.reservationId());
+        }
+
+        Ticket ticket = optionalTicket.get();
+
+        /*
+         * Kafka redelivery после уже успешно выполненного RESERVED -> SOLD.
+         */
+        if (ticket.getStatus() == TicketStatus.SOLD && command.reservationId().equals(ticket.getReservationId())) {
+
+            saveTicketConfirmedResult(command, now);
+            return;
+        }
+
+        /*
+         * Важно:
+         *
+         * AVAILABLE означает, что reservation могла истечь до того, как пришёл
+         * ConfirmTicketCommand.
+         *
+         * Такой билет нельзя снова переводить в SOLD.
+         */
+        throw new IllegalStateException("Cannot confirm ticket reservation" + ": ticketId=" + command.ticketId()
+                + ", expectedReservationId=" + command.reservationId() + ", actualReservationId="
+                + ticket.getReservationId() + ", status=" + ticket.getStatus());
+    }
+
+    private void saveTicketConfirmedResult(ConfirmTicketCommand command, Instant occurredAt) {
+
+        String messageId = resultMessageId(command);
+
+        TicketConfirmedEvent event = new TicketConfirmedEvent(messageId, command.orderId(), command.reservationId(),
+                command.ticketId(), occurredAt);
+
+        outboxService.saveTicketConfirmedEvent(event);
+    }
+
+    private String resultMessageId(ConfirmTicketCommand command) {
+        return "result:" + command.messageId();
+    }
+
     private void saveTicketReleasedResult(ReleaseTicketCommand command, Instant occurredAt) {
 
         String messageId = resultMessageId(command);
@@ -196,14 +260,8 @@ public class TicketReservationService {
 
         String messageId = resultMessageId(command);
 
-        TicketReservedEvent event = new TicketReservedEvent(
-                messageId,
-                command.orderId(),
-                command.reservationId(),
-                command.ticketId(),
-                ticket.getEvent().getId(),
-                ticket.getPrice(),
-                occurredAt);
+        TicketReservedEvent event = new TicketReservedEvent(messageId, command.orderId(), command.reservationId(),
+                command.ticketId(), ticket.getEvent().getId(), ticket.getPrice(), occurredAt);
 
         outboxService.saveTicketReservedEvent(event);
     }

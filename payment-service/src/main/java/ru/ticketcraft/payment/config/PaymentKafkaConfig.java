@@ -35,12 +35,13 @@ import ru.ticketcraft.dto.PaymentRequestedEvent;
 @EnableKafka
 public class PaymentKafkaConfig {
 
-    private final PaymentKafkaProperties kafkaProperties;
-    private final PaymentRetryProperties retryProperties;
+    private final PaymentKafkaProperties paymentKafkaProperties;
+    private final PaymentRetryProperties paymentRetryProperties;
 
-    public PaymentKafkaConfig(PaymentKafkaProperties kafkaProperties, PaymentRetryProperties retryProperties) {
-        this.kafkaProperties = kafkaProperties;
-        this.retryProperties = retryProperties;
+    public PaymentKafkaConfig(PaymentKafkaProperties paymentKafkaProperties,
+            PaymentRetryProperties paymentRetryProperties) {
+        this.paymentKafkaProperties = paymentKafkaProperties;
+        this.paymentRetryProperties = paymentRetryProperties;
     }
 
     @Bean
@@ -79,13 +80,13 @@ public class PaymentKafkaConfig {
     DeadLetterPublishingRecoverer paymentDeadLetterPublishingRecoverer(
             KafkaTemplate<String, Object> paymentKafkaTemplate) {
         return new DeadLetterPublishingRecoverer(paymentKafkaTemplate,
-                (record, exception) -> new TopicPartition(kafkaProperties.getDltTopic(), record.partition()));
+                (record, exception) -> new TopicPartition(paymentKafkaProperties.getDltTopic(), record.partition()));
     }
 
     @Bean
     DefaultErrorHandler paymentErrorHandler(DeadLetterPublishingRecoverer paymentDeadLetterPublishingRecoverer) {
-        FixedBackOff backOff = new FixedBackOff(retryProperties.getBackOff().toMillis(),
-                retryProperties.getMaxAttempts() - 1L);
+        FixedBackOff backOff = new FixedBackOff(paymentRetryProperties.getBackOff().toMillis(),
+                paymentRetryProperties.getMaxAttempts() - 1L);
 
         return new DefaultErrorHandler(paymentDeadLetterPublishingRecoverer, backOff);
     }
@@ -93,14 +94,15 @@ public class PaymentKafkaConfig {
     @Bean
     ConcurrentKafkaListenerContainerFactory<String, PaymentRequestedEvent> kafkaListenerContainerFactory(
             ConsumerFactory<String, PaymentRequestedEvent> paymentConsumerFactory,
-            DefaultErrorHandler paymentErrorHandler) {
+            DefaultErrorHandler paymentErrorHandler, KafkaProperties kafkaProperties) {
         ConcurrentKafkaListenerContainerFactory<String, PaymentRequestedEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(paymentConsumerFactory);
         factory.setCommonErrorHandler(paymentErrorHandler);
-        factory.setConcurrency(kafkaProperties.getConcurrency());
-        factory.getContainerProperties().setPollTimeout(kafkaProperties.getPollTimeout().toMillis());
+        factory.setConcurrency(paymentKafkaProperties.getConcurrency());
+        factory.getContainerProperties().setPollTimeout(paymentKafkaProperties.getPollTimeout().toMillis());
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
+        factory.getContainerProperties().setObservationEnabled(kafkaProperties.getListener().isObservationEnabled());
 
         return factory;
     }

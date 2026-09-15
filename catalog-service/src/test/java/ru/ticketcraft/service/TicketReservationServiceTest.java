@@ -1,6 +1,7 @@
 package ru.ticketcraft.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -22,7 +23,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import ru.ticketcraft.config.ReservationProperties;
+import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 import ru.ticketcraft.dto.TicketStatus;
@@ -33,19 +36,28 @@ import ru.ticketcraft.repository.TicketRepository;
 @ExtendWith(MockitoExtension.class)
 class TicketReservationServiceTest {
 
-    private static final UUID EVENT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID EVENT_ID =
+            UUID.fromString(
+                    "11111111-1111-1111-1111-111111111111");
 
-    private static final UUID TICKET_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final UUID TICKET_ID =
+            UUID.fromString(
+                    "22222222-2222-2222-2222-222222222222");
 
-    private static final UUID RESERVATION_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
+    private static final UUID RESERVATION_ID =
+            UUID.fromString(
+                    "33333333-3333-3333-3333-333333333333");
 
-    private static final UUID ANOTHER_RESERVATION_ID = UUID.fromString("44444444-4444-4444-4444-444444444444");
+    private static final UUID ANOTHER_RESERVATION_ID =
+            UUID.fromString(
+                    "44444444-4444-4444-4444-444444444444");
 
     private static final Long ORDER_ID = 1001L;
 
     private static final Long USER_ID = 501L;
 
-    private static final BigDecimal PRICE = new BigDecimal("100.00");
+    private static final BigDecimal PRICE =
+            new BigDecimal("100.00");
 
     @Mock
     private TicketRepository ticketRepository;
@@ -57,228 +69,561 @@ class TicketReservationServiceTest {
 
     @BeforeEach
     void setUp() {
-        ReservationProperties reservationProperties = new ReservationProperties(Duration.ofMinutes(10L));
 
-        reservationService = new TicketReservationService(ticketRepository, outboxService, reservationProperties);
+        ReservationProperties reservationProperties =
+                new ReservationProperties(
+                        Duration.ofMinutes(10L));
+
+        reservationService = new TicketReservationService(
+                ticketRepository,
+                outboxService,
+                reservationProperties);
     }
 
     @Test
     void shouldReserveAvailableTicketAndCreateSuccessResult() {
-        ReserveTicketCommand command = createCommand(RESERVATION_ID);
 
-        String expectedResultMessageId = resultMessageId(command);
+        ReserveTicketCommand command =
+                createReserveCommand(RESERVATION_ID);
 
-        when(outboxService.existsByMessageId(expectedResultMessageId)).thenReturn(false);
+        String expectedResultMessageId =
+                resultMessageId(command.messageId());
 
-        when(ticketRepository.reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class))).thenReturn(1);
+        when(outboxService.existsByMessageId(
+                expectedResultMessageId))
+                .thenReturn(false);
 
-        Ticket ticket = createReservedTicket(TICKET_ID, RESERVATION_ID);
+        when(ticketRepository.reserveTicket(
+                eq(TICKET_ID),
+                eq(RESERVATION_ID),
+                any(Instant.class)))
+                .thenReturn(1);
 
-        when(ticketRepository.findById(TICKET_ID)).thenReturn(Optional.of(ticket));
+        Ticket ticket =
+                createReservedTicket(
+                        TICKET_ID,
+                        RESERVATION_ID);
 
-        reservationService.processReserveTicketCommand(command);
+        when(ticketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
 
-        verify(outboxService).existsByMessageId(expectedResultMessageId);
+        reservationService
+                .processReserveTicketCommand(command);
 
-        verify(ticketRepository).reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class));
+        verify(outboxService)
+                .existsByMessageId(expectedResultMessageId);
 
-        verify(ticketRepository).findById(TICKET_ID);
+        verify(ticketRepository)
+                .reserveTicket(
+                        eq(TICKET_ID),
+                        eq(RESERVATION_ID),
+                        any(Instant.class));
 
-        ArgumentCaptor<TicketReservedEvent> eventCaptor = ArgumentCaptor.forClass(TicketReservedEvent.class);
+        verify(ticketRepository)
+                .findById(TICKET_ID);
 
-        verify(outboxService).saveTicketReservedEvent(eventCaptor.capture());
+        ArgumentCaptor<TicketReservedEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        TicketReservedEvent.class);
 
-        TicketReservedEvent event = eventCaptor.getValue();
+        verify(outboxService)
+                .saveTicketReservedEvent(
+                        eventCaptor.capture());
 
-        assertThat(event.messageId()).isEqualTo(expectedResultMessageId);
+        TicketReservedEvent event =
+                eventCaptor.getValue();
 
-        assertThat(event.orderId()).isEqualTo(ORDER_ID);
+        assertThat(event.messageId())
+                .isEqualTo(expectedResultMessageId);
 
-        assertThat(event.reservationId()).isEqualTo(RESERVATION_ID);
+        assertThat(event.orderId())
+                .isEqualTo(ORDER_ID);
 
-        assertThat(event.ticketId()).isEqualTo(TICKET_ID);
+        assertThat(event.reservationId())
+                .isEqualTo(RESERVATION_ID);
 
-        assertThat(event.eventId()).isEqualTo(EVENT_ID);
+        assertThat(event.ticketId())
+                .isEqualTo(TICKET_ID);
 
-        assertThat(event.price()).isEqualByComparingTo(PRICE);
+        assertThat(event.eventId())
+                .isEqualTo(EVENT_ID);
 
-        assertThat(event.occurredAt()).isNotNull();
+        assertThat(event.price())
+                .isEqualByComparingTo(PRICE);
 
-        verify(outboxService, never()).saveTicketReservationFailedEvent(any());
+        assertThat(event.occurredAt())
+                .isNotNull();
 
-        verifyNoMoreInteractions(ticketRepository, outboxService);
+        verify(outboxService, never())
+                .saveTicketReservationFailedEvent(any());
+
+        verifyNoMoreInteractions(
+                ticketRepository,
+                outboxService);
     }
 
     @Test
     void shouldTreatSameReservationAsIdempotentSuccess() {
-        ReserveTicketCommand command = createCommand(RESERVATION_ID);
 
-        String expectedResultMessageId = resultMessageId(command);
+        ReserveTicketCommand command =
+                createReserveCommand(RESERVATION_ID);
 
-        when(outboxService.existsByMessageId(expectedResultMessageId)).thenReturn(false);
+        String expectedResultMessageId =
+                resultMessageId(command.messageId());
 
-        /*
-         * Atomic UPDATE не сработал, потому что ticket уже RESERVED.
-         */
-        when(ticketRepository.reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class))).thenReturn(0);
+        when(outboxService.existsByMessageId(
+                expectedResultMessageId))
+                .thenReturn(false);
 
-        Ticket ticket = createReservedTicket(TICKET_ID, RESERVATION_ID);
+        when(ticketRepository.reserveTicket(
+                eq(TICKET_ID),
+                eq(RESERVATION_ID),
+                any(Instant.class)))
+                .thenReturn(0);
 
-        when(ticketRepository.findById(TICKET_ID)).thenReturn(Optional.of(ticket));
+        Ticket ticket =
+                createReservedTicket(
+                        TICKET_ID,
+                        RESERVATION_ID);
 
-        reservationService.processReserveTicketCommand(command);
+        when(ticketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
 
-        verify(outboxService).existsByMessageId(expectedResultMessageId);
+        reservationService
+                .processReserveTicketCommand(command);
 
-        verify(ticketRepository).reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class));
+        ArgumentCaptor<TicketReservedEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        TicketReservedEvent.class);
 
-        verify(ticketRepository).findById(TICKET_ID);
+        verify(outboxService)
+                .saveTicketReservedEvent(
+                        eventCaptor.capture());
 
-        ArgumentCaptor<TicketReservedEvent> eventCaptor = ArgumentCaptor.forClass(TicketReservedEvent.class);
+        TicketReservedEvent event =
+                eventCaptor.getValue();
 
-        verify(outboxService).saveTicketReservedEvent(eventCaptor.capture());
+        assertThat(event.messageId())
+                .isEqualTo(expectedResultMessageId);
 
-        TicketReservedEvent event = eventCaptor.getValue();
+        assertThat(event.reservationId())
+                .isEqualTo(RESERVATION_ID);
 
-        assertThat(event.messageId()).isEqualTo(expectedResultMessageId);
+        assertThat(event.ticketId())
+                .isEqualTo(TICKET_ID);
 
-        assertThat(event.reservationId()).isEqualTo(RESERVATION_ID);
+        assertThat(event.eventId())
+                .isEqualTo(EVENT_ID);
 
-        assertThat(event.ticketId()).isEqualTo(TICKET_ID);
+        assertThat(event.price())
+                .isEqualByComparingTo(PRICE);
 
-        assertThat(event.eventId()).isEqualTo(EVENT_ID);
-
-        assertThat(event.price()).isEqualByComparingTo(PRICE);
-
-        verify(outboxService, never()).saveTicketReservationFailedEvent(any());
-
-        verifyNoMoreInteractions(ticketRepository, outboxService);
+        verify(outboxService, never())
+                .saveTicketReservationFailedEvent(any());
     }
 
     @Test
     void shouldCreateFailureResultWhenTicketBelongsToAnotherReservation() {
-        ReserveTicketCommand command = createCommand(RESERVATION_ID);
 
-        String expectedResultMessageId = resultMessageId(command);
+        ReserveTicketCommand command =
+                createReserveCommand(RESERVATION_ID);
 
-        when(outboxService.existsByMessageId(expectedResultMessageId)).thenReturn(false);
+        String expectedResultMessageId =
+                resultMessageId(command.messageId());
 
-        when(ticketRepository.reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class))).thenReturn(0);
+        when(outboxService.existsByMessageId(
+                expectedResultMessageId))
+                .thenReturn(false);
 
-        Ticket ticket = createReservedTicket(TICKET_ID, ANOTHER_RESERVATION_ID);
+        when(ticketRepository.reserveTicket(
+                eq(TICKET_ID),
+                eq(RESERVATION_ID),
+                any(Instant.class)))
+                .thenReturn(0);
 
-        when(ticketRepository.findById(TICKET_ID)).thenReturn(Optional.of(ticket));
+        Ticket ticket =
+                createReservedTicket(
+                        TICKET_ID,
+                        ANOTHER_RESERVATION_ID);
 
-        reservationService.processReserveTicketCommand(command);
+        when(ticketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
 
-        verify(outboxService).existsByMessageId(expectedResultMessageId);
+        reservationService
+                .processReserveTicketCommand(command);
 
-        verify(ticketRepository).reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class));
+        ArgumentCaptor<TicketReservationFailedEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        TicketReservationFailedEvent.class);
 
-        verify(ticketRepository).findById(TICKET_ID);
+        verify(outboxService)
+                .saveTicketReservationFailedEvent(
+                        eventCaptor.capture());
 
-        ArgumentCaptor<TicketReservationFailedEvent> eventCaptor = ArgumentCaptor
-                .forClass(TicketReservationFailedEvent.class);
+        TicketReservationFailedEvent event =
+                eventCaptor.getValue();
 
-        verify(outboxService).saveTicketReservationFailedEvent(eventCaptor.capture());
+        assertThat(event.messageId())
+                .isEqualTo(expectedResultMessageId);
 
-        TicketReservationFailedEvent event = eventCaptor.getValue();
+        assertThat(event.orderId())
+                .isEqualTo(ORDER_ID);
 
-        assertThat(event.messageId()).isEqualTo(expectedResultMessageId);
+        assertThat(event.reservationId())
+                .isEqualTo(RESERVATION_ID);
 
-        assertThat(event.orderId()).isEqualTo(ORDER_ID);
+        assertThat(event.ticketId())
+                .isEqualTo(TICKET_ID);
 
-        assertThat(event.reservationId()).isEqualTo(RESERVATION_ID);
+        assertThat(event.reason())
+                .isEqualTo("TICKET_ALREADY_RESERVED");
 
-        assertThat(event.ticketId()).isEqualTo(TICKET_ID);
-
-        assertThat(event.reason()).isEqualTo("TICKET_ALREADY_RESERVED");
-
-        assertThat(event.occurredAt()).isNotNull();
-
-        verify(outboxService, never()).saveTicketReservedEvent(any());
-
-        verifyNoMoreInteractions(ticketRepository, outboxService);
+        verify(outboxService, never())
+                .saveTicketReservedEvent(any());
     }
 
     @Test
     void shouldCreateFailureResultWhenTicketDoesNotExist() {
-        ReserveTicketCommand command = createCommand(RESERVATION_ID);
 
-        String expectedResultMessageId = resultMessageId(command);
+        ReserveTicketCommand command =
+                createReserveCommand(RESERVATION_ID);
 
-        when(outboxService.existsByMessageId(expectedResultMessageId)).thenReturn(false);
+        String expectedResultMessageId =
+                resultMessageId(command.messageId());
 
-        when(ticketRepository.reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class))).thenReturn(0);
+        when(outboxService.existsByMessageId(
+                expectedResultMessageId))
+                .thenReturn(false);
 
-        when(ticketRepository.findById(TICKET_ID)).thenReturn(Optional.empty());
+        when(ticketRepository.reserveTicket(
+                eq(TICKET_ID),
+                eq(RESERVATION_ID),
+                any(Instant.class)))
+                .thenReturn(0);
 
-        reservationService.processReserveTicketCommand(command);
+        when(ticketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.empty());
 
-        verify(outboxService).existsByMessageId(expectedResultMessageId);
+        reservationService
+                .processReserveTicketCommand(command);
 
-        verify(ticketRepository).reserveTicket(eq(TICKET_ID), eq(RESERVATION_ID), any(Instant.class));
+        ArgumentCaptor<TicketReservationFailedEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        TicketReservationFailedEvent.class);
 
-        verify(ticketRepository).findById(TICKET_ID);
+        verify(outboxService)
+                .saveTicketReservationFailedEvent(
+                        eventCaptor.capture());
 
-        ArgumentCaptor<TicketReservationFailedEvent> eventCaptor = ArgumentCaptor
-                .forClass(TicketReservationFailedEvent.class);
-
-        verify(outboxService).saveTicketReservationFailedEvent(eventCaptor.capture());
-
-        TicketReservationFailedEvent event = eventCaptor.getValue();
-
-        assertThat(event.messageId()).isEqualTo(expectedResultMessageId);
-
-        assertThat(event.orderId()).isEqualTo(ORDER_ID);
-
-        assertThat(event.reservationId()).isEqualTo(RESERVATION_ID);
-
-        assertThat(event.ticketId()).isEqualTo(TICKET_ID);
-
-        assertThat(event.reason()).isEqualTo("TICKET_NOT_FOUND");
-
-        assertThat(event.occurredAt()).isNotNull();
-
-        verify(outboxService, never()).saveTicketReservedEvent(any());
-
-        verifyNoMoreInteractions(ticketRepository, outboxService);
+        assertThat(eventCaptor.getValue().reason())
+                .isEqualTo("TICKET_NOT_FOUND");
     }
 
     @Test
-    void shouldIgnoreCommandWhenResultAlreadyExists() {
-        ReserveTicketCommand command = createCommand(RESERVATION_ID);
+    void shouldIgnoreReserveCommandWhenResultAlreadyExists() {
 
-        String expectedResultMessageId = resultMessageId(command);
+        ReserveTicketCommand command =
+                createReserveCommand(RESERVATION_ID);
 
-        when(outboxService.existsByMessageId(expectedResultMessageId)).thenReturn(true);
+        String expectedResultMessageId =
+                resultMessageId(command.messageId());
 
-        reservationService.processReserveTicketCommand(command);
+        when(outboxService.existsByMessageId(
+                expectedResultMessageId))
+                .thenReturn(true);
 
-        verify(outboxService).existsByMessageId(expectedResultMessageId);
+        reservationService
+                .processReserveTicketCommand(command);
 
-        /*
-         * Result уже существует в outbox.
-         *
-         * Значит Kafka redelivery полностью игнорируется: ticket повторно не изменяем и
-         * новый result event не создаём.
-         */
+        verify(outboxService)
+                .existsByMessageId(expectedResultMessageId);
+
         verifyNoMoreInteractions(outboxService);
         verifyNoMoreInteractions(ticketRepository);
     }
 
-    private ReserveTicketCommand createCommand(UUID reservationId) {
-        return new ReserveTicketCommand("saga:" + reservationId + ":reserve-ticket", ORDER_ID, reservationId, TICKET_ID,
-                USER_ID, Instant.parse("2026-09-14T10:00:00Z"));
+    /*
+     * ---------------- CONFIRM ----------------
+     */
+
+    @Test
+    void shouldConfirmReservedTicketAndCreateConfirmedResult() {
+
+        ConfirmTicketCommand command =
+                createConfirmCommand(RESERVATION_ID);
+
+        String expectedResultMessageId =
+                resultMessageId(command.messageId());
+
+        when(outboxService.existsByMessageId(
+                expectedResultMessageId))
+                .thenReturn(false);
+
+        when(ticketRepository.confirmTicket(
+                TICKET_ID,
+                RESERVATION_ID))
+                .thenReturn(1);
+
+        reservationService
+                .processConfirmTicketCommand(command);
+
+        verify(ticketRepository)
+                .confirmTicket(
+                        TICKET_ID,
+                        RESERVATION_ID);
+
+        ArgumentCaptor<TicketConfirmedEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        TicketConfirmedEvent.class);
+
+        verify(outboxService)
+                .saveTicketConfirmedEvent(
+                        eventCaptor.capture());
+
+        TicketConfirmedEvent event =
+                eventCaptor.getValue();
+
+        assertThat(event.messageId())
+                .isEqualTo(expectedResultMessageId);
+
+        assertThat(event.orderId())
+                .isEqualTo(ORDER_ID);
+
+        assertThat(event.reservationId())
+                .isEqualTo(RESERVATION_ID);
+
+        assertThat(event.ticketId())
+                .isEqualTo(TICKET_ID);
+
+        assertThat(event.occurredAt())
+                .isNotNull();
+
+        verify(ticketRepository, never())
+                .findById(any());
     }
 
-    private String resultMessageId(ReserveTicketCommand command) {
-        return "result:" + command.messageId();
+    @Test
+    void shouldTreatAlreadySoldTicketForSameReservationAsIdempotentSuccess() {
+
+        ConfirmTicketCommand command =
+                createConfirmCommand(RESERVATION_ID);
+
+        String expectedResultMessageId =
+                resultMessageId(command.messageId());
+
+        when(outboxService.existsByMessageId(
+                expectedResultMessageId))
+                .thenReturn(false);
+
+        when(ticketRepository.confirmTicket(
+                TICKET_ID,
+                RESERVATION_ID))
+                .thenReturn(0);
+
+        Ticket ticket =
+                createSoldTicket(
+                        TICKET_ID,
+                        RESERVATION_ID);
+
+        when(ticketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
+
+        reservationService
+                .processConfirmTicketCommand(command);
+
+        ArgumentCaptor<TicketConfirmedEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        TicketConfirmedEvent.class);
+
+        verify(outboxService)
+                .saveTicketConfirmedEvent(
+                        eventCaptor.capture());
+
+        assertThat(eventCaptor.getValue().messageId())
+                .isEqualTo(expectedResultMessageId);
+
+        assertThat(eventCaptor.getValue().reservationId())
+                .isEqualTo(RESERVATION_ID);
     }
 
-    private Ticket createReservedTicket(UUID ticketId, UUID reservationId) {
+    @Test
+    void shouldRejectConfirmWhenReservationAlreadyExpired() {
+
+        ConfirmTicketCommand command =
+                createConfirmCommand(RESERVATION_ID);
+
+        when(outboxService.existsByMessageId(
+                resultMessageId(command.messageId())))
+                .thenReturn(false);
+
+        when(ticketRepository.confirmTicket(
+                TICKET_ID,
+                RESERVATION_ID))
+                .thenReturn(0);
+
+        Ticket ticket = createTicket(
+                TICKET_ID,
+                TicketStatus.AVAILABLE,
+                null);
+
+        when(ticketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
+
+        assertThatThrownBy(() ->
+                reservationService
+                        .processConfirmTicketCommand(command))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(
+                        "Cannot confirm ticket reservation")
+                .hasMessageContaining(TICKET_ID.toString());
+
+        verify(outboxService, never())
+                .saveTicketConfirmedEvent(any());
+    }
+
+    @Test
+    void shouldRejectConfirmForAnotherReservation() {
+
+        ConfirmTicketCommand command =
+                createConfirmCommand(RESERVATION_ID);
+
+        when(outboxService.existsByMessageId(
+                resultMessageId(command.messageId())))
+                .thenReturn(false);
+
+        when(ticketRepository.confirmTicket(
+                TICKET_ID,
+                RESERVATION_ID))
+                .thenReturn(0);
+
+        Ticket ticket =
+                createReservedTicket(
+                        TICKET_ID,
+                        ANOTHER_RESERVATION_ID);
+
+        when(ticketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
+
+        assertThatThrownBy(() ->
+                reservationService
+                        .processConfirmTicketCommand(command))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(
+                        "Cannot confirm ticket reservation")
+                .hasMessageContaining(
+                        RESERVATION_ID.toString())
+                .hasMessageContaining(
+                        ANOTHER_RESERVATION_ID.toString());
+
+        verify(outboxService, never())
+                .saveTicketConfirmedEvent(any());
+    }
+
+    @Test
+    void shouldRejectConfirmWhenTicketDoesNotExist() {
+
+        ConfirmTicketCommand command =
+                createConfirmCommand(RESERVATION_ID);
+
+        when(outboxService.existsByMessageId(
+                resultMessageId(command.messageId())))
+                .thenReturn(false);
+
+        when(ticketRepository.confirmTicket(
+                TICKET_ID,
+                RESERVATION_ID))
+                .thenReturn(0);
+
+        when(ticketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                reservationService
+                        .processConfirmTicketCommand(command))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(
+                        "Cannot confirm ticket: ticket not found");
+
+        verify(outboxService, never())
+                .saveTicketConfirmedEvent(any());
+    }
+
+    @Test
+    void shouldIgnoreConfirmCommandWhenResultAlreadyExists() {
+
+        ConfirmTicketCommand command =
+                createConfirmCommand(RESERVATION_ID);
+
+        String expectedResultMessageId =
+                resultMessageId(command.messageId());
+
+        when(outboxService.existsByMessageId(
+                expectedResultMessageId))
+                .thenReturn(true);
+
+        reservationService
+                .processConfirmTicketCommand(command);
+
+        verify(outboxService)
+                .existsByMessageId(expectedResultMessageId);
+
+        verifyNoMoreInteractions(outboxService);
+        verifyNoMoreInteractions(ticketRepository);
+    }
+
+    private ReserveTicketCommand createReserveCommand(
+            UUID reservationId) {
+
+        return new ReserveTicketCommand(
+                "saga:" + reservationId + ":reserve-ticket",
+                ORDER_ID,
+                reservationId,
+                TICKET_ID,
+                USER_ID,
+                Instant.parse("2026-09-14T10:00:00Z"));
+    }
+
+    private ConfirmTicketCommand createConfirmCommand(
+            UUID reservationId) {
+
+        return new ConfirmTicketCommand(
+                "saga:" + reservationId + ":confirm-ticket",
+                ORDER_ID,
+                reservationId,
+                TICKET_ID,
+                Instant.parse("2026-09-14T10:01:00Z"));
+    }
+
+    private String resultMessageId(String commandMessageId) {
+        return "result:" + commandMessageId;
+    }
+
+    private Ticket createReservedTicket(
+            UUID ticketId,
+            UUID reservationId) {
+
+        return createTicket(
+                ticketId,
+                TicketStatus.RESERVED,
+                reservationId);
+    }
+
+    private Ticket createSoldTicket(
+            UUID ticketId,
+            UUID reservationId) {
+
+        return createTicket(
+                ticketId,
+                TicketStatus.SOLD,
+                reservationId);
+    }
+
+    private Ticket createTicket(
+            UUID ticketId,
+            TicketStatus status,
+            UUID reservationId) {
+
         Event event = new Event();
-
         event.setId(EVENT_ID);
 
         Ticket ticket = new Ticket();
@@ -286,9 +631,14 @@ class TicketReservationServiceTest {
         ticket.setId(ticketId);
         ticket.setEvent(event);
         ticket.setPrice(PRICE);
-        ticket.setStatus(TicketStatus.RESERVED);
+        ticket.setStatus(status);
         ticket.setReservationId(reservationId);
-        ticket.setReservedUntil(Instant.parse("2026-09-14T10:10:00Z"));
+
+        if (status == TicketStatus.RESERVED) {
+            ticket.setReservedUntil(
+                    Instant.parse(
+                            "2026-09-14T10:10:00Z"));
+        }
 
         return ticket;
     }

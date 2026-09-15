@@ -1,13 +1,16 @@
 package ru.ticketcraft.service;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
@@ -111,6 +114,31 @@ public class TicketReservationResultProcessor {
         sagaMetrics.recordCompensatedAfterCommit();
     }
 
+    @Transactional
+    public void process(TicketConfirmedEvent event) {
+
+        if (!processedEventRepository.insertIfAbsent(event.messageId())) {
+            duplicateMetrics.recordReservationResultDuplicate();
+            return;
+        }
+
+        OrderSaga saga = loadAndValidateSaga(event.orderId(), event.reservationId());
+
+        Order order = loadOrder(event.orderId());
+
+        validateReservationTarget(order, event.ticketId());
+
+        transitionSaga(saga.getOrderId(), OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION, OrderSagaStatus.COMPLETED);
+
+        transitionOrder(order.getId(), OrderState.PAYMENT_PENDING, OrderState.CONFIRMED);
+
+        OrderEvent confirmedEvent = createOrderConfirmedEvent(saga, order);
+
+        outboxService.saveOrderConfirmedEvent(order, confirmedEvent);
+
+        sagaMetrics.recordCompletedAfterCommit();
+    }
+
     private OrderSaga loadAndValidateSaga(Long orderId, UUID reservationId) {
 
         OrderSaga saga = orderSagaRepository.findByOrderId(orderId)
@@ -183,5 +211,13 @@ public class TicketReservationResultProcessor {
 
         return new PaymentRequestedEvent(messageId, order.getId(), order.getUserId(), order.getTotalPrice(),
                 Instant.now());
+    }
+
+    private OrderEvent createOrderConfirmedEvent(OrderSaga saga, Order order) {
+
+        String messageId = "saga:" + saga.getId() + ":order-confirmed";
+
+        return new OrderEvent(messageId, order.getId(), order.getUserId(), order.getEventId(),
+                List.of(order.getTicketId()), order.getTotalPrice(), OrderState.CONFIRMED, Instant.now());
     }
 }

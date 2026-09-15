@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import ru.ticketcraft.config.KafkaTopicsProperties;
+import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.model.Order;
@@ -38,16 +39,18 @@ class OutboxServiceTest {
     private static final BigDecimal TOTAL_PRICE = new BigDecimal("100.00");
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
 
-    @Mock private OutboxEventRepository repository;
-    @Mock private ObjectMapper objectMapper;
+    @Mock
+    private OutboxEventRepository repository;
+    @Mock
+    private ObjectMapper objectMapper;
 
     private OutboxService outboxService;
 
     @BeforeEach
     void setUp() {
         KafkaTopicsProperties topics = new KafkaTopicsProperties("order-events", "ticket-reservation-commands",
-                "ticket-reservation-results", "ticket-reservation-results.DLT", "payment-requests",
-                "payment-results", "payment-results.DLT");
+                "ticket-reservation-results", "ticket-reservation-results.DLT", "payment-requests", "payment-results",
+                "payment-results.DLT");
         outboxService = new OutboxService(repository, objectMapper, topics);
     }
 
@@ -79,8 +82,7 @@ class OutboxServiceTest {
         when(repository.insert(any(UUID.class), any(), any(), any(), any(), any(), any())).thenReturn(0);
 
         assertThatThrownBy(() -> outboxService.saveOrderConfirmedEvent(order, event))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageStartingWith("Failed to insert outbox event: ");
+                .isInstanceOf(IllegalStateException.class).hasMessageStartingWith("Failed to insert outbox event: ");
     }
 
     @Test
@@ -90,13 +92,40 @@ class OutboxServiceTest {
         Order order = new Order(ORDER_ID, USER_ID, EVENT_ID, TICKET_ID, TOTAL_PRICE, OrderState.CONFIRMED, CREATED_AT);
 
         when(objectMapper.writeValueAsString(any(OrderEvent.class)))
-                .thenThrow(new JacksonException("serialization failed") { });
+                .thenThrow(new JacksonException("serialization failed") {
+                });
 
         assertThatThrownBy(() -> outboxService.saveOrderConfirmedEvent(order, event))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Failed to serialize outbox payload: OrderEvent")
+                .isInstanceOf(IllegalStateException.class).hasMessage("Failed to serialize outbox payload: OrderEvent")
                 .hasCauseInstanceOf(JacksonException.class);
 
-        verify(repository, never()).insert(any(), anyString(), anyString(), anyString(), anyString(), anyString(), any());
+        verify(repository, never()).insert(any(), anyString(), anyString(), anyString(), anyString(), anyString(),
+                any());
+    }
+
+    @Test
+    void shouldSaveConfirmTicketCommand() throws Exception {
+
+        UUID reservationId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+
+        ConfirmTicketCommand command = new ConfirmTicketCommand("saga:" + reservationId + ":confirm-ticket", ORDER_ID,
+                reservationId, TICKET_ID, CREATED_AT);
+
+        Order order = new Order(ORDER_ID, USER_ID, EVENT_ID, TICKET_ID, TOTAL_PRICE, OrderState.PAYMENT_PENDING,
+                CREATED_AT);
+
+        String payload = "{\"messageId\":\"saga:" + reservationId + ":confirm-ticket\"}";
+
+        when(objectMapper.writeValueAsString(command)).thenReturn(payload);
+
+        when(repository.insert(any(UUID.class), eq("ORDER"), eq(ORDER_ID.toString()), eq("ConfirmTicket"),
+                eq("ticket-reservation-commands"), eq(payload), eq(CREATED_AT))).thenReturn(1);
+
+        UUID result = outboxService.saveConfirmTicketCommand(order, command);
+
+        assertThat(result).isNotNull();
+
+        verify(repository).insert(eq(result), eq("ORDER"), eq(ORDER_ID.toString()), eq("ConfirmTicket"),
+                eq("ticket-reservation-commands"), eq(payload), eq(CREATED_AT));
     }
 }

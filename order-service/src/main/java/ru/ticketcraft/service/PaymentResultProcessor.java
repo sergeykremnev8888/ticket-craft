@@ -1,19 +1,17 @@
 package ru.ticketcraft.service;
 
 import java.time.Instant;
-import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
-import ru.ticketcraft.observability.OrderSagaMetrics;
 import ru.ticketcraft.repository.OrderRepository;
 import ru.ticketcraft.repository.OrderSagaRepository;
 import ru.ticketcraft.repository.ProcessedEventRepository;
@@ -28,18 +26,19 @@ public class PaymentResultProcessor {
     private final OrderSagaRepository orderSagaRepository;
     private final OutboxService outboxService;
     private final ConsumerDuplicateMetrics duplicateMetrics;
-    private final OrderSagaMetrics sagaMetrics;
 
-    public PaymentResultProcessor(ProcessedEventRepository processedEventRepository, OrderRepository orderRepository,
-            OrderSagaRepository orderSagaRepository, OutboxService outboxService,
-            ConsumerDuplicateMetrics duplicateMetrics, OrderSagaMetrics sagaMetrics) {
+    public PaymentResultProcessor(
+            ProcessedEventRepository processedEventRepository,
+            OrderRepository orderRepository,
+            OrderSagaRepository orderSagaRepository,
+            OutboxService outboxService,
+            ConsumerDuplicateMetrics duplicateMetrics) {
 
         this.processedEventRepository = processedEventRepository;
         this.orderRepository = orderRepository;
         this.orderSagaRepository = orderSagaRepository;
         this.outboxService = outboxService;
         this.duplicateMetrics = duplicateMetrics;
-        this.sagaMetrics = sagaMetrics;
     }
 
     @Transactional
@@ -51,19 +50,19 @@ public class PaymentResultProcessor {
         }
 
         OrderSaga saga = loadSaga(event.orderId());
-
         Order order = loadOrder(event.orderId());
 
         validateAmount(order, event.amount());
 
-        transitionSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT, OrderSagaStatus.COMPLETED);
+        transitionSaga(
+                order.getId(),
+                OrderSagaStatus.WAITING_FOR_PAYMENT,
+                OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
 
-        transitionOrder(order.getId(), OrderState.PAYMENT_PENDING, OrderState.CONFIRMED);
+        ConfirmTicketCommand command =
+                createConfirmTicketCommand(saga, order);
 
-        OrderEvent confirmedEvent = createOrderConfirmedEvent(saga, order);
-        outboxService.saveOrderConfirmedEvent(order, confirmedEvent);
-
-        sagaMetrics.recordCompletedAfterCommit();
+        outboxService.saveConfirmTicketCommand(order, command);
     }
 
     @Transactional
@@ -75,16 +74,22 @@ public class PaymentResultProcessor {
         }
 
         OrderSaga saga = loadSaga(event.orderId());
-
         Order order = loadOrder(event.orderId());
 
         validateAmount(order, event.amount());
 
-        transitionSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT, OrderSagaStatus.COMPENSATING_RESERVATION);
+        transitionSaga(
+                order.getId(),
+                OrderSagaStatus.WAITING_FOR_PAYMENT,
+                OrderSagaStatus.COMPENSATING_RESERVATION);
 
-        transitionOrder(order.getId(), OrderState.PAYMENT_PENDING, OrderState.PAYMENT_FAILED);
+        transitionOrder(
+                order.getId(),
+                OrderState.PAYMENT_PENDING,
+                OrderState.PAYMENT_FAILED);
 
-        ReleaseTicketCommand command = createReleaseTicketCommand(saga, order);
+        ReleaseTicketCommand command =
+                createReleaseTicketCommand(saga, order);
 
         outboxService.saveReleaseTicketCommand(order, command);
     }
@@ -92,54 +97,96 @@ public class PaymentResultProcessor {
     private OrderSaga loadSaga(Long orderId) {
 
         return orderSagaRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new IllegalStateException("Saga not found for order " + orderId));
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Saga not found for order " + orderId));
     }
 
     private Order loadOrder(Long orderId) {
 
         return orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalStateException("Order not found: " + orderId));
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Order not found: " + orderId));
     }
 
-    private void validateAmount(Order order, java.math.BigDecimal paymentAmount) {
+    private void validateAmount(
+            Order order,
+            java.math.BigDecimal paymentAmount) {
 
         if (order.getTotalPrice().compareTo(paymentAmount) != 0) {
-
-            throw new IllegalStateException("Payment amount mismatch" + ": orderId=" + order.getId()
-                    + ", expectedAmount=" + order.getTotalPrice() + ", actualAmount=" + paymentAmount);
+            throw new IllegalStateException(
+                    "Payment amount mismatch"
+                            + ": orderId=" + order.getId()
+                            + ", expectedAmount=" + order.getTotalPrice()
+                            + ", actualAmount=" + paymentAmount);
         }
     }
 
-    private void transitionSaga(Long orderId, OrderSagaStatus expected, OrderSagaStatus target) {
+    private void transitionSaga(
+            Long orderId,
+            OrderSagaStatus expected,
+            OrderSagaStatus target) {
 
-        int updated = orderSagaRepository.transition(orderId, expected.name(), target.name(), Instant.now());
+        int updated = orderSagaRepository.transition(
+                orderId,
+                expected.name(),
+                target.name(),
+                Instant.now());
 
         if (updated != 1) {
             throw new IllegalStateException(
-                    "Failed to transition saga for order " + orderId + " from " + expected + " to " + target);
+                    "Failed to transition saga for order "
+                            + orderId
+                            + " from " + expected
+                            + " to " + target);
         }
     }
 
-    private void transitionOrder(Long orderId, OrderState expected, OrderState target) {
+    private void transitionOrder(
+            Long orderId,
+            OrderState expected,
+            OrderState target) {
 
-        boolean transitioned = orderRepository.transitionStatus(orderId, expected, target);
+        boolean transitioned =
+                orderRepository.transitionStatus(orderId, expected, target);
 
         if (!transitioned) {
             throw new IllegalStateException(
-                    "Failed to transition order " + orderId + " from " + expected + " to " + target);
+                    "Failed to transition order "
+                            + orderId
+                            + " from " + expected
+                            + " to " + target);
         }
     }
 
-    private ReleaseTicketCommand createReleaseTicketCommand(OrderSaga saga, Order order) {
+    private ConfirmTicketCommand createConfirmTicketCommand(
+            OrderSaga saga,
+            Order order) {
 
-        String messageId = "saga:" + saga.getId() + ":release-ticket";
+        String messageId =
+                "saga:" + saga.getId() + ":confirm-ticket";
 
-        return new ReleaseTicketCommand(messageId, order.getId(), saga.getId(), order.getTicketId(), Instant.now());
+        return new ConfirmTicketCommand(
+                messageId,
+                order.getId(),
+                saga.getId(),
+                order.getTicketId(),
+                Instant.now());
     }
-    private OrderEvent createOrderConfirmedEvent(OrderSaga saga, Order order) {
-        String messageId = "saga:" + saga.getId() + ":order-confirmed";
-        return new OrderEvent(messageId, order.getId(), order.getUserId(), order.getEventId(),
-                List.of(order.getTicketId()), order.getTotalPrice(), OrderState.CONFIRMED, Instant.now());
-    }
 
+    private ReleaseTicketCommand createReleaseTicketCommand(
+            OrderSaga saga,
+            Order order) {
+
+        String messageId =
+                "saga:" + saga.getId() + ":release-ticket";
+
+        return new ReleaseTicketCommand(
+                messageId,
+                order.getId(),
+                saga.getId(),
+                order.getTicketId(),
+                Instant.now());
+    }
 }

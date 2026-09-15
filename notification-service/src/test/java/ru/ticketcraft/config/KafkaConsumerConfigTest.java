@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
@@ -27,9 +28,10 @@ class KafkaConsumerConfigTest {
         KafkaConsumerProperties consumerProperties = new KafkaConsumerProperties(3);
 
         KafkaConsumerConfig config = new KafkaConsumerConfig();
+        KafkaProperties kafkaProperties = new KafkaProperties();
 
         ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory = config
-                .kafkaListenerContainerFactory(consumerFactory, errorHandler, consumerProperties);
+                .kafkaListenerContainerFactory(consumerFactory, errorHandler, consumerProperties, kafkaProperties);
 
         assertThat(factory.getConsumerFactory()).isSameAs(consumerFactory);
 

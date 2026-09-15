@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 import ru.ticketcraft.config.KafkaTopicsProperties;
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
@@ -42,14 +43,20 @@ public class OutboxService {
                 event.occurredAt());
     }
 
-    public boolean existsByMessageId(String messageId) {
-        return repository.existsByMessageId(messageId);
+    public boolean saveTicketConfirmedEvent(TicketConfirmedEvent event) {
+
+        return save(event.messageId(), event.orderId().toString(), OutboxEventType.TICKET_CONFIRMED, event,
+                event.occurredAt());
     }
 
     public boolean saveTicketReleasedEvent(TicketReleasedEvent event) {
 
         return save(event.messageId(), event.orderId().toString(), OutboxEventType.TICKET_RELEASED, event,
                 event.occurredAt());
+    }
+
+    public boolean existsByMessageId(String messageId) {
+        return repository.existsByMessageId(messageId);
     }
 
     private boolean save(String messageId, String aggregateId, OutboxEventType eventType, Object payload,
@@ -64,14 +71,10 @@ public class OutboxService {
     private String serialize(Object payload) {
 
         try {
-
             return objectMapper.writeValueAsString(payload);
-
         } catch (JacksonException e) {
-
             throw new IllegalStateException("Failed to serialize outbox payload: " + payload.getClass().getSimpleName(),
                     e);
         }
     }
-
 }

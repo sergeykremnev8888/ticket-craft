@@ -1,5 +1,6 @@
 package ru.ticketcraft.model;
 
+import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
@@ -12,6 +13,8 @@ public enum OutboxEventType {
     RESERVE_TICKET("ReserveTicket", ReserveTicketCommand.class),
 
     PAYMENT_REQUESTED("PaymentRequested", PaymentRequestedEvent.class),
+
+    CONFIRM_TICKET("ConfirmTicket", ConfirmTicketCommand.class),
 
     RELEASE_TICKET("ReleaseTicket", ReleaseTicketCommand.class);
 
@@ -38,6 +41,7 @@ public enum OutboxEventType {
             }
         }
 
-        throw new IllegalArgumentException("Unsupported outbox event type: " + value);
+        throw new IllegalArgumentException(
+                "Unsupported outbox event type: " + value);
     }
 }

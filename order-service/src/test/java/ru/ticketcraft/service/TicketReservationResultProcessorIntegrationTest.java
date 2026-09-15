@@ -18,8 +18,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
@@ -34,12 +36,8 @@ import ru.ticketcraft.saga.OrderSagaStatus;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
-@SpringBootTest(properties = { 
-        "ticketcraft.outbox.publisher.enabled=false",
-        "spring.kafka.admin.auto-create=false",
-        "spring.kafka.listener.auto-startup=false",
-        "spring.kafka.admin.enabled=false"
-})
+@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false", "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false", "spring.kafka.admin.enabled=false" })
 class TicketReservationResultProcessorIntegrationTest {
 
     private static final Long USER_ID = 10L;
@@ -97,8 +95,8 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID, EVENT_ID, PRICE,
-                Instant.now());
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                EVENT_ID, PRICE, Instant.now());
 
         processor.process(event);
 
@@ -223,8 +221,8 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID, EVENT_ID, PRICE,
-                Instant.now());
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                EVENT_ID, PRICE, Instant.now());
 
         processor.process(event);
 
@@ -269,8 +267,8 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID, EVENT_ID, PRICE,
-                Instant.now());
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                EVENT_ID, PRICE, Instant.now());
 
         assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Failed to transition order");
@@ -311,8 +309,8 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + wrongReservationId + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), wrongReservationId, TICKET_ID, EVENT_ID, PRICE,
-                Instant.now());
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), wrongReservationId, TICKET_ID,
+                EVENT_ID, PRICE, Instant.now());
 
         assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Reservation result correlation mismatch");
@@ -341,8 +339,8 @@ class TicketReservationResultProcessorIntegrationTest {
 
         String messageId = "result:saga:" + RESERVATION_ID + ":reserve-ticket";
 
-        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, wrongTicketId, EVENT_ID, PRICE,
-                Instant.now());
+        TicketReservedEvent event = new TicketReservedEvent(messageId, order.getId(), RESERVATION_ID, wrongTicketId,
+                EVENT_ID, PRICE, Instant.now());
 
         assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Reservation result ticket mismatch");
@@ -528,6 +526,184 @@ class TicketReservationResultProcessorIntegrationTest {
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPENSATING_RESERVATION);
 
         assertThat(processedEventCount(messageId)).isZero();
+    }
+
+    @Test
+    void shouldConfirmOrderAndCompleteSagaWhenTicketConfirmed() throws Exception {
+
+        Order order = createOrder(OrderState.PAYMENT_PENDING);
+
+        createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":confirm-ticket";
+
+        TicketConfirmedEvent event = new TicketConfirmedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                Instant.now());
+
+        processor.process(event);
+
+        Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
+
+        assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.CONFIRMED);
+
+        OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
+
+        assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPLETED);
+
+        assertThat(processedEventCount(messageId)).isEqualTo(1);
+
+        List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
+
+        assertThat(outboxEvents).hasSize(1);
+
+        OutboxEvent outboxEvent = outboxEvents.getFirst();
+
+        assertThat(outboxEvent.getAggregateType()).isEqualTo("ORDER");
+
+        assertThat(outboxEvent.getAggregateId()).isEqualTo(order.getId().toString());
+
+        assertThat(outboxEvent.getEventType()).isEqualTo("OrderConfirmed");
+
+        assertThat(outboxEvent.getTopic()).isEqualTo("order-events");
+
+        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxStatus.PENDING);
+
+        OrderEvent orderConfirmedEvent = objectMapper.readValue(outboxEvent.getPayload(), OrderEvent.class);
+
+        assertThat(orderConfirmedEvent.getMessageId()).isEqualTo("saga:" + RESERVATION_ID + ":order-confirmed");
+
+        assertThat(orderConfirmedEvent.getOrderId()).isEqualTo(order.getId());
+
+        assertThat(orderConfirmedEvent.getUserId()).isEqualTo(USER_ID);
+
+        assertThat(orderConfirmedEvent.getEventId()).isEqualTo(EVENT_ID);
+
+        assertThat(orderConfirmedEvent.getTicketIds()).containsExactly(TICKET_ID);
+
+        assertThat(orderConfirmedEvent.getTotalPrice()).isEqualByComparingTo(PRICE);
+
+        assertThat(orderConfirmedEvent.getState()).isEqualTo(OrderState.CONFIRMED);
+    }
+
+    @Test
+    void shouldIgnoreDuplicateTicketConfirmedEvent() {
+
+        Order order = createOrder(OrderState.PAYMENT_PENDING);
+
+        createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":confirm-ticket";
+
+        TicketConfirmedEvent event = new TicketConfirmedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                Instant.now());
+
+        processor.process(event);
+        processor.process(event);
+
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderState.CONFIRMED);
+
+        assertThat(orderSagaRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderSagaStatus.COMPLETED);
+
+        assertThat(processedEventCount(messageId)).isEqualTo(1);
+
+        /*
+         * Duplicate TicketConfirmed не должен породить второй OrderConfirmed.
+         */
+        assertThat(outboxEventRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldRollbackTicketConfirmedWhenReservationIdDoesNotMatchSaga() {
+
+        Order order = createOrder(OrderState.PAYMENT_PENDING);
+
+        createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
+
+        UUID wrongReservationId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+        String messageId = "result:saga:" + wrongReservationId + ":confirm-ticket";
+
+        TicketConfirmedEvent event = new TicketConfirmedEvent(messageId, order.getId(), wrongReservationId, TICKET_ID,
+                Instant.now());
+
+        assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Reservation result correlation mismatch");
+
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderState.PAYMENT_PENDING);
+
+        assertThat(orderSagaRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
+
+        /*
+         * processed marker должен rollback-нуться.
+         */
+        assertThat(processedEventCount(messageId)).isZero();
+
+        assertThat(outboxEventRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldRollbackTicketConfirmedWhenTicketIdDoesNotMatchOrder() {
+
+        Order order = createOrder(OrderState.PAYMENT_PENDING);
+
+        createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
+
+        UUID wrongTicketId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":confirm-ticket";
+
+        TicketConfirmedEvent event = new TicketConfirmedEvent(messageId, order.getId(), RESERVATION_ID, wrongTicketId,
+                Instant.now());
+
+        assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Reservation result ticket mismatch");
+
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderState.PAYMENT_PENDING);
+
+        assertThat(orderSagaRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
+
+        assertThat(processedEventCount(messageId)).isZero();
+
+        assertThat(outboxEventRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldRollbackTicketConfirmedWhenOrderTransitionFails() {
+
+        /*
+         * Намеренно inconsistent state:
+         *
+         * catalog подтвердил SOLD, saga ждёт confirmation, но Order почему-то уже
+         * CONFIRMED.
+         */
+        Order order = createOrder(OrderState.CONFIRMED);
+
+        createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
+
+        String messageId = "result:saga:" + RESERVATION_ID + ":confirm-ticket";
+
+        TicketConfirmedEvent event = new TicketConfirmedEvent(messageId, order.getId(), RESERVATION_ID, TICKET_ID,
+                Instant.now());
+
+        assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Failed to transition order");
+
+        /*
+         * Saga CAS выполнялся раньше Order CAS. Вся транзакция обязана откатиться.
+         */
+        assertThat(orderSagaRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
+
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderState.CONFIRMED);
+
+        assertThat(processedEventCount(messageId)).isZero();
+
+        assertThat(outboxEventRepository.count()).isZero();
     }
 
     private Order createOrder(OrderState state) {

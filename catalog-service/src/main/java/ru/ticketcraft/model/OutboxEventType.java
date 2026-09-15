@@ -1,22 +1,32 @@
 package ru.ticketcraft.model;
 
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
 
 public enum OutboxEventType {
 
-    TICKET_RESERVED("TicketReserved", TicketReservedEvent.class),
+    TICKET_RESERVED(
+            "TicketReserved",
+            TicketReservedEvent.class),
 
-    TICKET_RESERVATION_FAILED("TicketReservationFailed", TicketReservationFailedEvent.class),
+    TICKET_RESERVATION_FAILED(
+            "TicketReservationFailed",
+            TicketReservationFailedEvent.class),
 
-    TICKET_RELEASED("TicketReleased", TicketReleasedEvent.class);
+    TICKET_CONFIRMED(
+            "TicketConfirmed",
+            TicketConfirmedEvent.class),
+
+    TICKET_RELEASED(
+            "TicketReleased",
+            TicketReleasedEvent.class);
 
     private final String value;
     private final Class<?> payloadType;
 
     OutboxEventType(String value, Class<?> payloadType) {
-
         this.value = value;
         this.payloadType = payloadType;
     }
@@ -32,12 +42,12 @@ public enum OutboxEventType {
     public static OutboxEventType fromValue(String value) {
 
         for (OutboxEventType type : values()) {
-
             if (type.value.equals(value)) {
                 return type;
             }
         }
 
-        throw new IllegalArgumentException("Unknown outbox event type: " + value);
+        throw new IllegalArgumentException(
+                "Unknown outbox event type: " + value);
     }
 }

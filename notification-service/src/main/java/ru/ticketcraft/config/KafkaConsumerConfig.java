@@ -2,6 +2,7 @@ package ru.ticketcraft.config;
 
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
@@ -15,7 +16,7 @@ import org.springframework.util.backoff.FixedBackOff;
 import ru.ticketcraft.dto.OrderEvent;
 
 @Configuration
-@EnableConfigurationProperties({KafkaRetryProperties.class, KafkaConsumerProperties.class})
+@EnableConfigurationProperties({ KafkaRetryProperties.class, KafkaConsumerProperties.class })
 public class KafkaConsumerConfig {
 
     @Bean
@@ -39,9 +40,8 @@ public class KafkaConsumerConfig {
 
     @Bean
     ConcurrentKafkaListenerContainerFactory<String, OrderEvent> kafkaListenerContainerFactory(
-            ConsumerFactory<String, OrderEvent> consumerFactory,
-            DefaultErrorHandler kafkaErrorHandler,
-            KafkaConsumerProperties consumerProperties) {
+            ConsumerFactory<String, OrderEvent> consumerFactory, DefaultErrorHandler kafkaErrorHandler,
+            KafkaConsumerProperties consumerProperties, KafkaProperties kafkaProperties) {
 
         ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
@@ -49,6 +49,7 @@ public class KafkaConsumerConfig {
         factory.setCommonErrorHandler(kafkaErrorHandler);
         factory.setConcurrency(consumerProperties.concurrency());
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
+        factory.getContainerProperties().setObservationEnabled(kafkaProperties.getListener().isObservationEnabled());
 
         return factory;
     }

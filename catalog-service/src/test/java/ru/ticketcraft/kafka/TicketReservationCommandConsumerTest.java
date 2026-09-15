@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.service.TicketReservationService;
@@ -32,6 +33,7 @@ class TicketReservationCommandConsumerTest {
 
     @Test
     void shouldProcessReserveTicketCommand() {
+
         ReserveTicketCommand command = new ReserveTicketCommand("saga:111:reserve-ticket", 42L, UUID.randomUUID(),
                 UUID.randomUUID(), 7L, Instant.now());
 
@@ -44,7 +46,22 @@ class TicketReservationCommandConsumerTest {
     }
 
     @Test
+    void shouldProcessConfirmTicketCommand() {
+
+        ConfirmTicketCommand command = new ConfirmTicketCommand("saga:111:confirm-ticket", 42L, UUID.randomUUID(),
+                UUID.randomUUID(), Instant.now());
+
+        ConsumerRecord<String, Object> record = new ConsumerRecord<>("ticket-reservation-commands", 0, 0L, "42",
+                command);
+
+        consumer.handle(record);
+
+        verify(reservationService).processConfirmTicketCommand(command);
+    }
+
+    @Test
     void shouldProcessReleaseTicketCommand() {
+
         ReleaseTicketCommand command = new ReleaseTicketCommand("saga:111:release-ticket", 42L, UUID.randomUUID(),
                 UUID.randomUUID(), Instant.now());
 
@@ -58,6 +75,7 @@ class TicketReservationCommandConsumerTest {
 
     @Test
     void shouldRejectUnsupportedCommand() {
+
         String command = "unsupported";
 
         ConsumerRecord<String, Object> record = new ConsumerRecord<>("ticket-reservation-commands", 0, 0L, "42",
@@ -69,6 +87,7 @@ class TicketReservationCommandConsumerTest {
 
     @Test
     void shouldRejectNullPayload() {
+
         ConsumerRecord<String, Object> record = new ConsumerRecord<>("ticket-reservation-commands", 0, 0L, "42", null);
 
         assertThatThrownBy(() -> consumer.handle(record)).isInstanceOf(IllegalArgumentException.class)

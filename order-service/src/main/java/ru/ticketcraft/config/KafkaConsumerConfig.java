@@ -99,7 +99,7 @@ public class KafkaConsumerConfig {
     ConcurrentKafkaListenerContainerFactory<String, Object> ticketReservationResultKafkaListenerContainerFactory(
             @Qualifier("ticketReservationResultConsumerFactory") ConsumerFactory<String, Object> consumerFactory,
             @Qualifier("ticketReservationResultErrorHandler") DefaultErrorHandler errorHandler,
-            KafkaConsumerProperties consumerProperties) {
+            KafkaConsumerProperties consumerProperties, KafkaProperties kafkaProperties) {
 
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
@@ -110,6 +110,7 @@ public class KafkaConsumerConfig {
         factory.setConcurrency(consumerProperties.concurrency());
 
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        factory.getContainerProperties().setObservationEnabled(kafkaProperties.getListener().isObservationEnabled());
 
         return factory;
     }
@@ -152,7 +153,7 @@ public class KafkaConsumerConfig {
     ConcurrentKafkaListenerContainerFactory<String, Object> paymentResultKafkaListenerContainerFactory(
             @Qualifier("paymentResultConsumerFactory") ConsumerFactory<String, Object> consumerFactory,
             @Qualifier("paymentResultErrorHandler") DefaultErrorHandler errorHandler,
-            KafkaConsumerProperties consumerProperties) {
+            KafkaConsumerProperties consumerProperties, KafkaProperties kafkaProperties) {
 
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
@@ -163,6 +164,7 @@ public class KafkaConsumerConfig {
         factory.setConcurrency(consumerProperties.concurrency());
 
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        factory.getContainerProperties().setObservationEnabled(kafkaProperties.getListener().isObservationEnabled());
 
         return factory;
     }

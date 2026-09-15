@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
@@ -14,13 +15,11 @@ import ru.ticketcraft.service.TicketReservationResultProcessor;
 @Component
 public class TicketReservationResultConsumer {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(TicketReservationResultConsumer.class);
+    private static final Logger log = LoggerFactory.getLogger(TicketReservationResultConsumer.class);
 
     private final TicketReservationResultProcessor processor;
 
-    public TicketReservationResultConsumer(
-            TicketReservationResultProcessor processor) {
+    public TicketReservationResultConsumer(TicketReservationResultProcessor processor) {
 
         this.processor = processor;
     }
@@ -33,20 +32,22 @@ public class TicketReservationResultConsumer {
 
         Object event = record.value();
 
-        if (event instanceof TicketReservedEvent ticketReservedEvent) {
+        if (event instanceof TicketReservedEvent reservedEvent) {
+
             log.info("Received TicketReservedEvent " + "[messageId={}, orderId={}, reservationId={}, ticketId={}]",
-                    ticketReservedEvent.messageId(), ticketReservedEvent.orderId(), ticketReservedEvent.reservationId(),
-                    ticketReservedEvent.ticketId());
+                    reservedEvent.messageId(), reservedEvent.orderId(), reservedEvent.reservationId(),
+                    reservedEvent.ticketId());
 
-            processor.process(ticketReservedEvent);
+            processor.process(reservedEvent);
 
-            log.info("Processed TicketReservedEvent [messageId={}, orderId={}]", ticketReservedEvent.messageId(),
-                    ticketReservedEvent.orderId());
+            log.info("Processed TicketReservedEvent [messageId={}, orderId={}]", reservedEvent.messageId(),
+                    reservedEvent.orderId());
 
             return;
         }
 
         if (event instanceof TicketReservationFailedEvent failedEvent) {
+
             log.info(
                     "Received TicketReservationFailedEvent "
                             + "[messageId={}, orderId={}, reservationId={}, ticketId={}, reason={}]",
@@ -57,6 +58,20 @@ public class TicketReservationResultConsumer {
 
             log.info("Processed TicketReservationFailedEvent " + "[messageId={}, orderId={}, reason={}]",
                     failedEvent.messageId(), failedEvent.orderId(), failedEvent.reason());
+
+            return;
+        }
+
+        if (event instanceof TicketConfirmedEvent confirmedEvent) {
+
+            log.info("Received TicketConfirmedEvent " + "[messageId={}, orderId={}, reservationId={}, ticketId={}]",
+                    confirmedEvent.messageId(), confirmedEvent.orderId(), confirmedEvent.reservationId(),
+                    confirmedEvent.ticketId());
+
+            processor.process(confirmedEvent);
+
+            log.info("Processed TicketConfirmedEvent " + "[messageId={}, orderId={}]", confirmedEvent.messageId(),
+                    confirmedEvent.orderId());
 
             return;
         }
