@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
@@ -24,13 +25,15 @@ class KafkaConsumerConfigTest {
                 "order-payment-results");
 
         KafkaConsumerConfig config = new KafkaConsumerConfig();
+        KafkaProperties kafkaProperties = new KafkaProperties();
 
         ConcurrentKafkaListenerContainerFactory<String, Object> reservationFactory = config
-                .ticketReservationResultKafkaListenerContainerFactory(consumerFactory, errorHandler,
-                        consumerProperties);
+                .ticketReservationResultKafkaListenerContainerFactory(consumerFactory, errorHandler, consumerProperties,
+                        kafkaProperties);
 
         ConcurrentKafkaListenerContainerFactory<String, Object> paymentFactory = config
-                .paymentResultKafkaListenerContainerFactory(consumerFactory, errorHandler, consumerProperties);
+                .paymentResultKafkaListenerContainerFactory(consumerFactory, errorHandler, consumerProperties,
+                        kafkaProperties);
 
         ConcurrentMessageListenerContainer<String, Object> reservationContainer = reservationFactory
                 .createContainer("ticket-reservation-results");

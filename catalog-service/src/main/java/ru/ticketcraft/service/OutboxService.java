@@ -6,6 +6,8 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 import ru.ticketcraft.config.KafkaTopicsProperties;
+import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
@@ -23,7 +25,10 @@ public class OutboxService {
     private final ObjectMapper objectMapper;
     private final KafkaTopicsProperties topics;
 
-    public OutboxService(OutboxEventRepository repository, ObjectMapper objectMapper, KafkaTopicsProperties topics) {
+    public OutboxService(
+            OutboxEventRepository repository,
+            ObjectMapper objectMapper,
+            KafkaTopicsProperties topics) {
 
         this.repository = repository;
         this.objectMapper = objectMapper;
@@ -32,13 +37,53 @@ public class OutboxService {
 
     public boolean saveTicketReservedEvent(TicketReservedEvent event) {
 
-        return save(event.messageId(), event.orderId().toString(), OutboxEventType.TICKET_RESERVED, event,
+        return save(
+                event.messageId(),
+                event.orderId().toString(),
+                OutboxEventType.TICKET_RESERVED,
+                event,
                 event.occurredAt());
     }
 
-    public boolean saveTicketReservationFailedEvent(TicketReservationFailedEvent event) {
+    public boolean saveTicketReservationFailedEvent(
+            TicketReservationFailedEvent event) {
 
-        return save(event.messageId(), event.orderId().toString(), OutboxEventType.TICKET_RESERVATION_FAILED, event,
+        return save(
+                event.messageId(),
+                event.orderId().toString(),
+                OutboxEventType.TICKET_RESERVATION_FAILED,
+                event,
+                event.occurredAt());
+    }
+
+    public boolean saveTicketConfirmedEvent(TicketConfirmedEvent event) {
+
+        return save(
+                event.messageId(),
+                event.orderId().toString(),
+                OutboxEventType.TICKET_CONFIRMED,
+                event,
+                event.occurredAt());
+    }
+
+    public boolean saveTicketConfirmationFailedEvent(
+            TicketConfirmationFailedEvent event) {
+
+        return save(
+                event.messageId(),
+                event.orderId().toString(),
+                OutboxEventType.TICKET_CONFIRMATION_FAILED,
+                event,
+                event.occurredAt());
+    }
+
+    public boolean saveTicketReleasedEvent(TicketReleasedEvent event) {
+
+        return save(
+                event.messageId(),
+                event.orderId().toString(),
+                OutboxEventType.TICKET_RELEASED,
+                event,
                 event.occurredAt());
     }
 
@@ -46,32 +91,35 @@ public class OutboxService {
         return repository.existsByMessageId(messageId);
     }
 
-    public boolean saveTicketReleasedEvent(TicketReleasedEvent event) {
-
-        return save(event.messageId(), event.orderId().toString(), OutboxEventType.TICKET_RELEASED, event,
-                event.occurredAt());
-    }
-
-    private boolean save(String messageId, String aggregateId, OutboxEventType eventType, Object payload,
+    private boolean save(
+            String messageId,
+            String aggregateId,
+            OutboxEventType eventType,
+            Object payload,
             Instant createdAt) {
 
         String serializedPayload = serialize(payload);
 
-        return repository.insertIfAbsent(UUID.randomUUID(), messageId, AGGREGATE_TYPE_ORDER, aggregateId,
-                eventType.getValue(), topics.ticketReservationResults(), serializedPayload, createdAt);
+        return repository.insertIfAbsent(
+                UUID.randomUUID(),
+                messageId,
+                AGGREGATE_TYPE_ORDER,
+                aggregateId,
+                eventType.getValue(),
+                topics.ticketReservationResults(),
+                serializedPayload,
+                createdAt);
     }
 
     private String serialize(Object payload) {
 
         try {
-
             return objectMapper.writeValueAsString(payload);
-
         } catch (JacksonException e) {
-
-            throw new IllegalStateException("Failed to serialize outbox payload: " + payload.getClass().getSimpleName(),
+            throw new IllegalStateException(
+                    "Failed to serialize outbox payload: "
+                            + payload.getClass().getSimpleName(),
                     e);
         }
     }
-
 }

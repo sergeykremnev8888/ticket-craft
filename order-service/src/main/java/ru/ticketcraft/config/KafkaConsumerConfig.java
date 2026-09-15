@@ -72,9 +72,13 @@ public class KafkaConsumerConfig {
 
     @Bean
     KafkaTemplate<String, Object> ticketReservationResultDltKafkaTemplate(
-            @Qualifier("ticketReservationResultDltProducerFactory") ProducerFactory<String, Object> ticketReservationResultDltProducerFactory) {
+            @Qualifier("ticketReservationResultDltProducerFactory") ProducerFactory<String, Object> ticketReservationResultDltProducerFactory,
+            KafkaProperties kafkaProperties) {
+        KafkaTemplate<String, Object> kafkaTemplate = new KafkaTemplate<>(ticketReservationResultDltProducerFactory);
 
-        return new KafkaTemplate<>(ticketReservationResultDltProducerFactory);
+        kafkaTemplate.setObservationEnabled(kafkaProperties.getTemplate().isObservationEnabled());
+
+        return kafkaTemplate;
     }
 
     @Bean
@@ -99,7 +103,7 @@ public class KafkaConsumerConfig {
     ConcurrentKafkaListenerContainerFactory<String, Object> ticketReservationResultKafkaListenerContainerFactory(
             @Qualifier("ticketReservationResultConsumerFactory") ConsumerFactory<String, Object> consumerFactory,
             @Qualifier("ticketReservationResultErrorHandler") DefaultErrorHandler errorHandler,
-            KafkaConsumerProperties consumerProperties) {
+            KafkaConsumerProperties consumerProperties, KafkaProperties kafkaProperties) {
 
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
@@ -110,6 +114,7 @@ public class KafkaConsumerConfig {
         factory.setConcurrency(consumerProperties.concurrency());
 
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        factory.getContainerProperties().setObservationEnabled(kafkaProperties.getListener().isObservationEnabled());
 
         return factory;
     }
@@ -152,7 +157,7 @@ public class KafkaConsumerConfig {
     ConcurrentKafkaListenerContainerFactory<String, Object> paymentResultKafkaListenerContainerFactory(
             @Qualifier("paymentResultConsumerFactory") ConsumerFactory<String, Object> consumerFactory,
             @Qualifier("paymentResultErrorHandler") DefaultErrorHandler errorHandler,
-            KafkaConsumerProperties consumerProperties) {
+            KafkaConsumerProperties consumerProperties, KafkaProperties kafkaProperties) {
 
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
@@ -163,6 +168,7 @@ public class KafkaConsumerConfig {
         factory.setConcurrency(consumerProperties.concurrency());
 
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        factory.getContainerProperties().setObservationEnabled(kafkaProperties.getListener().isObservationEnabled());
 
         return factory;
     }

@@ -29,21 +29,8 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
             """)
     List<EventSummaryResponse> findAllSummaries();
 
-    @Query("""
-            SELECT new ru.ticketcraft.dto.EventSummaryResponse(
-                e.id,
-                e.title,
-                e.description,
-                e.eventDate,
-                e.venue
-            )
-            FROM Event e
-            WHERE e.id = :eventId
-            """)
-    Optional<EventSummaryResponse> findSummaryById(@Param("eventId") UUID eventId);
-
     @EntityGraph(attributePaths = { "tickets" })
-    @Query("SELECT e FROM Event e")
-    List<Event> findAllWithTicketsGraph();
+    @Query("SELECT e FROM Event e WHERE e.id = :eventId")
+    Optional<Event> findByIdWithTickets(@Param("eventId") UUID eventId);
 
 }

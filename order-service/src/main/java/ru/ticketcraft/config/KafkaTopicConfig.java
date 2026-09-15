@@ -51,7 +51,19 @@ public class KafkaTopicConfig {
             KafkaTopicsProperties topics,
             KafkaTopicProperties topicProperties) {
 
-        return topic(topics.paymentRequests(), topicProperties);
+        return topic(
+                topics.paymentRequests(),
+                topicProperties);
+    }
+
+    @Bean
+    NewTopic paymentCommandsTopic(
+            KafkaTopicsProperties topics,
+            KafkaTopicProperties topicProperties) {
+
+        return topic(
+                topics.paymentCommands(),
+                topicProperties);
     }
 
     @Bean
@@ -59,7 +71,9 @@ public class KafkaTopicConfig {
             KafkaTopicsProperties topics,
             KafkaTopicProperties topicProperties) {
 
-        return topic(topics.paymentResults(), topicProperties);
+        return topic(
+                topics.paymentResults(),
+                topicProperties);
     }
 
     @Bean

@@ -15,6 +15,7 @@ class KafkaTopicConfigTest {
                 "ticket-reservation-results",
                 "ticket-reservation-results.DLT",
                 "payment-requests",
+                "payment-commands",
                 "payment-results",
                 "payment-results.DLT");
 

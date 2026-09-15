@@ -162,12 +162,12 @@ class PaymentTransactionServiceTest {
         PaymentSucceededEvent event = new PaymentSucceededEvent(createSucceededMessageId(paymentId), 100L, paymentId,
                 new BigDecimal("150.00"), Instant.parse("2026-09-09T10:01:00Z"));
 
-        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
-                .thenReturn(1);
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.SUCCEEDED),
+                any(Instant.class))).thenReturn(1);
 
         paymentTransactionService.markSucceeded(event);
 
-        verify(paymentRepository).updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED),
+        verify(paymentRepository).updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.SUCCEEDED),
                 any(Instant.class));
 
         verify(paymentOutboxService).addSucceededEvent(event);
@@ -182,12 +182,13 @@ class PaymentTransactionServiceTest {
         PaymentFailedEvent event = new PaymentFailedEvent(createFailedMessageId(paymentId), 100L, paymentId,
                 new BigDecimal("150.00"), "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
 
-        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
-                .thenReturn(1);
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.FAILED),
+                any(Instant.class))).thenReturn(1);
 
         paymentTransactionService.markFailed(event);
 
-        verify(paymentRepository).updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class));
+        verify(paymentRepository).updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.FAILED),
+                any(Instant.class));
 
         verify(paymentOutboxService).addFailedEvent(event);
 
@@ -201,8 +202,8 @@ class PaymentTransactionServiceTest {
         PaymentFailedEvent event = new PaymentFailedEvent(createFailedMessageId(paymentId), 100L, paymentId,
                 new BigDecimal("150.00"), "Insufficient funds", Instant.parse("2026-09-09T10:01:00Z"));
 
-        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
-                .thenReturn(2);
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.FAILED),
+                any(Instant.class))).thenReturn(2);
 
         assertThatThrownBy(() -> paymentTransactionService.markFailed(event)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Unexpected number of updated payment rows");
@@ -217,8 +218,8 @@ class PaymentTransactionServiceTest {
         PaymentSucceededEvent event = new PaymentSucceededEvent(createSucceededMessageId(paymentId), 100L, paymentId,
                 new BigDecimal("150.00"), Instant.parse("2026-09-09T10:01:00Z"));
 
-        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
-                .thenReturn(2);
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.SUCCEEDED),
+                any(Instant.class))).thenReturn(2);
 
         assertThatThrownBy(() -> paymentTransactionService.markSucceeded(event))
                 .isInstanceOf(IllegalStateException.class)
@@ -238,8 +239,8 @@ class PaymentTransactionServiceTest {
 
         Payment currentPayment = createPayment(paymentId, PaymentStatus.FAILED);
 
-        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
-                .thenReturn(0);
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.FAILED),
+                any(Instant.class))).thenReturn(0);
 
         when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(currentPayment));
 
@@ -261,8 +262,8 @@ class PaymentTransactionServiceTest {
 
         Payment currentPayment = createPayment(paymentId, PaymentStatus.SUCCEEDED);
 
-        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
-                .thenReturn(0);
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.SUCCEEDED),
+                any(Instant.class))).thenReturn(0);
 
         when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(currentPayment));
 
@@ -284,8 +285,8 @@ class PaymentTransactionServiceTest {
 
         Payment currentPayment = createPayment(paymentId, PaymentStatus.FAILED);
 
-        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.SUCCEEDED), any(Instant.class)))
-                .thenReturn(0);
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.SUCCEEDED),
+                any(Instant.class))).thenReturn(0);
 
         when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(currentPayment));
 
@@ -307,8 +308,8 @@ class PaymentTransactionServiceTest {
 
         Payment currentPayment = createPayment(paymentId, PaymentStatus.SUCCEEDED);
 
-        when(paymentRepository.updateStatusFromPending(eq(paymentId), eq(PaymentStatus.FAILED), any(Instant.class)))
-                .thenReturn(0);
+        when(paymentRepository.updateStatus(eq(paymentId), eq(PaymentStatus.PENDING), eq(PaymentStatus.FAILED),
+                any(Instant.class))).thenReturn(0);
 
         when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(currentPayment));
 
@@ -335,6 +336,7 @@ class PaymentTransactionServiceTest {
         assertThat(result).isSameAs(existingPayment);
 
         verify(paymentRepository).findByOrderId(event.orderId());
+
         verify(paymentRepository, never()).insertIfAbsent(any(Payment.class));
 
         verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
@@ -357,6 +359,7 @@ class PaymentTransactionServiceTest {
                 .hasMessageContaining("100");
 
         verify(paymentRepository).findByOrderId(event.orderId());
+
         verify(paymentRepository, never()).insertIfAbsent(any(Payment.class));
 
         verify(paymentOutboxService, never()).addSucceededEvent(any(PaymentSucceededEvent.class));
@@ -394,7 +397,9 @@ class PaymentTransactionServiceTest {
     }
 
     private Payment createPayment(UUID paymentId, PaymentStatus status) {
+
         Instant now = Instant.parse("2026-09-09T10:00:00Z");
+
         return new Payment(paymentId, 100L, 200L, new BigDecimal("150.00"), status, "message-1", now, now);
     }
 

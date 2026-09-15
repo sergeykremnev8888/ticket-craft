@@ -72,9 +72,14 @@ public class KafkaConsumerConfig {
 
     @Bean
     KafkaTemplate<String, Object> ticketReservationCommandDltKafkaTemplate(
-            @Qualifier("ticketReservationCommandDltProducerFactory") ProducerFactory<String, Object> producerFactory) {
+            @Qualifier("ticketReservationCommandDltProducerFactory") ProducerFactory<String, Object> producerFactory,
+            KafkaProperties kafkaProperties) {
 
-        return new KafkaTemplate<>(producerFactory);
+        KafkaTemplate<String, Object> kafkaTemplate = new KafkaTemplate<>(producerFactory);
+
+        kafkaTemplate.setObservationEnabled(kafkaProperties.getTemplate().isObservationEnabled());
+
+        return kafkaTemplate;
     }
 
     @Bean
@@ -99,17 +104,17 @@ public class KafkaConsumerConfig {
     ConcurrentKafkaListenerContainerFactory<String, Object> ticketReservationCommandKafkaListenerContainerFactory(
             @Qualifier("ticketReservationCommandConsumerFactory") ConsumerFactory<String, Object> consumerFactory,
             @Qualifier("ticketReservationCommandErrorHandler") DefaultErrorHandler errorHandler,
-            KafkaConsumerProperties consumerProperties) {
+            KafkaConsumerProperties consumerProperties, KafkaProperties kafkaProperties) {
 
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(consumerFactory);
-
         factory.setCommonErrorHandler(errorHandler);
-
         factory.setConcurrency(consumerProperties.concurrency());
 
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+
+        factory.getContainerProperties().setObservationEnabled(kafkaProperties.getListener().isObservationEnabled());
 
         return factory;
     }

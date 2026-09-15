@@ -1,19 +1,37 @@
 package ru.ticketcraft.model;
 
+import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.RefundPaymentCommand;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.dto.ReserveTicketCommand;
 
 public enum OutboxEventType {
 
-    ORDER_CREATED("OrderCreated", OrderEvent.class),
+    ORDER_CONFIRMED(
+            "OrderConfirmed",
+            OrderEvent.class),
 
-    RESERVE_TICKET("ReserveTicket", ReserveTicketCommand.class),
+    RESERVE_TICKET(
+            "ReserveTicket",
+            ReserveTicketCommand.class),
 
-    PAYMENT_REQUESTED("PaymentRequested", PaymentRequestedEvent.class),
+    PAYMENT_REQUESTED(
+            "PaymentRequested",
+            PaymentRequestedEvent.class),
 
-    RELEASE_TICKET("ReleaseTicket", ReleaseTicketCommand.class);
+    CONFIRM_TICKET(
+            "ConfirmTicket",
+            ConfirmTicketCommand.class),
+
+    REFUND_PAYMENT(
+            "RefundPayment",
+            RefundPaymentCommand.class),
+
+    RELEASE_TICKET(
+            "ReleaseTicket",
+            ReleaseTicketCommand.class);
 
     private final String value;
     private final Class<?> payloadType;
@@ -32,12 +50,14 @@ public enum OutboxEventType {
     }
 
     public static OutboxEventType fromValue(String value) {
+
         for (OutboxEventType type : values()) {
             if (type.value.equals(value)) {
                 return type;
             }
         }
 
-        throw new IllegalArgumentException("Unsupported outbox event type: " + value);
+        throw new IllegalArgumentException(
+                "Unsupported outbox event type: " + value);
     }
 }

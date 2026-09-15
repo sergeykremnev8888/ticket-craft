@@ -210,7 +210,7 @@ JWT_AUDIENCE=ticketcraft-api
 
 ```text
 orders.write   — создание заказа
-catalog.write  — прямой служебный reserve endpoint catalog-service
+orders.read    — чтение собственного заказа
 metrics.read   — доступ к /actuator/prometheus
 ```
 
@@ -218,7 +218,7 @@ metrics.read   — доступ к /actuator/prometheus
 
 Для заказа JWT также обязан содержать claim `user_id` с положительным числовым идентификатором пользователя. `userId` больше не принимается из request body.
 
-`price` и `eventId`, пришедшие от клиента, не считаются авторитетными для оплаты: после успешной резервации `catalog-service` публикует фактические `eventId` и `price` из `catalog_db`, а `order-service` записывает их в заказ до создания `PaymentRequestedEvent`.
+`eventId` и `price` вообще не принимаются от клиента при создании заказа. Клиент передаёт только `ticketId`; после успешной резервации `catalog-service` публикует авторитетные `eventId` и `price` из `catalog_db`, а `order-service` записывает их в заказ до создания `PaymentRequestedEvent`.
 
 ---
 
@@ -259,108 +259,79 @@ Schema Registry не вводятся. Совместимость этого и�
 GET /api/v1/catalog/events
 ```
 
-Пример:
+Публичный endpoint. Возвращает краткий список мероприятий.
 
-```bash
-curl http://localhost:8081/api/v1/catalog/events
-```
-
----
-
-## Зарезервировать билет
+## Получить мероприятие с билетами
 
 ```http
-POST /api/v1/catalog/tickets/{ticketId}/reserve
+GET /api/v1/catalog/events/{eventId}
 ```
 
-Пример:
-
-```bash
-curl -X POST \
-  http://localhost:8081/api/v1/catalog/tickets/22222222-2222-2222-2222-222222222222/reserve \
-  -H "Authorization: Bearer $ACCESS_TOKEN"
-```
-
-На текущем этапе резервирование использует pessimistic locking.
-
-> В дальнейшем горячий путь бронирования будет переведён на атомарный conditional `UPDATE`.
-
----
+Публичный endpoint. Возвращает детали мероприятия и текущие `status`/`price` билетов. Детальный ответ намеренно не кешируется в Redis, чтобы не отдавать устаревшую доступность билетов после reservation.
 
 ## Создать заказ
 
 ```http
 POST /api/v1/orders
+Authorization: Bearer <JWT with orders.write>
+Idempotency-Key: <unique key>
+Content-Type: application/json
 ```
-
-Пример body:
 
 ```json
 {
-  "eventId": "11111111-1111-1111-1111-111111111111",
-  "ticketId": "22222222-2222-2222-2222-222222222222",
-  "price": 150.00
+  "ticketId": "22222222-2222-2222-2222-222222222222"
 }
 ```
 
-`userId` берётся из claim `user_id` проверенного JWT и не доверяется данным клиента.
+`userId` берётся из JWT claim `user_id`. `eventId` и цена получаются только от `catalog-service`. Ответ `201 Created` содержит `Location: /api/v1/orders/{orderId}`. Saga продолжается асинхронно через Kafka и Transactional Outbox.
 
-Пример запроса:
+## Получить текущее состояние заказа
 
-```bash
-curl -X POST \
-  http://localhost:8082/api/v1/orders \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Idempotency-Key: 2f34a020-326d-4d34-b768-d76ec19f8f78" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "eventId": "11111111-1111-1111-1111-111111111111",
-    "ticketId": "22222222-2222-2222-2222-222222222222",
-    "price": 150.00
-  }'
+```http
+GET /api/v1/orders/{orderId}
+Authorization: Bearer <JWT with orders.read>
 ```
 
----
+Endpoint возвращает только заказ текущего пользователя (`user_id` из JWT) и используется клиентом для чтения результата асинхронной saga.
+
+`payment-service` и `notification-service` не имеют business HTTP API: они являются внутренними Kafka consumers. Actuator endpoints остаются инфраструктурными endpoints.
 
 # Текущий flow создания заказа
 
-На текущем этапе flow выглядит следующим образом:
-
 ```text
 Client
-  │
-  │ POST /orders
+  │ POST /api/v1/orders {ticketId}
   ▼
 order-service
-  │
-  │ POST /catalog/tickets/{id}/reserve
+  │ Order + OrderSaga + outbox ReserveTicket
+  ▼
+Kafka: ticket-reservation-commands
   ▼
 catalog-service
-  │
-  │ PostgreSQL transaction
-  │ lock ticket
-  │ check availability
-  │ reserve ticket
+  │ atomic reservation + outbox TicketReserved/TicketReservationFailed
   ▼
-catalog_db
-  │
-  │ success
+Kafka: ticket-reservation-results
   ▼
 order-service
-  │
-  │ save order
+  │ outbox PaymentRequested
   ▼
-order_db
-  │
-  │ publish OrderEvent
+Kafka: payment-requests
   ▼
-Kafka
-  │
+payment-service
+  │ external payment provider + payment outbox
+  ▼
+Kafka: payment-results
+  ▼
+order-service
+  │ Order=CONFIRMED, Saga=COMPLETED + outbox OrderConfirmed
+  ▼
+Kafka: order-events
   ▼
 notification-service
 ```
 
----
+`payment-service` вызывает внешний payment provider. В production `PAYMENT_PROVIDER_BASE_URL` обязателен. Business decline должен возвращаться как успешный HTTP response provider-а со статусом `DECLINED`; transport/5xx ошибки считаются техническими и обрабатываются Kafka retry/DLT.
 
 # Kafka
 
@@ -466,7 +437,7 @@ ORDER_DB_URL
 ORDER_DB_USERNAME
 ORDER_DB_PASSWORD
 KAFKA_BOOTSTRAP_SERVERS
-CATALOG_SERVICE_URL
+PAYMENT_PROVIDER_BASE_URL
 ```
 
 Секреты не должны храниться в Git.

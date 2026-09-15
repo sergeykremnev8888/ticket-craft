@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
@@ -20,13 +21,15 @@ class KafkaConsumerConfigTest {
 
         DefaultErrorHandler errorHandler = mock(DefaultErrorHandler.class);
 
+        KafkaProperties kafkaProperties = new KafkaProperties();
+        
         KafkaConsumerProperties consumerProperties = new KafkaConsumerProperties(3);
 
         KafkaConsumerConfig config = new KafkaConsumerConfig();
 
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = config
                 .ticketReservationCommandKafkaListenerContainerFactory(consumerFactory, errorHandler,
-                        consumerProperties);
+                        consumerProperties, kafkaProperties);
 
         assertThat(factory.getConsumerFactory()).isSameAs(consumerFactory);
 

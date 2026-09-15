@@ -1,13 +1,18 @@
 package ru.ticketcraft.service;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.RefundPaymentCommand;
+import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
+import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
 import ru.ticketcraft.dto.TicketReservedEvent;
@@ -30,9 +35,13 @@ public class TicketReservationResultProcessor {
     private final ConsumerDuplicateMetrics duplicateMetrics;
     private final OrderSagaMetrics sagaMetrics;
 
-    public TicketReservationResultProcessor(ProcessedEventRepository processedEventRepository,
-            OrderRepository orderRepository, OrderSagaRepository orderSagaRepository, OutboxService outboxService,
-            ConsumerDuplicateMetrics duplicateMetrics, OrderSagaMetrics sagaMetrics) {
+    public TicketReservationResultProcessor(
+            ProcessedEventRepository processedEventRepository,
+            OrderRepository orderRepository,
+            OrderSagaRepository orderSagaRepository,
+            OutboxService outboxService,
+            ConsumerDuplicateMetrics duplicateMetrics,
+            OrderSagaMetrics sagaMetrics) {
 
         this.processedEventRepository = processedEventRepository;
         this.orderRepository = orderRepository;
@@ -50,7 +59,10 @@ public class TicketReservationResultProcessor {
             return;
         }
 
-        OrderSaga saga = loadAndValidateSaga(event.orderId(), event.reservationId());
+        OrderSaga saga =
+                loadAndValidateSaga(
+                        event.orderId(),
+                        event.reservationId());
 
         Order order = loadOrder(event.orderId());
 
@@ -58,15 +70,27 @@ public class TicketReservationResultProcessor {
 
         applyAuthoritativeReservationDetails(order, event);
 
-        transitionSaga(saga.getOrderId(), OrderSagaStatus.WAITING_FOR_RESERVATION, OrderSagaStatus.WAITING_FOR_PAYMENT);
+        transitionSaga(
+                saga.getOrderId(),
+                OrderSagaStatus.WAITING_FOR_RESERVATION,
+                OrderSagaStatus.WAITING_FOR_PAYMENT);
 
-        transitionOrder(order.getId(), OrderState.CREATED, OrderState.TICKETS_RESERVED);
+        transitionOrder(
+                order.getId(),
+                OrderState.CREATED,
+                OrderState.TICKETS_RESERVED);
 
-        transitionOrder(order.getId(), OrderState.TICKETS_RESERVED, OrderState.PAYMENT_PENDING);
+        transitionOrder(
+                order.getId(),
+                OrderState.TICKETS_RESERVED,
+                OrderState.PAYMENT_PENDING);
 
-        PaymentRequestedEvent paymentRequestedEvent = createPaymentRequestedEvent(saga, order);
+        PaymentRequestedEvent paymentRequestedEvent =
+                createPaymentRequestedEvent(saga, order);
 
-        outboxService.savePaymentRequestedEvent(order, paymentRequestedEvent);
+        outboxService.savePaymentRequestedEvent(
+                order,
+                paymentRequestedEvent);
     }
 
     @Transactional
@@ -77,15 +101,24 @@ public class TicketReservationResultProcessor {
             return;
         }
 
-        OrderSaga saga = loadAndValidateSaga(event.orderId(), event.reservationId());
+        OrderSaga saga =
+                loadAndValidateSaga(
+                        event.orderId(),
+                        event.reservationId());
 
         Order order = loadOrder(event.orderId());
 
         validateReservationTarget(order, event.ticketId());
 
-        transitionSaga(saga.getOrderId(), OrderSagaStatus.WAITING_FOR_RESERVATION, OrderSagaStatus.FAILED);
+        transitionSaga(
+                saga.getOrderId(),
+                OrderSagaStatus.WAITING_FOR_RESERVATION,
+                OrderSagaStatus.FAILED);
 
-        transitionOrder(order.getId(), OrderState.CREATED, OrderState.CANCELED);
+        transitionOrder(
+                order.getId(),
+                OrderState.CREATED,
+                OrderState.CANCELED);
 
         sagaMetrics.recordFailedAfterCommit();
     }
@@ -98,27 +131,118 @@ public class TicketReservationResultProcessor {
             return;
         }
 
-        OrderSaga saga = loadAndValidateSaga(event.orderId(), event.reservationId());
+        OrderSaga saga =
+                loadAndValidateSaga(
+                        event.orderId(),
+                        event.reservationId());
 
         Order order = loadOrder(event.orderId());
 
         validateReservationTarget(order, event.ticketId());
 
-        transitionSaga(saga.getOrderId(), OrderSagaStatus.COMPENSATING_RESERVATION, OrderSagaStatus.FAILED);
+        transitionSaga(
+                saga.getOrderId(),
+                OrderSagaStatus.COMPENSATING_RESERVATION,
+                OrderSagaStatus.FAILED);
 
-        transitionOrder(order.getId(), OrderState.PAYMENT_FAILED, OrderState.CANCELED);
+        transitionOrder(
+                order.getId(),
+                OrderState.PAYMENT_FAILED,
+                OrderState.CANCELED);
 
         sagaMetrics.recordCompensatedAfterCommit();
     }
 
-    private OrderSaga loadAndValidateSaga(Long orderId, UUID reservationId) {
+    @Transactional
+    public void process(TicketConfirmedEvent event) {
 
-        OrderSaga saga = orderSagaRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new IllegalStateException("Saga not found for order " + orderId));
+        if (!processedEventRepository.insertIfAbsent(event.messageId())) {
+            duplicateMetrics.recordReservationResultDuplicate();
+            return;
+        }
+
+        OrderSaga saga =
+                loadAndValidateSaga(
+                        event.orderId(),
+                        event.reservationId());
+
+        Order order = loadOrder(event.orderId());
+
+        validateReservationTarget(order, event.ticketId());
+
+        transitionSaga(
+                saga.getOrderId(),
+                OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION,
+                OrderSagaStatus.COMPLETED);
+
+        transitionOrder(
+                order.getId(),
+                OrderState.PAYMENT_PENDING,
+                OrderState.CONFIRMED);
+
+        OrderEvent confirmedEvent =
+                createOrderConfirmedEvent(saga, order);
+
+        outboxService.saveOrderConfirmedEvent(
+                order,
+                confirmedEvent);
+
+        sagaMetrics.recordCompletedAfterCommit();
+    }
+
+    @Transactional
+    public void process(TicketConfirmationFailedEvent event) {
+
+        if (!processedEventRepository.insertIfAbsent(event.messageId())) {
+            duplicateMetrics.recordReservationResultDuplicate();
+            return;
+        }
+
+        OrderSaga saga =
+                loadAndValidateSaga(
+                        event.orderId(),
+                        event.reservationId());
+
+        Order order = loadOrder(event.orderId());
+
+        validateReservationTarget(order, event.ticketId());
+
+        if (saga.getPaymentId() == null) {
+            throw new IllegalStateException(
+                    "Cannot compensate payment: payment id is missing"
+                            + ": orderId=" + order.getId()
+                            + ", sagaId=" + saga.getId());
+        }
+
+        transitionSaga(
+                saga.getOrderId(),
+                OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION,
+                OrderSagaStatus.COMPENSATING_PAYMENT);
+
+        RefundPaymentCommand command =
+                createRefundPaymentCommand(
+                        saga,
+                        order,
+                        event);
+
+        outboxService.saveRefundPaymentCommand(order, command);
+    }
+
+    private OrderSaga loadAndValidateSaga(
+            Long orderId,
+            UUID reservationId) {
+
+        OrderSaga saga =
+                orderSagaRepository.findByOrderId(orderId)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Saga not found for order " + orderId));
 
         if (!saga.getId().equals(reservationId)) {
-            throw new IllegalStateException("Reservation result correlation mismatch" + ": orderId=" + orderId
-                    + ", expectedReservationId=" + saga.getId() + ", actualReservationId=" + reservationId);
+            throw new IllegalStateException(
+                    "Reservation result correlation mismatch"
+                            + ": orderId=" + orderId
+                            + ", expectedReservationId=" + saga.getId()
+                            + ", actualReservationId=" + reservationId);
         }
 
         return saga;
@@ -127,61 +251,139 @@ public class TicketReservationResultProcessor {
     private Order loadOrder(Long orderId) {
 
         return orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalStateException("Order not found: " + orderId));
+                .orElseThrow(() -> new IllegalStateException(
+                        "Order not found: " + orderId));
     }
 
-    private void validateReservationTarget(Order order, UUID ticketId) {
+    private void validateReservationTarget(
+            Order order,
+            UUID ticketId) {
 
         if (!order.getTicketId().equals(ticketId)) {
-            throw new IllegalStateException("Reservation result ticket mismatch" + ": orderId=" + order.getId()
-                    + ", expectedTicketId=" + order.getTicketId() + ", actualTicketId=" + ticketId);
+            throw new IllegalStateException(
+                    "Reservation result ticket mismatch"
+                            + ": orderId=" + order.getId()
+                            + ", expectedTicketId=" + order.getTicketId()
+                            + ", actualTicketId=" + ticketId);
         }
     }
 
+    private void applyAuthoritativeReservationDetails(
+            Order order,
+            TicketReservedEvent event) {
 
-    private void applyAuthoritativeReservationDetails(Order order, TicketReservedEvent event) {
+        if (event.eventId() == null
+                || event.price() == null
+                || event.price().signum() <= 0) {
 
-        if (event.eventId() == null || event.price() == null || event.price().signum() <= 0) {
-            throw new IllegalStateException("Reservation result contains invalid authoritative order details: orderId="
-                    + order.getId());
+            throw new IllegalStateException(
+                    "Reservation result contains invalid authoritative "
+                            + "order details: orderId=" + order.getId());
         }
 
-        int updated = orderRepository.applyAuthoritativeReservationDetails(order.getId(), event.eventId(), event.price());
+        int updated =
+                orderRepository.applyAuthoritativeReservationDetails(
+                        order.getId(),
+                        event.eventId(),
+                        event.price());
 
         if (updated != 1) {
             throw new IllegalStateException(
-                    "Failed to apply authoritative reservation details for order " + order.getId());
+                    "Failed to apply authoritative reservation details "
+                            + "for order " + order.getId());
         }
 
         order.setEventId(event.eventId());
         order.setTotalPrice(event.price());
     }
 
-    private void transitionSaga(Long orderId, OrderSagaStatus expected, OrderSagaStatus target) {
+    private void transitionSaga(
+            Long orderId,
+            OrderSagaStatus expected,
+            OrderSagaStatus target) {
 
-        int updated = orderSagaRepository.transition(orderId, expected.name(), target.name(), Instant.now());
+        int updated = orderSagaRepository.transition(
+                orderId,
+                expected.name(),
+                target.name(),
+                Instant.now());
 
         if (updated != 1) {
             throw new IllegalStateException(
-                    "Failed to transition saga for order " + orderId + " from " + expected + " to " + target);
+                    "Failed to transition saga for order "
+                            + orderId
+                            + " from " + expected
+                            + " to " + target);
         }
     }
 
-    private void transitionOrder(Long orderId, OrderState expected, OrderState target) {
+    private void transitionOrder(
+            Long orderId,
+            OrderState expected,
+            OrderState target) {
 
-        boolean transitioned = orderRepository.transitionStatus(orderId, expected, target);
+        boolean transitioned =
+                orderRepository.transitionStatus(
+                        orderId,
+                        expected,
+                        target);
 
         if (!transitioned) {
             throw new IllegalStateException(
-                    "Failed to transition order " + orderId + " from " + expected + " to " + target);
+                    "Failed to transition order "
+                            + orderId
+                            + " from " + expected
+                            + " to " + target);
         }
     }
 
-    private PaymentRequestedEvent createPaymentRequestedEvent(OrderSaga saga, Order order) {
+    private PaymentRequestedEvent createPaymentRequestedEvent(
+            OrderSaga saga,
+            Order order) {
 
-        String messageId = "saga:" + saga.getId() + ":payment-requested";
+        String messageId =
+                "saga:" + saga.getId() + ":payment-requested";
 
-        return new PaymentRequestedEvent(messageId, order.getId(), order.getUserId(), order.getTotalPrice(),
+        return new PaymentRequestedEvent(
+                messageId,
+                order.getId(),
+                order.getUserId(),
+                order.getTotalPrice(),
+                Instant.now());
+    }
+
+    private RefundPaymentCommand createRefundPaymentCommand(
+            OrderSaga saga,
+            Order order,
+            TicketConfirmationFailedEvent event) {
+
+        String messageId =
+                "saga:" + saga.getId() + ":refund-payment";
+
+        return new RefundPaymentCommand(
+                messageId,
+                order.getId(),
+                saga.getPaymentId(),
+                order.getTotalPrice(),
+                event.reason(),
+                Instant.now());
+    }
+
+    private OrderEvent createOrderConfirmedEvent(
+            OrderSaga saga,
+            Order order) {
+
+        String messageId =
+                "saga:" + saga.getId() + ":order-confirmed";
+
+        return new OrderEvent(
+                messageId,
+                order.getId(),
+                order.getUserId(),
+                order.getEventId(),
+                List.of(order.getTicketId()),
+                order.getTotalPrice(),
+                OrderState.CONFIRMED,
                 Instant.now());
     }
 }

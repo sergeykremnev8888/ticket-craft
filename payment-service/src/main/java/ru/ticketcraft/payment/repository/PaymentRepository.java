@@ -21,6 +21,7 @@ public class PaymentRepository {
     }
 
     public boolean insertIfAbsent(Payment payment) {
+
         int affectedRows = jdbcTemplate.update("""
                 INSERT INTO payments (
                     id,
@@ -42,6 +43,7 @@ public class PaymentRepository {
     }
 
     public Optional<Payment> findByOrderId(Long orderId) {
+
         return jdbcTemplate.query("""
                 SELECT
                     id,
@@ -55,28 +57,17 @@ public class PaymentRepository {
                 FROM payments
                 WHERE order_id = ?
                 """, ps -> ps.setLong(1, orderId), rs -> {
+
             if (!rs.next()) {
                 return Optional.empty();
             }
 
-            return Optional.of(new Payment(rs.getObject("id", UUID.class), rs.getLong("order_id"),
-                    rs.getLong("user_id"), rs.getBigDecimal("amount"), PaymentStatus.valueOf(rs.getString("status")),
-                    rs.getString("message_id"), rs.getTimestamp("created_at").toInstant(),
-                    rs.getTimestamp("updated_at").toInstant()));
+            return Optional.of(mapPayment(rs));
         });
     }
 
-    public int updateStatusFromPending(UUID paymentId, PaymentStatus status, Instant updatedAt) {
-        return jdbcTemplate.update("""
-                UPDATE payments
-                SET status = ?,
-                    updated_at = ?
-                WHERE id = ?
-                  AND status = 'PENDING'
-                """, status.name(), Timestamp.from(updatedAt), paymentId);
-    }
-
     public Optional<Payment> findById(UUID paymentId) {
+
         return jdbcTemplate.query("""
                 SELECT
                     id,
@@ -90,16 +81,31 @@ public class PaymentRepository {
                 FROM payments
                 WHERE id = ?
                 """, ps -> ps.setObject(1, paymentId), rs -> {
+
             if (!rs.next()) {
                 return Optional.empty();
             }
 
-            Payment payment = new Payment(rs.getObject("id", UUID.class), rs.getLong("order_id"), rs.getLong("user_id"),
-                    rs.getBigDecimal("amount"), PaymentStatus.valueOf(rs.getString("status")),
-                    rs.getString("message_id"), rs.getTimestamp("created_at").toInstant(),
-                    rs.getTimestamp("updated_at").toInstant());
-            return Optional.of(payment);
+            return Optional.of(mapPayment(rs));
         });
     }
 
+    public int updateStatus(UUID paymentId, PaymentStatus expectedStatus, PaymentStatus targetStatus,
+            Instant updatedAt) {
+
+        return jdbcTemplate.update("""
+                UPDATE payments
+                SET status = ?,
+                    updated_at = ?
+                WHERE id = ?
+                  AND status = ?
+                """, targetStatus.name(), Timestamp.from(updatedAt), paymentId, expectedStatus.name());
+    }
+
+    private Payment mapPayment(java.sql.ResultSet rs) throws java.sql.SQLException {
+
+        return new Payment(rs.getObject("id", UUID.class), rs.getLong("order_id"), rs.getLong("user_id"),
+                rs.getBigDecimal("amount"), PaymentStatus.valueOf(rs.getString("status")), rs.getString("message_id"),
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
+    }
 }

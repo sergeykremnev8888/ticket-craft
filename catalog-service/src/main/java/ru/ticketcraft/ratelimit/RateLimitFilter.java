@@ -33,10 +33,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final String CATALOG_EVENTS_PATH = "/api/v1/catalog/events";
 
-    private static final String TICKETS_PATH_PREFIX = "/api/v1/catalog/tickets/";
-
-    private static final String RESERVE_PATH_SUFFIX = "/reserve";
-
     private static final long FAILURE_LOG_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
 
     private final AtomicLong nextFailureLogNanos = new AtomicLong();
@@ -122,11 +118,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (HttpMethod.GET.matches(method)
                 && (CATALOG_EVENTS_PATH.equals(path) || path.startsWith(CATALOG_EVENTS_PATH + "/"))) {
             return RateLimitPolicy.CATALOG_READ;
-        }
-
-        if (HttpMethod.POST.matches(method) && path.startsWith(TICKETS_PATH_PREFIX)
-                && path.endsWith(RESERVE_PATH_SUFFIX)) {
-            return RateLimitPolicy.TICKET_RESERVATION;
         }
 
         return null;

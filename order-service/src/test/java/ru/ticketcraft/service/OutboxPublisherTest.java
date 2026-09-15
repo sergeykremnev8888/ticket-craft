@@ -88,7 +88,7 @@ class OutboxPublisherTest {
         when(claimService.findClaimed(any(UUID.class))).thenAnswer(invocation -> {
             UUID claimId = invocation.getArgument(0);
 
-            OutboxEvent claimedEvent = new OutboxEvent(EVENT_ID, "ORDER", ORDER_ID.toString(), "OrderCreated", TOPIC,
+            OutboxEvent claimedEvent = new OutboxEvent(EVENT_ID, "ORDER", ORDER_ID.toString(), "OrderConfirmed", TOPIC,
                     payload, OutboxStatus.PENDING, CREATED_AT, null, 1, CREATED_AT, CREATED_AT, "publisher-1", claimId);
 
             return List.of(claimedEvent);
@@ -216,7 +216,7 @@ class OutboxPublisherTest {
 
         String payload = objectMapper.writeValueAsString(orderEvent);
 
-        return new OutboxEvent(eventId, "ORDER", "123", "OrderCreated", TOPIC, payload, OutboxStatus.PENDING, CREATED_AT, null,
+        return new OutboxEvent(eventId, "ORDER", "123", "OrderConfirmed", TOPIC, payload, OutboxStatus.PENDING, CREATED_AT, null,
                 1, CREATED_AT, CREATED_AT, "publisher-1", claimId);
     }
 }

@@ -1,25 +1,13 @@
 package ru.ticketcraft.dto;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 
 /**
- * Входящий запрос от аутентифицированного клиента на покупку билета.
- *
- * userId намеренно отсутствует: идентификатор пользователя берётся только из
- * проверенного JWT, чтобы клиент не мог создать заказ от имени другого пользователя.
+ * Запрос аутентифицированного пользователя на покупку конкретного билета.
+ * userId берётся из JWT, а eventId и цена — из catalog-service после успешной
+ * reservation, поэтому клиент не может подменить бизнес-данные каталога.
  */
-public record OrderRequest(
-        @NotNull
-        UUID eventId,
-
-        @NotNull
-        UUID ticketId,
-
-        @NotNull
-        @Positive
-        BigDecimal price) {
+public record OrderRequest(@NotNull UUID ticketId) {
 }

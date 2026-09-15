@@ -1,4 +1,5 @@
 services:
+
   postgres-catalog:
     image: postgres:16-alpine
     container_name: postgres-catalog
@@ -17,6 +18,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   postgres-order:
     image: postgres:16-alpine
     container_name: postgres-order
@@ -35,6 +37,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   postgres-payment:
     image: postgres:16-alpine
     container_name: postgres-payment
@@ -53,6 +56,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   postgres-notification:
     image: postgres:16-alpine
     container_name: postgres-notification
@@ -71,6 +75,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   redis:
     image: redis:7.4-alpine
     container_name: ticketcraft-redis
@@ -86,6 +91,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: kafka
@@ -112,6 +118,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
@@ -123,6 +130,7 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
@@ -142,6 +150,7 @@ services:
         condition: service_healthy
       postgres-payment:
         condition: service_healthy
+
   prometheus:
     image: prom/prometheus:v3.5.0
     container_name: ticketcraft-prometheus
@@ -155,6 +164,7 @@ services:
     - prometheus_data:/prometheus
     extra_hosts:
     - host.docker.internal:host-gateway
+
   tempo:
     image: grafana/tempo:2.8.2
     container_name: ticketcraft-tempo
@@ -167,6 +177,7 @@ services:
     volumes:
     - ./observability/tempo/tempo.yml:/etc/tempo.yml:ro
     - tempo_data:/var/tempo
+
   grafana:
     image: grafana/grafana:12.1.0
     container_name: ticketcraft-grafana
@@ -183,6 +194,21 @@ services:
     depends_on:
     - prometheus
     - tempo
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.3
+    container_name: ticketcraft-keycloak
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "9000:8080"
+    volumes:
+      - ./docker/keycloak/ticketcraft-realm.json:/opt/keycloak/data/import/ticketcraft-realm.json:ro
+
 volumes:
   pg_catalog_data:
     name: ticketcraft_pg_catalog_data

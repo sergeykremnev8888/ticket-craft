@@ -2,7 +2,11 @@ package ru.ticketcraft.payment.outbox;
 
 public enum PaymentOutboxEventType {
 
-    PAYMENT_SUCCEEDED("PaymentSucceededEvent"), PAYMENT_FAILED("PaymentFailedEvent");
+    PAYMENT_SUCCEEDED("PaymentSucceededEvent"),
+
+    PAYMENT_FAILED("PaymentFailedEvent"),
+
+    PAYMENT_REFUNDED("PaymentRefundedEvent");
 
     private final String persistedValue;
 
@@ -15,6 +19,7 @@ public enum PaymentOutboxEventType {
     }
 
     public static PaymentOutboxEventType fromPersistedValue(String value) {
+
         for (PaymentOutboxEventType eventType : values()) {
             if (eventType.persistedValue.equals(value)) {
                 return eventType;

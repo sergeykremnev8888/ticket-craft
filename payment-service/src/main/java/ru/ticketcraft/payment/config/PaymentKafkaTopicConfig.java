@@ -1,10 +1,10 @@
 package ru.ticketcraft.payment.config;
 
+import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaAdmin.NewTopics;
-import org.apache.kafka.clients.admin.NewTopic;
 
 @Configuration
 public class PaymentKafkaTopicConfig {
@@ -12,20 +12,29 @@ public class PaymentKafkaTopicConfig {
     private final PaymentKafkaProperties kafkaProperties;
 
     public PaymentKafkaTopicConfig(PaymentKafkaProperties kafkaProperties) {
+
         this.kafkaProperties = kafkaProperties;
     }
 
     @Bean
     NewTopics paymentTopics() {
-        NewTopic paymentRequests = TopicBuilder.name(kafkaProperties.getRequestTopic())
-                .partitions(kafkaProperties.getPartitions()).replicas(kafkaProperties.getReplicas()).build();
 
-        NewTopic paymentResults = TopicBuilder.name(kafkaProperties.getResultTopic())
-                .partitions(kafkaProperties.getPartitions()).replicas(kafkaProperties.getReplicas()).build();
+        NewTopic paymentRequests = topic(kafkaProperties.getRequestTopic());
 
-        NewTopic paymentRequestsDlt = TopicBuilder.name(kafkaProperties.getDltTopic())
-                .partitions(kafkaProperties.getPartitions()).replicas(kafkaProperties.getReplicas()).build();
+        NewTopic paymentCommands = topic(kafkaProperties.getCommandTopic());
 
-        return new NewTopics(paymentRequests, paymentResults, paymentRequestsDlt);
+        NewTopic paymentResults = topic(kafkaProperties.getResultTopic());
+
+        NewTopic paymentRequestsDlt = topic(kafkaProperties.getDltTopic());
+
+        NewTopic paymentCommandsDlt = topic(kafkaProperties.getCommandDltTopic());
+
+        return new NewTopics(paymentRequests, paymentCommands, paymentResults, paymentRequestsDlt, paymentCommandsDlt);
+    }
+
+    private NewTopic topic(String name) {
+
+        return TopicBuilder.name(name).partitions(kafkaProperties.getPartitions())
+                .replicas(kafkaProperties.getReplicas()).build();
     }
 }

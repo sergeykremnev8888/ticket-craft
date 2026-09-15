@@ -55,14 +55,23 @@ logging:
     correlation: '[${spring.application.name:},%X{traceId:-},%X{spanId:-}] '
   include-application-name: false
 ticketcraft:
+  payment:
+    provider:
+      base-url: ${PAYMENT_PROVIDER_BASE_URL:http://localhost:8090}
+      charge-path: ${PAYMENT_PROVIDER_CHARGE_PATH:/api/v1/payments/charges}
+      refund-path: ${PAYMENT_PROVIDER_REFUND_PATH:/api/v1/payments/refunds}
+      connect-timeout: ${PAYMENT_PROVIDER_CONNECT_TIMEOUT:2s}
+      read-timeout: ${PAYMENT_PROVIDER_READ_TIMEOUT:5s}
   outbox:
     batch-size: ${PAYMENT_OUTBOX_BATCH_SIZE:100}
     claim-lease: ${PAYMENT_OUTBOX_CLAIM_LEASE:30s}
     publish-delay: ${PAYMENT_OUTBOX_PUBLISH_DELAY:1s}
   kafka:
     request-topic: payment-requests
+    command-topic: payment-commands
     result-topic: payment-results
     dlt-topic: payment-requests.DLT
+    command-dlt-topic: payment-commands.DLT
     concurrency: 1
     poll-timeout: 1s
     partitions: 1
