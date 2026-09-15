@@ -1,5 +1,6 @@
 package ru.ticketcraft.model;
 
+import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
 import ru.ticketcraft.dto.TicketConfirmedEvent;
 import ru.ticketcraft.dto.TicketReleasedEvent;
 import ru.ticketcraft.dto.TicketReservationFailedEvent;
@@ -18,6 +19,10 @@ public enum OutboxEventType {
     TICKET_CONFIRMED(
             "TicketConfirmed",
             TicketConfirmedEvent.class),
+
+    TICKET_CONFIRMATION_FAILED(
+            "TicketConfirmationFailed",
+            TicketConfirmationFailedEvent.class),
 
     TICKET_RELEASED(
             "TicketReleased",

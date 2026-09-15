@@ -72,9 +72,13 @@ public class KafkaConsumerConfig {
 
     @Bean
     KafkaTemplate<String, Object> ticketReservationResultDltKafkaTemplate(
-            @Qualifier("ticketReservationResultDltProducerFactory") ProducerFactory<String, Object> ticketReservationResultDltProducerFactory) {
+            @Qualifier("ticketReservationResultDltProducerFactory") ProducerFactory<String, Object> ticketReservationResultDltProducerFactory,
+            KafkaProperties kafkaProperties) {
+        KafkaTemplate<String, Object> kafkaTemplate = new KafkaTemplate<>(ticketReservationResultDltProducerFactory);
 
-        return new KafkaTemplate<>(ticketReservationResultDltProducerFactory);
+        kafkaTemplate.setObservationEnabled(kafkaProperties.getTemplate().isObservationEnabled());
+
+        return kafkaTemplate;
     }
 
     @Bean

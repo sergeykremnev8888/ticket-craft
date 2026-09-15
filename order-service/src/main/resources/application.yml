@@ -38,9 +38,9 @@ management:
       application: ${spring.application.name}
     distribution:
       percentiles-histogram:
-        http.server.requests: true
+        '[http.server.requests]': true
       slo:
-        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
+        '[http.server.requests]': 50ms,100ms,250ms,500ms,1s,2s,5s
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
@@ -69,6 +69,7 @@ ticketcraft:
       ticket-reservation-results: ticket-reservation-results
       ticket-reservation-results-dlt: ticket-reservation-results.DLT
       payment-requests: payment-requests
+      payment-commands: payment-commands
       payment-results: payment-results
       payment-results-dlt: payment-results.DLT
   outbox:

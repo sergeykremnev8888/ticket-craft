@@ -7,34 +7,45 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import ru.ticketcraft.dto.PaymentFailedEvent;
+import ru.ticketcraft.dto.PaymentRefundedEvent;
 import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.service.PaymentResultProcessor;
 
 @Component
 public class PaymentResultConsumer {
 
-    private static final Logger log = LoggerFactory.getLogger(PaymentResultConsumer.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(PaymentResultConsumer.class);
 
     private final PaymentResultProcessor processor;
 
     public PaymentResultConsumer(PaymentResultProcessor processor) {
-
         this.processor = processor;
     }
 
-    @KafkaListener(topics = "${ticketcraft.kafka.topics.payment-results}", groupId = "${ticketcraft.kafka.consumer.payment-results-group-id}", containerFactory = "paymentResultKafkaListenerContainerFactory")
+    @KafkaListener(
+            topics = "${ticketcraft.kafka.topics.payment-results}",
+            groupId = "${ticketcraft.kafka.consumer.payment-results-group-id}",
+            containerFactory = "paymentResultKafkaListenerContainerFactory")
     public void handle(ConsumerRecord<?, ?> record) {
 
         Object event = record.value();
 
         if (event instanceof PaymentSucceededEvent succeededEvent) {
 
-            log.info("Received PaymentSucceededEvent " + "[messageId={}, orderId={}, paymentId={}]",
-                    succeededEvent.messageId(), succeededEvent.orderId(), succeededEvent.paymentId());
+            log.info(
+                    "Received PaymentSucceededEvent "
+                            + "[messageId={}, orderId={}, paymentId={}]",
+                    succeededEvent.messageId(),
+                    succeededEvent.orderId(),
+                    succeededEvent.paymentId());
 
             processor.process(succeededEvent);
 
-            log.info("Processed PaymentSucceededEvent " + "[messageId={}, orderId={}]", succeededEvent.messageId(),
+            log.info(
+                    "Processed PaymentSucceededEvent "
+                            + "[messageId={}, orderId={}]",
+                    succeededEvent.messageId(),
                     succeededEvent.orderId());
 
             return;
@@ -42,17 +53,53 @@ public class PaymentResultConsumer {
 
         if (event instanceof PaymentFailedEvent failedEvent) {
 
-            log.info("Received PaymentFailedEvent " + "[messageId={}, orderId={}, paymentId={}, reason={}]",
-                    failedEvent.messageId(), failedEvent.orderId(), failedEvent.paymentId(), failedEvent.reason());
+            log.info(
+                    "Received PaymentFailedEvent "
+                            + "[messageId={}, orderId={}, paymentId={}, reason={}]",
+                    failedEvent.messageId(),
+                    failedEvent.orderId(),
+                    failedEvent.paymentId(),
+                    failedEvent.reason());
 
             processor.process(failedEvent);
 
-            log.info("Processed PaymentFailedEvent " + "[messageId={}, orderId={}, reason={}]", failedEvent.messageId(),
-                    failedEvent.orderId(), failedEvent.reason());
+            log.info(
+                    "Processed PaymentFailedEvent "
+                            + "[messageId={}, orderId={}, reason={}]",
+                    failedEvent.messageId(),
+                    failedEvent.orderId(),
+                    failedEvent.reason());
 
             return;
         }
 
-        throw new IllegalArgumentException("Unsupported payment result type: " + event.getClass().getName());
+        if (event instanceof PaymentRefundedEvent refundedEvent) {
+
+            log.info(
+                    "Received PaymentRefundedEvent "
+                            + "[messageId={}, orderId={}, paymentId={}]",
+                    refundedEvent.messageId(),
+                    refundedEvent.orderId(),
+                    refundedEvent.paymentId());
+
+            processor.process(refundedEvent);
+
+            log.info(
+                    "Processed PaymentRefundedEvent "
+                            + "[messageId={}, orderId={}]",
+                    refundedEvent.messageId(),
+                    refundedEvent.orderId());
+
+            return;
+        }
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Payment result payload must not be null");
+        }
+
+        throw new IllegalArgumentException(
+                "Unsupported payment result type: "
+                        + event.getClass().getName());
     }
 }

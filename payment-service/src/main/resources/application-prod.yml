@@ -34,6 +34,7 @@ ticketcraft:
     provider:
       base-url: ${PAYMENT_PROVIDER_BASE_URL}
       charge-path: ${PAYMENT_PROVIDER_CHARGE_PATH:/api/v1/payments/charges}
+      refund-path: ${PAYMENT_PROVIDER_REFUND_PATH:/api/v1/payments/refunds}
       connect-timeout: ${PAYMENT_PROVIDER_CONNECT_TIMEOUT:2s}
       read-timeout: ${PAYMENT_PROVIDER_READ_TIMEOUT:5s}
   kafka:

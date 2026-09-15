@@ -19,6 +19,9 @@ public class OrderSaga {
     @Column("status")
     private OrderSagaStatus status;
 
+    @Column("payment_id")
+    private UUID paymentId;
+
     @Column("created_at")
     private Instant createdAt;
 
@@ -28,10 +31,18 @@ public class OrderSaga {
     public OrderSaga() {
     }
 
-    public OrderSaga(UUID id, Long orderId, OrderSagaStatus status, Instant createdAt, Instant updatedAt) {
+    public OrderSaga(
+            UUID id,
+            Long orderId,
+            OrderSagaStatus status,
+            UUID paymentId,
+            Instant createdAt,
+            Instant updatedAt) {
+
         this.id = id;
         this.orderId = orderId;
         this.status = status;
+        this.paymentId = paymentId;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -46,6 +57,10 @@ public class OrderSaga {
 
     public OrderSagaStatus getStatus() {
         return status;
+    }
+
+    public UUID getPaymentId() {
+        return paymentId;
     }
 
     public Instant getCreatedAt() {

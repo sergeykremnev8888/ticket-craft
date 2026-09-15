@@ -17,10 +17,16 @@ public class PaymentKafkaProperties {
     private String requestTopic;
 
     @NotBlank
+    private String commandTopic;
+
+    @NotBlank
     private String resultTopic;
 
     @NotBlank
     private String dltTopic;
+
+    @NotBlank
+    private String commandDltTopic;
 
     @Min(1)
     private int concurrency = 1;
@@ -42,6 +48,14 @@ public class PaymentKafkaProperties {
         this.requestTopic = requestTopic;
     }
 
+    public String getCommandTopic() {
+        return commandTopic;
+    }
+
+    public void setCommandTopic(String commandTopic) {
+        this.commandTopic = commandTopic;
+    }
+
     public String getResultTopic() {
         return resultTopic;
     }
@@ -56,6 +70,14 @@ public class PaymentKafkaProperties {
 
     public void setDltTopic(String dltTopic) {
         this.dltTopic = dltTopic;
+    }
+
+    public String getCommandDltTopic() {
+        return commandDltTopic;
+    }
+
+    public void setCommandDltTopic(String commandDltTopic) {
+        this.commandDltTopic = commandDltTopic;
     }
 
     public int getConcurrency() {

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ru.ticketcraft.dto.PaymentFailedEvent;
+import ru.ticketcraft.dto.PaymentRefundedEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
 import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.payment.model.Payment;
@@ -21,12 +22,14 @@ public class PaymentTransactionService {
     private final PaymentOutboxService paymentOutboxService;
 
     public PaymentTransactionService(PaymentRepository paymentRepository, PaymentOutboxService paymentOutboxService) {
+
         this.paymentRepository = paymentRepository;
         this.paymentOutboxService = paymentOutboxService;
     }
 
     @Transactional
     public Payment getOrCreatePayment(PaymentRequestedEvent event) {
+
         Payment existingPayment = paymentRepository.findByOrderId(event.orderId()).orElse(null);
 
         if (existingPayment != null) {
@@ -40,13 +43,14 @@ public class PaymentTransactionService {
                 PaymentStatus.PENDING, event.messageId(), now, now);
 
         boolean inserted = paymentRepository.insertIfAbsent(payment);
+
         if (inserted) {
             return payment;
         }
 
         Payment concurrentPayment = paymentRepository.findByOrderId(event.orderId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "Payment was not found after failed insert for order " + event.orderId()));
+                        "Payment was not found after failed insert " + "for order " + event.orderId()));
 
         validateSamePayment(concurrentPayment, event);
 
@@ -55,25 +59,46 @@ public class PaymentTransactionService {
 
     @Transactional
     public void markSucceeded(PaymentSucceededEvent event) {
-        transitionToTerminal(event.paymentId(), PaymentStatus.SUCCEEDED,
+
+        transition(event.paymentId(), PaymentStatus.PENDING, PaymentStatus.SUCCEEDED,
                 () -> paymentOutboxService.addSucceededEvent(event));
     }
 
     @Transactional
     public void markFailed(PaymentFailedEvent event) {
-        transitionToTerminal(event.paymentId(), PaymentStatus.FAILED, () -> paymentOutboxService.addFailedEvent(event));
+
+        transition(event.paymentId(), PaymentStatus.PENDING, PaymentStatus.FAILED,
+                () -> paymentOutboxService.addFailedEvent(event));
+    }
+
+    @Transactional
+    public void markRefunded(PaymentRefundedEvent event) {
+
+        transition(event.paymentId(), PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED,
+                () -> paymentOutboxService.addRefundedEvent(event));
+    }
+
+    public Payment findPayment(UUID paymentId) {
+
+        return paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Payment not found: " + paymentId));
     }
 
     private void validateSamePayment(Payment existingPayment, PaymentRequestedEvent event) {
+
         if (!existingPayment.getUserId().equals(event.userId())
                 || existingPayment.getAmount().compareTo(event.amount()) != 0) {
-            throw new IllegalStateException(
-                    "Conflicting payment request for order " + event.orderId());
+
+            throw new IllegalStateException("Conflicting payment request for order " + event.orderId());
         }
     }
 
-    private void transitionToTerminal(UUID paymentId, PaymentStatus targetStatus, Runnable outboxAction) {
-        int updatedRows = paymentRepository.updateStatusFromPending(paymentId, targetStatus, Instant.now());
+    private void transition(UUID paymentId, PaymentStatus expectedStatus, PaymentStatus targetStatus,
+            Runnable outboxAction) {
+
+        int updatedRows = paymentRepository.updateStatus(paymentId, expectedStatus, targetStatus, Instant.now());
+
         if (updatedRows == 1) {
             outboxAction.run();
             return;

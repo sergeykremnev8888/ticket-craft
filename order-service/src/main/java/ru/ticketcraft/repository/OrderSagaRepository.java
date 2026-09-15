@@ -11,7 +11,8 @@ import org.springframework.data.repository.query.Param;
 
 import ru.ticketcraft.saga.OrderSaga;
 
-public interface OrderSagaRepository extends CrudRepository<OrderSaga, UUID> {
+public interface OrderSagaRepository
+        extends CrudRepository<OrderSaga, UUID> {
 
     Optional<OrderSaga> findByOrderId(Long orderId);
 
@@ -33,8 +34,12 @@ public interface OrderSagaRepository extends CrudRepository<OrderSaga, UUID> {
             )
             ON CONFLICT (order_id) DO NOTHING
             """)
-    int insertIfAbsent(@Param("id") UUID id, @Param("orderId") Long orderId, @Param("status") String status,
-            @Param("createdAt") Instant createdAt, @Param("updatedAt") Instant updatedAt);
+    int insertIfAbsent(
+            @Param("id") UUID id,
+            @Param("orderId") Long orderId,
+            @Param("status") String status,
+            @Param("createdAt") Instant createdAt,
+            @Param("updatedAt") Instant updatedAt);
 
     @Modifying
     @Query("""
@@ -44,6 +49,26 @@ public interface OrderSagaRepository extends CrudRepository<OrderSaga, UUID> {
             WHERE order_id = :orderId
               AND status = :expectedStatus
             """)
-    int transition(@Param("orderId") Long orderId, @Param("expectedStatus") String expectedStatus,
-            @Param("targetStatus") String targetStatus, @Param("updatedAt") Instant updatedAt);
+    int transition(
+            @Param("orderId") Long orderId,
+            @Param("expectedStatus") String expectedStatus,
+            @Param("targetStatus") String targetStatus,
+            @Param("updatedAt") Instant updatedAt);
+
+    @Modifying
+    @Query("""
+            UPDATE order_sagas
+            SET status = :targetStatus,
+                payment_id = :paymentId,
+                updated_at = :updatedAt
+            WHERE order_id = :orderId
+              AND status = :expectedStatus
+              AND payment_id IS NULL
+            """)
+    int transitionAndSetPaymentId(
+            @Param("orderId") Long orderId,
+            @Param("expectedStatus") String expectedStatus,
+            @Param("targetStatus") String targetStatus,
+            @Param("paymentId") UUID paymentId,
+            @Param("updatedAt") Instant updatedAt);
 }

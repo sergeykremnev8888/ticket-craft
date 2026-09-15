@@ -9,6 +9,7 @@ import ru.ticketcraft.config.KafkaTopicsProperties;
 import ru.ticketcraft.dto.ConfirmTicketCommand;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.dto.RefundPaymentCommand;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.model.Order;
@@ -34,6 +35,7 @@ public class OutboxService {
     }
 
     public UUID saveOrderConfirmedEvent(Order order, OrderEvent event) {
+
         UUID eventId = UUID.randomUUID();
 
         save(eventId, AGGREGATE_TYPE_ORDER, order.getId().toString(), OutboxEventType.ORDER_CONFIRMED,
@@ -72,6 +74,16 @@ public class OutboxService {
         return eventId;
     }
 
+    public UUID saveRefundPaymentCommand(Order order, RefundPaymentCommand command) {
+
+        UUID eventId = UUID.randomUUID();
+
+        save(eventId, AGGREGATE_TYPE_ORDER, order.getId().toString(), OutboxEventType.REFUND_PAYMENT,
+                topics.paymentCommands(), command, command.occurredAt());
+
+        return eventId;
+    }
+
     public UUID saveReleaseTicketCommand(Order order, ReleaseTicketCommand command) {
 
         UUID eventId = UUID.randomUUID();
@@ -96,6 +108,7 @@ public class OutboxService {
     }
 
     private String serialize(Object payload) {
+
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JacksonException e) {
