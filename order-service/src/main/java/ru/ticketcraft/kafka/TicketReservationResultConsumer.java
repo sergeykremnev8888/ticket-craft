@@ -1,5 +1,6 @@
 package ru.ticketcraft.kafka;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -13,34 +14,39 @@ import ru.ticketcraft.service.TicketReservationResultProcessor;
 @Component
 public class TicketReservationResultConsumer {
 
-    private static final Logger log = LoggerFactory.getLogger(TicketReservationResultConsumer.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(TicketReservationResultConsumer.class);
 
     private final TicketReservationResultProcessor processor;
 
-    public TicketReservationResultConsumer(TicketReservationResultProcessor processor) {
+    public TicketReservationResultConsumer(
+            TicketReservationResultProcessor processor) {
 
         this.processor = processor;
     }
 
-    @KafkaListener(topics = "${ticketcraft.kafka.topics.ticket-reservation-results}", groupId = "${ticketcraft.kafka.consumer.ticket-reservation-results-group-id}", containerFactory = "ticketReservationResultKafkaListenerContainerFactory")
-    public void handle(Object event) {
+    @KafkaListener(
+            topics = "${ticketcraft.kafka.topics.ticket-reservation-results}",
+            groupId = "${ticketcraft.kafka.consumer.ticket-reservation-results-group-id}",
+            containerFactory = "ticketReservationResultKafkaListenerContainerFactory")
+    public void handle(ConsumerRecord<?, ?> record) {
+
+        Object event = record.value();
 
         if (event instanceof TicketReservedEvent ticketReservedEvent) {
-
             log.info("Received TicketReservedEvent " + "[messageId={}, orderId={}, reservationId={}, ticketId={}]",
                     ticketReservedEvent.messageId(), ticketReservedEvent.orderId(), ticketReservedEvent.reservationId(),
                     ticketReservedEvent.ticketId());
 
             processor.process(ticketReservedEvent);
 
-            log.info("Processed TicketReservedEvent " + "[messageId={}, orderId={}]", ticketReservedEvent.messageId(),
+            log.info("Processed TicketReservedEvent [messageId={}, orderId={}]", ticketReservedEvent.messageId(),
                     ticketReservedEvent.orderId());
 
             return;
         }
 
         if (event instanceof TicketReservationFailedEvent failedEvent) {
-
             log.info(
                     "Received TicketReservationFailedEvent "
                             + "[messageId={}, orderId={}, reservationId={}, ticketId={}, reason={}]",
@@ -56,13 +62,15 @@ public class TicketReservationResultConsumer {
         }
 
         if (event instanceof TicketReleasedEvent releasedEvent) {
-
             processor.process(releasedEvent);
-
             return;
         }
 
-        log.warn("Ignoring unsupported ticket reservation result event [type={}]",
-                event == null ? "null" : event.getClass().getName());
+        if (event == null) {
+            throw new IllegalArgumentException("Ticket reservation result payload must not be null");
+        }
+
+        throw new IllegalArgumentException(
+                "Unsupported ticket reservation result event type: " + event.getClass().getName());
     }
 }

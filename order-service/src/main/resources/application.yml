@@ -20,8 +20,10 @@ spring:
       observation-enabled: true
     template:
       observation-enabled: true
+
 server:
   port: ${SERVER_PORT:8082}
+
 management:
   endpoints:
     web:
@@ -51,6 +53,7 @@ management:
     metrics:
       export:
         enabled: false
+
 ticketcraft:
   kafka:
     consumer:
@@ -76,6 +79,7 @@ ticketcraft:
       lock-duration: 30s
       retry-delay: 5s
       send-timeout: 10s
+
 logging:
   level:
     root: INFO

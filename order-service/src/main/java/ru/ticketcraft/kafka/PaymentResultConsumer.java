@@ -1,5 +1,6 @@
 package ru.ticketcraft.kafka;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -22,7 +23,9 @@ public class PaymentResultConsumer {
     }
 
     @KafkaListener(topics = "${ticketcraft.kafka.topics.payment-results}", groupId = "${ticketcraft.kafka.consumer.payment-results-group-id}", containerFactory = "paymentResultKafkaListenerContainerFactory")
-    public void handle(Object event) {
+    public void handle(ConsumerRecord<?, ?> record) {
+
+        Object event = record.value();
 
         if (event instanceof PaymentSucceededEvent succeededEvent) {
 
