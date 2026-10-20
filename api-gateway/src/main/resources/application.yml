@@ -23,6 +23,14 @@ spring:
               uri: http://localhost:8081
               predicates:
                 - Path=/api/v1/catalog/events,/api/v1/catalog/events/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    rate-limiter: "#{@resilientRateLimiter}"
+                    key-resolver: "#{@ipKeyResolver}"
+                    '[redis-rate-limiter.replenishRate]': 10
+                    '[redis-rate-limiter.burstCapacity]': 20
+                    '[redis-rate-limiter.requestedTokens]': 1
 
   security:
     oauth2:
@@ -30,4 +38,15 @@ spring:
         jwt:
           issuer-uri: http://localhost:9000/realms/ticketcraft
           audiences:
-          - ticketcraft-api
+            - ticketcraft-api
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 500ms
+
+ticketcraft:
+  gateway:
+    rate-limiter:
+      timeout: 500ms
