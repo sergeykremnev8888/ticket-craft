@@ -22,6 +22,7 @@
     <!-- Список дочерних модулей -->
     <modules>
         <module>common-dto</module>
+        <module>api-gateway</module>
         <module>catalog-service</module>
         <module>order-service</module>
         <module>notification-service</module>
