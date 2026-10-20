@@ -1,0 +1,33 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 5s
+
+          routes:
+            - id: order-service-route
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/v1/orders,/api/v1/orders/**
+
+            - id: catalog-service-route
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api/v1/catalog/events,/api/v1/catalog/events/**
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:9000/realms/ticketcraft
+          audiences:
+          - ticketcraft-api
