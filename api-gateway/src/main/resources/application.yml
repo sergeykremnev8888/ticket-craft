@@ -18,6 +18,19 @@ spring:
               uri: http://localhost:8082
               predicates:
                 - Path=/api/v1/orders,/api/v1/orders/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: orderCircuitBreaker
+                    statusCodes: "503"
+                    fallbackUri: forward:/fallback/order
+                - name: RequestRateLimiter
+                  args:
+                    rate-limiter: "#{@resilientRateLimiter}"
+                    key-resolver: "#{@ipKeyResolver}"
+                    '[redis-rate-limiter.replenishRate]': 5
+                    '[redis-rate-limiter.burstCapacity]': 10
+                    '[redis-rate-limiter.requestedTokens]': 1
 
             - id: catalog-service-route
               uri: http://localhost:8081
@@ -62,10 +75,23 @@ spring:
       port: 6379
       timeout: 500ms
 
+  reactor:
+    context-propagation: auto
+
 resilience4j:
   circuitbreaker:
     instances:
       catalogCircuitBreaker:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50
+
+      orderCircuitBreaker:
         slidingWindowType: COUNT_BASED
         slidingWindowSize: 10
         minimumNumberOfCalls: 10
@@ -80,12 +106,20 @@ resilience4j:
       catalogCircuitBreaker:
         timeoutDuration: 4s
 
+      orderCircuitBreaker:
+        timeoutDuration: 4s
+
 ticketcraft:
   gateway:
     rate-limiter:
       timeout: 500ms
 
 management:
+  otlp:
+    metrics:
+      export:
+        enabled: false
+
   endpoints:
     web:
       exposure:
@@ -93,3 +127,12 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  tracing:
+    sampling:
+      probability: 1.0
+
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces

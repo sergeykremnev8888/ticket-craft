@@ -10,13 +10,19 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/fallback")
-public class CatalogFallbackController {
+public class FallbackController {
 
     @GetMapping("/catalog")
     public ResponseEntity<Map<String, String>> catalogFallback() {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("code", "CATALOG_UNAVAILABLE",
-                             "message", "Catalog service is temporarily unavailable"));
+                             "message", "Catalog service is temporarily unavailable."));
     }
 
+    @RequestMapping("/order")
+    public ResponseEntity<Map<String, String>> orderFallback() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("code", "ORDER_SERVICE_UNAVAILABLE",
+                             "message", "Order service is temporarily unavailable. The result of a previous request may be unknown."));
+    }
 }

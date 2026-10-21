@@ -41,11 +41,17 @@ public class ResilientRateLimiter implements RateLimiter<RedisRateLimiter.Config
 
     @Override
     public Mono<Response> isAllowed(String routeId, String id) {
-        return redisRateLimiter.isAllowed(routeId, id).timeout(allowedTimeout).onErrorResume(this::fallback);
+        RedisRateLimiter.Config config = redisRateLimiter.getConfig().get(routeId);
+
+        log.info("RateLimiter route={}, config={}", routeId, config);
+
+        return redisRateLimiter.isAllowed(routeId, id)
+                .timeout(allowedTimeout)
+                .onErrorResume(this::fallback);
     }
 
     private Mono<Response> fallback(Throwable ex) {
-        log.warn("Rate limiter unavailable, allowing request", ex);
+        log.warn("Rate limiter unavailable: {}. Allowing request", ex.toString());
         return Mono.just(new RateLimiter.Response(true, Map.of()));
     }
 
