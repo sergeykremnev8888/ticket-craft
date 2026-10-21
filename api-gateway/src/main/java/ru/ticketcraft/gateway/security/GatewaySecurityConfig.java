@@ -1,7 +1,5 @@
 package ru.ticketcraft.gateway.security;
 
-import java.util.List;
-
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,13 +37,13 @@ public class GatewaySecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource(GatewayCorsProperties сorsProperties) {
+    CorsConfigurationSource corsConfigurationSource(GatewayCorsProperties corsProperties) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(сorsProperties.allowedOrigins());
-        config.setAllowedMethods(сorsProperties.allowedMethods());
-        config.setAllowedHeaders(сorsProperties.allowedHeaders());
-        config.setExposedHeaders(сorsProperties.exposedHeaders());
-        config.setMaxAge(сorsProperties.maxAge());
+        config.setAllowedOrigins(corsProperties.allowedOrigins());
+        config.setAllowedMethods(corsProperties.allowedMethods());
+        config.setAllowedHeaders(corsProperties.allowedHeaders());
+        config.setExposedHeaders(corsProperties.exposedHeaders());
+        config.setMaxAge(corsProperties.maxAge());
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

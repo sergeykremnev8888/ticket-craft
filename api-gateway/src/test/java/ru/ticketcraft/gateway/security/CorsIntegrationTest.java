@@ -16,7 +16,8 @@ class CorsIntegrationTest {
 
     @Test
     void shouldAllowPreflightFromAllowedOrigin() {
-        webTestClient.options().uri("/api/v1/catalog/events").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+        webTestClient.options().uri("/api/v1/catalog/events")
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000")
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization").exchange().expectStatus().isOk()
                 .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:3000");
@@ -24,9 +25,25 @@ class CorsIntegrationTest {
 
     @Test
     void shouldRejectPreflightFromUnknownOrigin() {
-        webTestClient.options().uri("/api/v1/catalog/events").header(HttpHeaders.ORIGIN, "http://localhost:9999")
+        webTestClient.options().uri("/api/v1/catalog/events")
+                .header(HttpHeaders.ORIGIN, "http://localhost:9999")
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization").exchange().expectStatus()
                 .isForbidden().expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
+    }
+
+    @Test
+    void shouldAllowOrderCreationPreflight() {
+        webTestClient.options().uri("/api/v1/orders")
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                        "authorization,content-type,x-correlation-id,idempotency-key")
+                .exchange().expectStatus().isOk()
+                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:3000")
+                .expectHeader().value(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                        value -> org.junit.jupiter.api.Assertions
+                                .assertTrue(value.toLowerCase(java.util.Locale.ROOT).contains("idempotency-key")))
+                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_MAX_AGE, "3600");
     }
 }
