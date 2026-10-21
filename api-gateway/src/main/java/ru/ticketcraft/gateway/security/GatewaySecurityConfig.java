@@ -25,6 +25,7 @@ public class GatewaySecurityConfig {
 
                         .pathMatchers(HttpMethod.POST, "/api/v1/orders").permitAll()
                         .pathMatchers(HttpMethod.GET, "/debug/slow").permitAll()
+                        .pathMatchers("/fallback/**").permitAll()
 
                         .pathMatchers(HttpMethod.GET, "/api/v1/orders/**")
                         .hasAuthority("SCOPE_orders.read")

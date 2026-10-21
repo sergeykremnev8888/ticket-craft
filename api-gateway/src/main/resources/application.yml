@@ -27,6 +27,8 @@ spring:
                 - name: CircuitBreaker
                   args:
                     name: catalogCircuitBreaker
+                    statusCodes: "503"
+                    fallbackUri: forward:/fallback/catalog
                 - name: RequestRateLimiter
                   args:
                     rate-limiter: "#{@resilientRateLimiter}"
@@ -44,6 +46,7 @@ spring:
                   args:
                     name: catalogCircuitBreaker
                     statusCodes: "503"
+                    fallbackUri: forward:/fallback/catalog
 
   security:
     oauth2:
