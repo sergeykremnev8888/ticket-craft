@@ -15,15 +15,10 @@ spring:
 
           routes:
             - id: order-service-route
-              uri: http://localhost:8082
+              uri: ${ticketcraft.gateway.order-uri:http://localhost:8082}
               predicates:
                 - Path=/api/v1/orders,/api/v1/orders/**
               filters:
-                - name: CircuitBreaker
-                  args:
-                    name: orderCircuitBreaker
-                    statusCodes: "503"
-                    fallbackUri: forward:/fallback/order
                 - name: RequestRateLimiter
                   args:
                     rate-limiter: "#{@resilientRateLimiter}"
@@ -31,17 +26,17 @@ spring:
                     '[redis-rate-limiter.replenishRate]': 5
                     '[redis-rate-limiter.burstCapacity]': 10
                     '[redis-rate-limiter.requestedTokens]': 1
+                - name: CircuitBreaker
+                  args:
+                    name: orderCircuitBreaker
+                    statusCodes: "503"
+                    fallbackUri: forward:/fallback/order
 
             - id: catalog-service-route
-              uri: http://localhost:8081
+              uri: ${ticketcraft.gateway.catalog-uri:http://localhost:8081}
               predicates:
                 - Path=/api/v1/catalog/events,/api/v1/catalog/events/**
               filters:
-                - name: CircuitBreaker
-                  args:
-                    name: catalogCircuitBreaker
-                    statusCodes: "503"
-                    fallbackUri: forward:/fallback/catalog
                 - name: RequestRateLimiter
                   args:
                     rate-limiter: "#{@resilientRateLimiter}"
@@ -49,6 +44,11 @@ spring:
                     '[redis-rate-limiter.replenishRate]': 10
                     '[redis-rate-limiter.burstCapacity]': 20
                     '[redis-rate-limiter.requestedTokens]': 1
+                - name: CircuitBreaker
+                  args:
+                    name: catalogCircuitBreaker
+                    statusCodes: "503"
+                    fallbackUri: forward:/fallback/catalog
 
   security:
     oauth2:
