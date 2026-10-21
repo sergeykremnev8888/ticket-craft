@@ -102,6 +102,7 @@ ticketcraft:
   gateway:
     rate-limiter:
       timeout: 500ms
+      warn-interval: 30s
     cors:
       allowed-origins:
         - http://localhost:3000

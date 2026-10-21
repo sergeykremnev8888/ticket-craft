@@ -1,9 +1,8 @@
-package ru.ticketcraft.gateway.limiter;
+package ru.ticketcraft.gateway.ratelimiter;
 
 import java.net.InetSocketAddress;
-import java.time.Duration;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter;
 import org.springframework.context.annotation.Bean;
@@ -11,9 +10,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.web.server.ServerWebExchange;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import reactor.core.publisher.Mono;
 
 @Configuration
+@EnableConfigurationProperties(GatewayRateLimiterProperties.class)
 public class RateLimiterConfig {
 
     @Bean
@@ -24,10 +25,11 @@ public class RateLimiterConfig {
     @Bean
     @Primary
     ResilientRateLimiter resilientRateLimiter(RedisRateLimiter redisRateLimiter,
+                                              GatewayRateLimiterProperties properties,
+                                              MeterRegistry meterRegistry) {
 
-                                              @Value("${ticketcraft.gateway.rate-limiter.timeout:500ms}")
-                                              Duration rateLimiterTimeout) {
-        return new ResilientRateLimiter(redisRateLimiter, rateLimiterTimeout);
+        return new ResilientRateLimiter(redisRateLimiter, properties.timeout(), properties.warnInterval(),
+                meterRegistry);
     }
 
     private String getClientIp(ServerWebExchange exchange) {
