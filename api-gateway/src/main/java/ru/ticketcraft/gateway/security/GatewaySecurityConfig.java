@@ -3,6 +3,8 @@ package ru.ticketcraft.gateway.security;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
@@ -18,24 +20,31 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 public class GatewaySecurityConfig {
 
     @Bean
-    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
-        return http.csrf(ServerHttpSecurity.CsrfSpec::disable).cors(Customizer.withDefaults())
-                .authorizeExchange(exchange -> exchange
-                        .pathMatchers(HttpMethod.GET,
-                                "/api/v1/catalog/events",
-                                "/api/v1/catalog/events/**").permitAll()
+    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
+        Environment environment) {
+        return http
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .cors(Customizer.withDefaults())
+                .authorizeExchange(exchange -> {
+                    if (environment.acceptsProfiles(Profiles.of("local"))) {
+                        exchange.pathMatchers(HttpMethod.GET, "/debug/slow").permitAll();
+                    }
 
-                        .pathMatchers(HttpMethod.POST, "/api/v1/orders").authenticated()
-                        .pathMatchers(HttpMethod.GET, "/api/v1/orders/**").authenticated()
+                    exchange.pathMatchers(HttpMethod.GET,
+                                    "/api/v1/catalog/events",
+                                    "/api/v1/catalog/events/**").permitAll()
 
-                        .pathMatchers(HttpMethod.GET, 
-                                "/actuator/health",
-                                "/actuator/prometheus").permitAll()
+                            .pathMatchers(HttpMethod.POST, "/api/v1/orders").authenticated()
+                            .pathMatchers(HttpMethod.GET, "/api/v1/orders/**").authenticated()
 
-                        .pathMatchers(HttpMethod.GET, "/debug/slow").permitAll()
-                        .pathMatchers("/fallback/**").permitAll()
+                            .pathMatchers("/fallback/**").permitAll()
 
-                        .anyExchange().denyAll())
+                            .pathMatchers(HttpMethod.GET,
+                                    "/actuator/health",
+                                    "/actuator/prometheus").permitAll()
+
+                            .anyExchange().denyAll();
+                })
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults())).build();
     }
 

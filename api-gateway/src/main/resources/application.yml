@@ -50,17 +50,6 @@ spring:
                     '[redis-rate-limiter.burstCapacity]': 20
                     '[redis-rate-limiter.requestedTokens]': 1
 
-            - id: catalog-debug
-              uri: http://localhost:8081
-              predicates:
-                - Path=/debug/slow
-              filters:
-                - name: CircuitBreaker
-                  args:
-                    name: catalogCircuitBreaker
-                    statusCodes: "503"
-                    fallbackUri: forward:/fallback/catalog
-
   security:
     oauth2:
       resourceserver:

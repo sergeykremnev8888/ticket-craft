@@ -1,0 +1,17 @@
+resilience4j:
+  circuitbreaker:
+    instances:
+      catalogDebugCircuitBreaker:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50
+  
+  timelimiter:
+    instances:
+      catalogDebugCircuitBreaker:
+        timeoutDuration: 4s
