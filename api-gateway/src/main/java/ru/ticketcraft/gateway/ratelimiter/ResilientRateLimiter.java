@@ -72,7 +72,7 @@ public class ResilientRateLimiter implements RateLimiter<RedisRateLimiter.Config
 
         result = result.doOnNext(response -> {
             if (isDelegateFailOpen(response)) {
-                logFailOpen(routeId, "delegate_fail_open", null);
+                recordFailOpen(routeId, "delegate_fail_open", null);
             }
         });
 
@@ -96,11 +96,11 @@ public class ResilientRateLimiter implements RateLimiter<RedisRateLimiter.Config
     }
 
     private Mono<Response> allowRequest(String routeId, String reason, Throwable error) {
-        logFailOpen(routeId, reason, error);
+        recordFailOpen(routeId, reason, error);
         return Mono.just(new Response(true, Map.of()));
     }
 
-    private void logFailOpen(String routeId, String reason, Throwable error) {
+    private void recordFailOpen(String routeId, String reason, Throwable error) {
         meterRegistry.counter(FAIL_OPEN_METRIC, "route", routeId, "reason", reason).increment();
 
         long now = System.nanoTime();
