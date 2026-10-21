@@ -23,8 +23,8 @@ public class GatewaySecurityConfig {
                                 "/api/v1/catalog/events/**"
                         ).permitAll()
 
-                        .pathMatchers(HttpMethod.POST, "/api/v1/orders"
-                        ).permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/orders").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/debug/slow").permitAll()
 
                         .pathMatchers(HttpMethod.GET, "/api/v1/orders/**")
                         .hasAuthority("SCOPE_orders.read")
