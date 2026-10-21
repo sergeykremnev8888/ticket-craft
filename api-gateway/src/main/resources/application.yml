@@ -84,3 +84,12 @@ ticketcraft:
   gateway:
     rate-limiter:
       timeout: 500ms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
