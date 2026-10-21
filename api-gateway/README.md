@@ -2,13 +2,13 @@
 
 API Gateway — единая точка входа для HTTP API TicketCraft. Сервис отвечает за маршрутизацию, проверку JWT, ограничение частоты запросов, защиту от сбоев downstream-сервисов, CORS и базовую наблюдаемость. Бизнес-логика остаётся в соответствующих сервисах.
 
-> **Статус:** локальный MVP. Функциональность ниже зафиксирована по результатам ручных проверок и тестов в ходе разработки. Этот README не является утверждением о production readiness. Точные параметры лимитов, таймаутов и Circuit Breaker следует сверять с текущим `application.yml`.
-
 ## Технологии
 
 - Java 21, Spring Boot 4.1.1, Spring Cloud Gateway (WebFlux), Spring Security OAuth2 Resource Server.
-- Keycloak — выпуск JWT; Redis — распределённый rate limiting.
-- Resilience4j — Circuit Breaker; Spring Boot Actuator + Micrometer — метрики.
+- Keycloak — выпуск JWT;
+- Redis — распределённый rate limiting.
+- Resilience4j — Circuit Breaker;
+- Spring Boot Actuator + Micrometer — метрики.
 - Prometheus и Grafana — сбор и визуализация метрик.
 - Micrometer Tracing / OpenTelemetry → Grafana Tempo — распределённая трассировка (distributed tracing).
 
@@ -27,8 +27,6 @@ API Gateway — единая точка входа для HTTP API TicketCraft. 
 | GET | `/actuator/prometheus` | Public для локальной разработки | Экспорт метрик; **ограничить доступ вне dev** |
 | GET | `/actuator/metrics` и `/actuator/metrics/**` | **Не разрешён** текущим `GatewaySecurityConfig` | Endpoint включён в exposure, но доступ блокируется политикой `denyAll` |
 
-> Таблица отражает правила авторизации Gateway. Детальные HTTP-коды и JSON-схемы бизнес-ответов документируются в API соответствующих сервисов.
-
 ## Безопасность
 
 - JWT валидируется Spring Security Resource Server с использованием настроенного Keycloak issuer/JWK.
@@ -46,8 +44,6 @@ API Gateway — единая точка входа для HTTP API TicketCraft. 
 - Доступный frontend заголовок ответа: `X-Correlation-ID`.
 - Preflight cache (`maxAge`): 3600 секунд.
 - Конфигурация CORS находится в Spring Security.
-
-Проверено: разрешённый preflight → 200; неизвестный Origin → 403; обычный GET получает CORS-заголовки.
 
 ## Resilience
 
@@ -110,14 +106,12 @@ Gateway принимает входящий `X-Correlation-ID` либо гене
 
 ## Observability
 
-- `GET /actuator/health` — проверено: HTTP 200, `status=UP`.
-- `GET /actuator/prometheus` — проверена выдача JVM/HTTP/Resilience4j-метрик.
+- `GET /actuator/health` — HTTP 200, `status=UP`.
+- `GET /actuator/prometheus` — выдача JVM/HTTP/Resilience4j-метрик.
 - Prometheus опрашивает `host.docker.internal:8080/actuator/prometheus` с job `api-gateway` (локальный запуск Gateway на Windows, Prometheus в Docker).
 - Grafana использует provisioned Prometheus datasource с UID `prometheus`.
 - Дашборд: `observability/grafana/dashboards/api-gateway.json`; автоматически подхватывается Grafana provisioning.
-- Проверено в Grafana: `up{job="api-gateway"} = 1`; доступны метрики `catalogCircuitBreaker` и `orderCircuitBreaker`.
-- На `/actuator/prometheus` проверены метрики `resilience4j_circuitbreaker_state`, `resilience4j_circuitbreaker_calls_seconds_count` и `resilience4j_circuitbreaker_not_permitted_calls_total` для Order.
-- `metrics` присутствует в `management.endpoints.web.exposure.include`, но текущий `GatewaySecurityConfig` **не разрешает** `/actuator/metrics/**`; анонимный доступ блокируется. `prometheus` разрешён для локального окружения.
+- D Grafana: `up{job="api-gateway"} = 1`; доступны метрики `catalogCircuitBreaker` и `orderCircuitBreaker`.
 
 ### Distributed Tracing: OpenTelemetry → Tempo
 
@@ -128,9 +122,7 @@ Gateway принимает входящий `X-Correlation-ID` либо гене
 - `management.opentelemetry.tracing.export.otlp.endpoint: http://localhost:4318/v1/traces` — OTLP HTTP экспорт трассировок в Tempo (порт 4318 опубликован в `docker-compose.yml`, приёмник задан в `observability/tempo/tempo.yml`).
 - `management.otlp.metrics.export.enabled: false` — OTLP **метрики** не отправляются в Tempo; для метрик остаётся Prometheus. Это устраняет `404` на `/v1/metrics`.
 
-**Проверено вручную 21.10.2026:** логи Gateway содержат Trace ID и Span ID; в Grafana → Explore → Tempo найдена трассировка `GET /api/v1/catalog/events` по Trace ID `d2c0478768f4cad70492744c55bfc859`. Трассировка включала **14 spans**, в том числе `api-gateway`, `catalog-service`, операции Spring Security и Redis. Это подтверждает сквозную передачу trace-контекста **Gateway → Catalog** и успешный экспорт в Tempo. Общая длительность зафиксированного запроса — около 490 мс. Время отдельных вложенных spans нельзя суммировать.
-
-`X-Correlation-ID` — отдельный прикладной идентификатор запроса (UUID/переданное значение); **он не равен** OpenTelemetry `traceId`. Trace ID — 32 hex-символа, Span ID — 16 hex-символов. Сейчас оба механизма существуют параллельно. Связь между ними в structured logs ещё предстоит сделать.
+`X-Correlation-ID` — отдельный прикладной идентификатор запроса (UUID/переданное значение); **он не равен** OpenTelemetry `traceId`. Trace ID — 32 hex-символа, Span ID — 16 hex-символов. Сейчас оба механизма существуют параллельно.
 
 Для поиска: Grafana `http://localhost:3000` → **Explore** → datasource **Tempo** → поиск по Trace ID. Retention Tempo в локальной конфигурации: `1h`; старые traces могут исчезать.
 
@@ -207,8 +199,3 @@ mvn -pl api-gateway -am test
 - `ipKeyResolver` берёт `remoteAddress`, а не проверенный клиентский IP из доверенного proxy. При запуске за reverse proxy/Kubernetes Ingress это может приводить к общему лимиту на IP прокси. Нужна отдельная настройка доверенных forwarded headers.
 - `/fallback/**` доступен извне из-за `permitAll`; желательно закрыть прямой вызов fallback, сохранив внутренний `forward:`. `/debug/slow` сейчас публичен.
 - В текущей YAML-конфигурации на обоих маршрутах фильтр `CircuitBreaker` объявлен **перед** `RequestRateLimiter`. Проверить порядок выполнения фильтров и желаемую семантику: rate limit обычно выгоднее применять до обращения к downstream/CB.
-- Верифицированное восстановление Order CB: `CLOSED → OPEN → CLOSED`; `HALF_OPEN` как отдельное состояние в метриках непосредственно не зафиксировано.
-
-## Границы ответственности
-
-Gateway отвечает за edge concerns (routing, authentication, throttling, resilience, observability). Авторизация доступа к конкретному заказу, идемпотентность создания заказа, резервирование билета, оплата и Saga выполняются в бизнес-сервисах; Gateway не должен подменять их проверки.

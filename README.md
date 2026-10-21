@@ -1,829 +1,131 @@
 # Ticket Craft
 
-Учебный проект системы бронирования и покупки билетов, построенный в виде набора микросервисов.
+**Ticket Craft** — учебный backend-проект системы бронирования и покупки билетов на **Java 21 / Spring Boot 4** для исследование на практике микросервисную архитектуру распределённых систем, согласованность данных, конкурентное резервирование.
 
-Проект предназначен не только для демонстрации Spring Boot и Kafka, но и как практическая площадка для изучения проблем, которые возникают в распределённых системах:
+## Что интересно с технической точки зрения
 
-- конкурентное бронирование одного ресурса;
-- согласованность данных между микросервисами;
-- Kafka и асинхронное взаимодействие;
-- идемпотентность;
-- транзакции;
-- N+1;
-- работа с PostgreSQL под нагрузкой;
-- отказоустойчивость;
-- observability;
-- подготовка приложения к highload.
-
-> **Статус проекта:** учебный production-like проект.
-> Некоторые механизмы намеренно реализованы в упрощённом виде и будут последовательно улучшаться в рамках roadmap.
-
----
+- **Database per Service:** четыре отдельные PostgreSQL-базы для каталога, заказов, платежей и уведомлений.
+- **Асинхронная Saga:** заказ проходит резервирование билета, оплату и подтверждение; для неуспешных сценариев предусмотрены компенсационные команды.
+- **Transactional Outbox:** бизнес-изменения и исходящие события фиксируются в одной транзакции БД, затем отдельный publisher отправляет сообщения в Kafka.
+- **Конкурентное бронирование:** атомарное изменение состояния билета на стороне PostgreSQL, защита от повторных команд.
+- **Идемпотентность:** `Idempotency-Key` для создания заказов, персистентный учёт обработанных событий у отдельных Kafka consumers.
+- **Security:** Keycloak, JWT/OAuth2 Resource Server, проверка scopes и владельца заказа.
+- **Resilience и observability:** rate limiting с использованием Redis, Circuit Breaker в Gateway, Actuator, Prometheus, Grafana и OpenTelemetry/Tempo.
 
 ## Архитектура
 
-Система состоит из трёх микросервисов:
-
-- `catalog-service` — каталог мероприятий и билетов;
-- `order-service` — создание заказов;
-- `notification-service` — обработка событий заказов и отправка уведомлений.
-
-Каждый сервис владеет собственной базой данных.
-
-```text
-                         ┌──────────────────┐
-                         │      Client      │
-                         └────────┬─────────┘
-                                  │
-                    ┌─────────────┴─────────────┐
-                    │                           │
-                    ▼                           ▼
-          ┌──────────────────┐        ┌──────────────────┐
-          │ catalog-service  │◄──────►│   order-service  │
-          │     :8081        │  REST  │      :8082       │
-          └────────┬─────────┘        └───────┬──────────┘
-                   │                          │
-                   ▼                          ▼
-          ┌──────────────────┐       ┌───────────────────┐
-          │   catalog_db     │       │     order_db      │
-          │   PostgreSQL     │       │    PostgreSQL     │
-          └──────────────────┘       └─────────┬─────────┘
-                                               │
-                                               │ Kafka
-                                               ▼
-                                     ┌────────────────────┐
-                                     │ notification-service│
-                                     │       :8083        │
-                                     └────────────────────┘
+```mermaid
+flowchart TD
+    Client[HTTP client] --> GW[API Gateway :8080]
+    GW --> CAT[Catalog Service :8081]
+    GW --> ORD[Order Service :8082]
+    ORD <--> K[(Kafka)]
+    CAT <--> K
+    PAY[Payment Service :8084] <--> K
+    NOT[Notification Service :8083] <-- K
+    PAY --> Provider[External payment provider]
+    CAT --> CDB[(catalog_db)]
+    ORD --> ODB[(order_db)]
+    PAY --> PDB[(payment_db)]
+    NOT --> NDB[(notification_db)]
+    GW --> Redis[(Redis)]
+    GW -. JWT .-> KC[Keycloak]
 ```
 
-### Database-per-Service
+`docker-compose.yml` поднимает **инфраструктуру**, но не сами Java-приложения: их нужно запускать отдельно. `common-dto` — Maven-библиотека, а не сетевой сервис.
 
-Каждый микросервис имеет собственную PostgreSQL database.
+## Модули и подробная документация
 
-```text
-catalog-service  ──► catalog_db
-order-service    ──► order_db
-```
+| Модуль | Назначение | README |
+|---|---|---|
+| `api-gateway` | Маршрутизация, JWT, Redis rate limiting, Circuit Breaker | [Документация](api-gateway/README.md) |
+| `catalog-service` | Каталог мероприятий, билеты, резервирование и подтверждение | [Документация](catalog-service/README.md) |
+| `order-service` | HTTP API заказов, идемпотентность, оркестрация Saga | [Документация](order-service/README.md) |
+| `payment-service` | Обработка запросов оплаты и возврата через внешний платежный провайдер | [Документация](payment-service/README.md) |
+| `notification-service` | Обработка событий подтверждённых заказов | [Документация](notification-service/README.md) |
+| `common-dto` | Общие контракты Kafka-сообщений и состояния | [Документация](common-dto/README.md) |
 
-Сервисы не используют общие таблицы и не обращаются напрямую к базе данных другого сервиса.
+## Основной сценарий
 
----
+1. Клиент вызывает `POST /api/v1/orders` с `ticketId`, JWT и заголовком `Idempotency-Key`.
+2. `order-service` создаёт заказ, состояние Saga и команду резервирования в outbox.
+3. Команда поступает через Kafka в `catalog-service`; билет резервируется атомарным обновлением в БД.
+4. Результат резервирования возвращается через Kafka. Цена и идентификатор мероприятия берутся **из каталога**, а не из клиентского запроса.
+5. `order-service` отправляет запрос на оплату через outbox/Kafka; `payment-service` обращается к внешнему HTTP payment provider.
+6. После успешной оплаты выполняется подтверждение билета; при неуспешных сценариях запускаются предусмотренные компенсации (освобождение резерва / возврат оплаты).
+7. После подтверждения заказа событие `OrderEvent` поступает в `notification-service`.
 
-## Технологический стек
+Это **асинхронный процесс**: `201 Created` означает создание заказа, а не завершение покупки. Текущий статус доступен через `GET /api/v1/orders/{orderId}`.
 
-| Технология | Использование |
-|---|---|
-| Java 21 | основной язык |
-| Spring Boot 4 | backend framework |
-| Spring Web | REST API |
-| Spring Data JPA | работа с каталогом |
-| Spring Data JDBC | работа с заказами |
-| Spring Kafka | взаимодействие через Kafka |
-| PostgreSQL 16 | persistent storage |
-| Apache Kafka | event-driven communication |
-| Maven | сборка проекта |
-| Docker Compose | локальная инфраструктура |
-| Actuator | health/metrics endpoints |
-| HikariCP | connection pool |
+## Стек
 
----
+Java 21, Spring Boot 4.1.1, Spring MVC, Spring Cloud Gateway (WebFlux), Spring Security, Spring Data JPA/JDBC, Spring Kafka, PostgreSQL 16, Flyway, Apache Kafka, Redis, Keycloak, Maven, Docker Compose, JUnit/Mockito, Spring Boot Actuator, Micrometer, Prometheus, Grafana, OpenTelemetry/Tempo.
 
-## Структура проекта
+## Локальный запуск (Windows / PowerShell)
 
-```text
-ticket-craft/
-│
-├── common-dto/
-│
-├── catalog-service/
-│   └── src/main/
-│       ├── java/
-│       └── resources/
-│           ├── application.yml
-│           ├── application-local.yml
-│           └── application-prod.yml
-│
-├── order-service/
-│   └── src/main/
-│       ├── java/
-│       └── resources/
-│           ├── application.yml
-│           ├── application-local.yml
-│           └── application-prod.yml
-│
-├── notification-service/
-│   └── src/main/
-│       ├── java/
-│       └── resources/
-│           ├── application.yml
-│           ├── application-local.yml
-│           └── application-prod.yml
-│
-├── docker-compose.yml
-├── pgadmin-servers.json
-├── pom.xml
-└── README.md
-```
-
----
-
-# Сервисы
-
-## catalog-service
-
-Отвечает за:
-
-- мероприятия;
-- билеты;
-- доступность билетов;
-- резервирование билета.
-
-Порт:
-
-```text
-8081
-```
-
-Основная база:
-
-```text
-catalog_db
-```
-
----
-
-## order-service
-
-Отвечает за:
-
-- создание заказа;
-- хранение заказа;
-- взаимодействие с `catalog-service`;
-- публикацию событий заказа в Kafka.
-
-Порт:
-
-```text
-8082
-```
-
-Основная база:
-
-```text
-order_db
-```
-
----
-
-## notification-service
-
-Получает события из Kafka и обрабатывает их.
-
-Порт:
-
-```text
-8083
-```
-
-Основной Kafka consumer group:
-
-```text
-notification-group
-```
-
----
-
-# Security
-
-`catalog-service` и `order-service` работают как OAuth2 Resource Server и проверяют JWT, подписанные внешним Authorization Server. TicketCraft не хранит пароли пользователей и не выпускает access tokens самостоятельно.
-
-JWT должен проходить проверку подписи, `iss`, `exp`/`nbf` и audience `ticketcraft-api`. Для production задаются:
-
-```text
-JWT_ISSUER_URI=https://idp.example.com
-JWT_JWK_SET_URI=https://idp.example.com/.well-known/jwks.json
-JWT_AUDIENCE=ticketcraft-api
-```
-
-Используемые scopes:
-
-```text
-orders.write   — создание заказа
-orders.read    — чтение собственного заказа
-metrics.read   — доступ к /actuator/prometheus
-```
-
-`GET /api/v1/catalog/**`, `/actuator/health` и `/actuator/info` доступны без токена. Остальные неизвестные HTTP endpoints закрываются fail-closed.
-
-Для заказа JWT также обязан содержать claim `user_id` с положительным числовым идентификатором пользователя. `userId` больше не принимается из request body.
-
-`eventId` и `price` вообще не принимаются от клиента при создании заказа. Клиент передаёт только `ticketId`; после успешной резервации `catalog-service` публикует авторитетные `eventId` и `price` из `catalog_db`, а `order-service` записывает их в заказ до создания `PaymentRequestedEvent`.
-
----
-
-## Совместимость `TicketReservedEvent` при развёртывании
-
-`TicketReservedEvent` содержит авторитетные `eventId` и `price`, полученные
-`catalog-service` из `catalog_db`.
-
-Новый `order-service` намеренно не продолжает saga, если эти поля отсутствуют
-или `price` некорректен. Это fail-closed поведение предотвращает создание
-`PaymentRequestedEvent` с ценой, полученной от клиента.
-
-Изменение формата `TicketReservedEvent` несовместимо со старыми сообщениями,
-которые были созданы до добавления `eventId` и `price`. Поэтому при rolling
-deployment сервисы должны обновляться в следующем порядке:
-
-1. Сначала развернуть новую версию `catalog-service`.
-2. Убедиться, что старые экземпляры `catalog-service` остановлены и больше
-   не публикуют старую версию `TicketReservedEvent`.
-3. Дождаться обработки сообщений в `ticket-reservation-results`, созданных
-   старой версией `catalog-service`.
-4. После этого развернуть новую версию `order-service`.
-
-Нельзя сначала разворачивать новый `order-service`, пока в
-`ticket-reservation-results` могут находиться события старого формата:
-новый consumer намеренно отклонит такие сообщения, после чего они пройдут
-настроенный retry/DLT flow.
-
-Для текущей версии TicketCraft отдельная схема версионирования событий или
-Schema Registry не вводятся. Совместимость этого изменения обеспечивается
-порядком deployment.
-
-# API
-
-## Получить каталог мероприятий
-
-```http
-GET /api/v1/catalog/events
-```
-
-Публичный endpoint. Возвращает краткий список мероприятий.
-
-## Получить мероприятие с билетами
-
-```http
-GET /api/v1/catalog/events/{eventId}
-```
-
-Публичный endpoint. Возвращает детали мероприятия и текущие `status`/`price` билетов. Детальный ответ намеренно не кешируется в Redis, чтобы не отдавать устаревшую доступность билетов после reservation.
-
-## Создать заказ
-
-```http
-POST /api/v1/orders
-Authorization: Bearer <JWT with orders.write>
-Idempotency-Key: <unique key>
-Content-Type: application/json
-```
-
-```json
-{
-  "ticketId": "22222222-2222-2222-2222-222222222222"
-}
-```
-
-`userId` берётся из JWT claim `user_id`. `eventId` и цена получаются только от `catalog-service`. Ответ `201 Created` содержит `Location: /api/v1/orders/{orderId}`. Saga продолжается асинхронно через Kafka и Transactional Outbox.
-
-## Получить текущее состояние заказа
-
-```http
-GET /api/v1/orders/{orderId}
-Authorization: Bearer <JWT with orders.read>
-```
-
-Endpoint возвращает только заказ текущего пользователя (`user_id` из JWT) и используется клиентом для чтения результата асинхронной saga.
-
-`payment-service` и `notification-service` не имеют business HTTP API: они являются внутренними Kafka consumers. Actuator endpoints остаются инфраструктурными endpoints.
-
-# Текущий flow создания заказа
-
-```text
-Client
-  │ POST /api/v1/orders {ticketId}
-  ▼
-order-service
-  │ Order + OrderSaga + outbox ReserveTicket
-  ▼
-Kafka: ticket-reservation-commands
-  ▼
-catalog-service
-  │ atomic reservation + outbox TicketReserved/TicketReservationFailed
-  ▼
-Kafka: ticket-reservation-results
-  ▼
-order-service
-  │ outbox PaymentRequested
-  ▼
-Kafka: payment-requests
-  ▼
-payment-service
-  │ external payment provider + payment outbox
-  ▼
-Kafka: payment-results
-  ▼
-order-service
-  │ Order=CONFIRMED, Saga=COMPLETED + outbox OrderConfirmed
-  ▼
-Kafka: order-events
-  ▼
-notification-service
-```
-
-`payment-service` вызывает внешний payment provider. В production `PAYMENT_PROVIDER_BASE_URL` обязателен. Business decline должен возвращаться как успешный HTTP response provider-а со статусом `DECLINED`; transport/5xx ошибки считаются техническими и обрабатываются Kafka retry/DLT.
-
-# Kafka
-
-Kafka используется для асинхронного взаимодействия между сервисами.
-
-Текущая схема:
-
-```text
-order-service
-      │
-      │ OrderEvent
-      ▼
-   Kafka
-      │
-      ▼
-notification-service
-```
-
-Producer использует:
-
-```yaml
-acks: all
-enable-idempotence: true
-```
-
-Consumer использует:
-
-```text
-manual acknowledgement
-```
-
-и имеет базовую защиту от повторной обработки событий.
-
-> Текущая реализация consumer idempotency хранит обработанные event ID в памяти процесса. Это означает, что информация теряется после restart. Персистентная идемпотентность будет добавлена в рамках отдельной задачи roadmap.
-
----
-
-# PostgreSQL
-
-Используются две независимые базы данных.
-
-### Catalog
-
-```text
-localhost:5432
-database: catalog_db
-```
-
-### Order
-
-```text
-localhost:5433
-database: order_db
-```
-
-Для локальной разработки PostgreSQL запускается через Docker Compose.
-
----
-
-# Конфигурация
-
-Разделена на:
-
-```text
-application.yml
-application-local.yml
-application-prod.yml
-```
-
-### application.yml
-
-Содержит общие настройки приложения:
-
-- имя сервиса;
-- порт;
-- Actuator;
-- базовые logging settings;
-- настройки, одинаковые для разных окружений.
-
-### application-local.yml
-
-Используется для локальной разработки.
-
-Например:
-
-```text
-localhost:5432
-localhost:5433
-localhost:9092
-```
-
-### application-prod.yml
-
-Содержит production configuration contract.
-
-Адреса инфраструктуры и credentials передаются через environment variables:
-
-```text
-CATALOG_DB_URL
-CATALOG_DB_USERNAME
-CATALOG_DB_PASSWORD
-ORDER_DB_URL
-ORDER_DB_USERNAME
-ORDER_DB_PASSWORD
-KAFKA_BOOTSTRAP_SERVERS
-PAYMENT_PROVIDER_BASE_URL
-```
-
-Секреты не должны храниться в Git.
-
----
-
-# Spring Profiles
-
-Для локального запуска используется профиль:
-
-```text
-local
-```
-
-Production:
-
-```text
-prod
-```
-
-Например:
-
-```bash
-SPRING_PROFILES_ACTIVE=local
-```
-
-или:
-
-```bash
-SPRING_PROFILES_ACTIVE=prod
-```
-
-По умолчанию используется `local`, чтобы проект можно было запустить без дополнительной конфигурации.
-
----
-
-# Переменные окружения
-
-В репозитории должен находиться только пример конфигурации:
-
-```text
-.env.example
-```
-
-Например:
-
-```dotenv
-CATALOG_DB_NAME=catalog_db
-CATALOG_DB_USERNAME=postgres
-CATALOG_DB_PASSWORD=postgres
-
-ORDER_DB_NAME=order_db
-ORDER_DB_USERNAME=postgres
-ORDER_DB_PASSWORD=postgres
-
-PGADMIN_EMAIL=admin@example.com
-PGADMIN_PASSWORD=change-me
-
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-```
-
-Файл с реальными credentials:
-
-```text
-.env
-```
-
-не должен попадать в Git.
-
----
-
-# Database schema
-
-На текущем этапе схема базы данных создаётся средствами приложения.
-
-Для production configuration:
-
-```yaml
-spring:
-  jpa:
-    hibernate:
-      ddl-auto: validate
-```
-
-Hibernate не должен создавать или удалять production schema.
-
-Также отключён автоматический SQL initialization:
-
-```yaml
-spring:
-  sql:
-    init:
-      mode: never
-```
-
----
-
-# Connection Pool
-
-Для работы с PostgreSQL используется HikariCP.
-
-Параметры pool являются конфигурируемыми.
-
-Например:
-
-```yaml
-spring:
-  datasource:
-    hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:30}
-      minimum-idle: ${DB_POOL_MIN_IDLE:10}
-      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
-```
-
-Размер connection pool не следует увеличивать бездумно.
-
-Например, если запустить:
-
-```text
-10 application replicas
-×
-30 DB connections
-=
-300 connections
-```
-
-это уже необходимо сопоставлять с возможностями PostgreSQL.
-
----
-
-# Docker Compose
-
-Локальная инфраструктура запускается через:
-
-```bash
-docker compose up -d
-```
-
-Остановка:
-
-```bash
-docker compose down
-```
-
-Проверка контейнеров:
-
-```bash
-docker compose ps
-```
-
----
-
-# Локальная инфраструктура
-
-Docker Compose поднимает:
-
-```text
-┌──────────────────────┐
-│ PostgreSQL           │
-│ catalog_db           │
-│ :5432                │
-└──────────────────────┘
-
-┌──────────────────────┐
-│ PostgreSQL           │
-│ order_db             │
-│ :5433                │
-└──────────────────────┘
-
-┌──────────────────────┐
-│ Kafka                │
-│ :9092                │
-└──────────────────────┘
-
-┌──────────────────────┐
-│ Kafka UI             │
-└──────────────────────┘
-
-┌──────────────────────┐
-│ pgAdmin              │
-└──────────────────────┘
-```
-
----
-
-# Запуск проекта
-
-## 1. Требования
-
-Необходимы:
-
-- JDK 21;
-- Docker;
-- Docker Compose;
-- Maven.
-
-Проверить Java:
-
-```bash
-java -version
-```
-
-Ожидается Java 21.
-
----
-
-## 2. Запустить инфраструктуру
-
-```bash
-docker compose up -d
-```
-
-Проверить:
-
-```bash
-docker compose ps
-```
-
----
-
-## 3. Запустить catalog-service
-
-```bash
-./mvnw -pl catalog-service spring-boot:run
-```
-
-Windows:
+Требуются **JDK 21**, Docker с Docker Compose и доступ к Maven-зависимостям. Для payment-flow дополнительно нужен **внешний payment provider**, совместимый с контрактом `payment-service`; он **не включён** в `docker-compose.yml`.
 
 ```powershell
-mvnw.cmd -pl catalog-service spring-boot:run
+Copy-Item .env.example .env
+# При необходимости отредактируйте .env
+
+docker compose up -d
+docker compose ps
+
+.\mvnw.cmd clean install
 ```
 
----
+После сборки запустите приложения **в отдельных терминалах PowerShell** из корня репозитория:
 
-## 4. Запустить order-service
-
-```bash
-./mvnw -pl order-service spring-boot:run
+```powershell
+.\mvnw.cmd -pl catalog-service spring-boot:run
+.\mvnw.cmd -pl order-service spring-boot:run
+.\mvnw.cmd -pl payment-service spring-boot:run
+.\mvnw.cmd -pl notification-service spring-boot:run
+.\mvnw.cmd -pl api-gateway spring-boot:run
 ```
 
----
+Для локального окружения проверьте настройки `application-local.yml` каждого сервиса, параметры Keycloak и адрес payment provider. Запуск приложений и интеграционные сценарии **не проверялись** при подготовке этой документации.
 
-## 5. Запустить notification-service
+| Компонент | Локальный адрес |
+|---|---|
+| API Gateway | `http://localhost:8080` |
+| Catalog | `http://localhost:8081` |
+| Order | `http://localhost:8082` |
+| Notification (Actuator) | `http://localhost:8083` |
+| Payment (Actuator) | `http://localhost:8084` |
+| Keycloak | `http://localhost:9000` |
+| Kafka UI | `http://localhost:8070` |
+| pgAdmin | `http://localhost:5050` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
+| Tempo | `http://localhost:3200` |
 
-```bash
-./mvnw -pl notification-service spring-boot:run
+PostgreSQL: catalog `5432`, order `5433`, notification `5434`, payment `5435`; Kafka `9092`, Redis `6379`. Значения и учётные данные задаются в `.env` (пример — `.env.example`).
+
+### HTTP API
+
+| Метод | Путь через Gateway | Назначение |
+|---|---|---|
+| `GET` | `/api/v1/catalog/events` | Список мероприятий |
+| `GET` | `/api/v1/catalog/events/{eventId}` | Мероприятие и билеты |
+| `POST` | `/api/v1/orders` | Создание заказа (`JWT`, `Idempotency-Key`, JSON `{"ticketId":"<uuid>"}`) |
+| `GET` | `/api/v1/orders/{orderId}` | Статус собственного заказа (`JWT`) |
+
+## Тесты и наблюдаемость
+
+В проекте есть unit- и интеграционные тесты, в том числе для Saga, idempotency, outbox, резервирования и Kafka. Для отдельных интеграционных тестов требуется Docker/Testcontainers. Пример запуска:
+
+```powershell
+.\mvnw.cmd test
 ```
 
----
+Метрики доступны через Actuator с учётом security-настроек конкретного сервиса. Конфигурации Prometheus, Grafana и Tempo находятся в `observability/`. Trace context через durable outbox **не сохраняется автоматически**: асинхронная публикация может начать новую трассу.
 
-# Health Checks
+## Известные ограничения
 
-Для сервисов включён Spring Boot Actuator.
-
-Основной endpoint:
-
-```http
-GET /actuator/health
-```
-
-Например:
-
-```bash
-curl http://localhost:8081/actuator/health
-```
-
-Также подготовлен endpoint для Prometheus:
-
-```http
-GET /actuator/prometheus
-```
-
----
-
-# Текущие архитектурные паттерны
-
-Проект демонстрирует следующие подходы:
-
-### Database-per-Service
-
-Каждый сервис владеет собственной базой.
-
-### REST
-
-Синхронное взаимодействие:
-
-```text
-order-service → catalog-service
-```
-
-### Event-Driven Architecture
-
-Асинхронное взаимодействие:
-
-```text
-order-service → Kafka → notification-service
-```
-
-### Pessimistic Locking
-
-Текущий механизм защиты от одновременного бронирования одного билета.
-
-### N+1 demonstration
-
-В `catalog-service` специально продемонстрирован N+1 problem.
-
-### EntityGraph
-
-Есть вариант загрузки связанных сущностей без N+1.
-
-### Kafka Producer Idempotence
-
-Producer настроен с:
-
-```yaml
-enable-idempotence: true
-```
-
-### Manual Consumer Acknowledgement
-
-Kafka consumer использует manual acknowledgement.
-
----
-
-## Observability
-
-TicketCraft использует Spring Boot Actuator, Micrometer, Prometheus и OpenTelemetry для production-oriented observability baseline.
-
-### Метрики
-
-Каждый runtime-сервис публикует метрики через `/actuator/prometheus` и добавляет low-cardinality tag `application` со значением `spring.application.name`.
-
-Для `catalog-service` и `order-service` включены histogram buckets для `http.server.requests`, чтобы p95/p99 можно было агрегировать между несколькими экземплярами приложения. Дополнительно публикуются бизнес-метрики:
-
-- `ticketcraft.outbox.events` — успешные и неуспешные публикации outbox events с bounded tags `event_type` и `result`;
-- `ticketcraft.outbox.publish.duration` — время публикации outbox event;
-- `ticketcraft.saga.completed`, `ticketcraft.saga.failed`, `ticketcraft.saga.compensated` — terminal outcomes order saga;
-- `ticketcraft.consumer.duplicates` — повторные Kafka messages, отброшенные persistent consumer idempotency;
-- существующие rate-limit metrics `catalog-service` сохраняются.
-
-Metric labels должны содержать только значения с ограниченной кардинальностью. В labels нельзя добавлять `userId`, `orderId`, `ticketId`, `reservationId`, `messageId`, `traceId`, UUID или другие business identifiers. Такие значения должны оставаться в logs/traces.
-
-### Distributed tracing
-
-Все четыре runtime-сервиса используют OpenTelemetry через `spring-boot-starter-opentelemetry`. Traces экспортируются по OTLP/HTTP в Tempo. По умолчанию local profile использует sampling `1.0`, production — `0.1`; оба значения можно переопределить через `TRACING_SAMPLING_PROBABILITY`.
-
-Kafka observation включён для `KafkaTemplate` и listener containers, поэтому producer/consumer spans и trace-context propagation создаются Spring Kafka/Micrometer автоматически.
-
-Transactional outbox является намеренной асинхронной границей: запись outbox создаётся в бизнес-транзакции, а отдельный scheduler публикует её позже. Trace context исходного HTTP request в durable outbox row не сохраняется, поэтому публикация из outbox может начинать новую trace chain. Для correlation через эту границу используются business IDs в structured logs. Сохранять `traceparent` в бизнес-схеме БД в текущем scope проекта намеренно не стали.
-
-### Logging
-
-Local profile оставляет человекочитаемые console logs. В correlation pattern автоматически выводятся `application`, `traceId` и `spanId`. Production profile использует Spring Boot structured logging в ECS JSON format, куда также попадают MDC correlation fields.
-
-### Health probes
-
-Во всех сервисах включены:
-
-```text
-/actuator/health
-/actuator/health/liveness
-/actuator/health/readiness
-```
-
-Эти endpoints будут использоваться Kubernetes probes в следующей infrastructure issue.
-
-### Security метрик
-
-В local profile `/actuator/prometheus` у `catalog-service` и `order-service` открыт для локального Prometheus (`ticketcraft.security.metrics-public=true`). В production значение принудительно `false`, и endpoint остаётся защищён authority `SCOPE_metrics.read`. Health/info остаются public согласно security baseline.
-
-### Локальный observability stack
-
-`docker compose up -d` поднимает:
-
-```text
-Prometheus  http://localhost:9090
-Grafana     http://localhost:3000
-Tempo       http://localhost:3200
-OTLP HTTP   http://localhost:4318
-OTLP gRPC   localhost:4317
-```
-
-Prometheus scrape-конфигурация находится в `observability/prometheus/prometheus.yml`. Grafana автоматически получает Prometheus и Tempo datasources, а dashboard `TicketCraft Overview` provisioned из `observability/grafana/dashboards/ticketcraft-overview.json`.
-
-Dashboard показывает service availability, HTTP request/error rate, p95 latency, outbox metrics, saga outcomes, duplicate consumer messages, JVM heap и HikariCP connections.
-
-### Production ограничения
-
-Локальные Prometheus/Grafana/Tempo containers предназначены только для development/demo. В production telemetry backend должен быть изолирован сетью и защищён отдельной инфраструктурной политикой. Tempo local filesystem storage не является production storage backend.
+- Это локальная демонстрационная инфраструктура (один Kafka broker, development-настройки Keycloak и наблюдаемости).
+- Внешний payment provider требуется отдельно; без него полный успешный платёжный сценарий не воспроизводится.
+- Gateway README фиксирует открытые задачи по защите диагностических маршрутов, метрик и согласованию авторизации `POST /api/v1/orders`.
+- Совместимость форматов Kafka-событий при rolling deployment требует отдельного контроля: `TicketReservedEvent` с `eventId`/`price` несовместим со старым форматом. См. [Catalog](catalog-service/README.md) и [Order](order-service/README.md).
+- Нагрузочные показатели, SLO и production readiness пока не заявлены.
