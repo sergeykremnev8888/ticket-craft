@@ -2,6 +2,7 @@ package ru.ticketcraft.gateway.exception.handler;
 
 import java.net.ConnectException;
 
+import org.springframework.cloud.gateway.filter.factory.SpringCloudCircuitBreakerFilterFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -30,6 +31,11 @@ public class GatewayExceptionHandler implements WebExceptionHandler {
 
         if (ex instanceof ConnectException) {
             response.setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+            return response.setComplete();
+        }
+
+        if (ex instanceof SpringCloudCircuitBreakerFilterFactory.CircuitBreakerStatusCodeException circuitBreakerStatusCodeException) {
+            response.setStatusCode(circuitBreakerStatusCodeException.getStatusCode());
             return response.setComplete();
         }
 

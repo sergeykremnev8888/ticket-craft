@@ -24,6 +24,9 @@ spring:
               predicates:
                 - Path=/api/v1/catalog/events,/api/v1/catalog/events/**
               filters:
+                - name: CircuitBreaker
+                  args:
+                    name: catalogCircuitBreaker
                 - name: RequestRateLimiter
                   args:
                     rate-limiter: "#{@resilientRateLimiter}"
@@ -31,6 +34,16 @@ spring:
                     '[redis-rate-limiter.replenishRate]': 10
                     '[redis-rate-limiter.burstCapacity]': 20
                     '[redis-rate-limiter.requestedTokens]': 1
+
+            - id: catalog-debug
+              uri: http://localhost:8081
+              predicates:
+                - Path=/debug/slow
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: catalogCircuitBreaker
+                    statusCodes: "503"
 
   security:
     oauth2:
@@ -45,6 +58,24 @@ spring:
       host: localhost
       port: 6379
       timeout: 500ms
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      catalogCircuitBreaker:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50
+
+  timelimiter:
+    instances:
+      catalogCircuitBreaker:
+        timeoutDuration: 4s
 
 ticketcraft:
   gateway:

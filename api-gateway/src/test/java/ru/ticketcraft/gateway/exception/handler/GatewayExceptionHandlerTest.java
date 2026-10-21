@@ -4,11 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.net.ConnectException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.cloud.gateway.filter.factory.SpringCloudCircuitBreakerFilterFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -67,5 +70,17 @@ public class GatewayExceptionHandlerTest {
 
         StepVerifier.create(result).expectErrorSatisfies(actual -> assertSame(exception, actual)).verify();
         assertNull(exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    public void shouldReturnSameStatusForCircuitBreakerStatusCodeException() {
+        SpringCloudCircuitBreakerFilterFactory.CircuitBreakerStatusCodeException exception =
+                mock(SpringCloudCircuitBreakerFilterFactory.CircuitBreakerStatusCodeException.class);
+        when(exception.getStatusCode()).thenReturn(HttpStatus.SERVICE_UNAVAILABLE);
+
+        Mono<Void> result = handler.handle(exchange, exception);
+        StepVerifier.create(result).verifyComplete();
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, exchange.getResponse().getStatusCode());
     }
 }

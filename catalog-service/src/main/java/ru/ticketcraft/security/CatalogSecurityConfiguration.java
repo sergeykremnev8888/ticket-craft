@@ -54,6 +54,7 @@ public class CatalogSecurityConfiguration {
                     }
                     authorize
                         .requestMatchers(HttpMethod.GET, "/api/v1/catalog/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/debug/slow").permitAll()
                         .anyRequest().denyAll();
                 })
                 .exceptionHandling(exceptions -> exceptions
