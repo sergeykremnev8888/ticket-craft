@@ -22,7 +22,9 @@ spring:
                 - name: RequestRateLimiter
                   args:
                     rate-limiter: "#{@resilientRateLimiter}"
-                    key-resolver: "#{@ipKeyResolver}"
+                    key-resolver: "#{@userKeyResolver}"
+                    deny-empty-key: true
+                    empty-key-status: FORBIDDEN
                     '[redis-rate-limiter.replenishRate]': 5
                     '[redis-rate-limiter.burstCapacity]': 10
                     '[redis-rate-limiter.requestedTokens]': 1
