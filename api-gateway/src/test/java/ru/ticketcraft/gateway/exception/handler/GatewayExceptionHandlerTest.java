@@ -24,13 +24,13 @@ public class GatewayExceptionHandlerTest {
 
     private GatewayExceptionHandler handler;
     private MockServerWebExchange exchange;
-    
+
     @BeforeEach
     public void setUp() {
         handler = new GatewayExceptionHandler();
         exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/debug/slow"));
     }
-    
+
     @Test
     public void shouldReturn503ForConnectionRefused() {
         ConnectException exception = new ConnectException("Connection refused");
