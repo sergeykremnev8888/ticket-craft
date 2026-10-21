@@ -2,87 +2,109 @@ package ru.ticketcraft.gateway.filter;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.web.server.WebFilterChain;
 
-import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class CorrelationIdFilterTest {
 
-    private static final String HEADER = "X-Correlation-ID";
+    private static final String HEADER = CorrelationIdFilter.HTTP_HEADER_CORRELATION_ID;
 
-    private CorrelationIdFilter filter;
-
-    @BeforeEach
-    void setUp() {
-        filter = new CorrelationIdFilter();
-    }
+    private final CorrelationIdFilter filter = new CorrelationIdFilter();
 
     @Test
     void shouldGenerateCorrelationIdWhenHeaderIsMissing() {
-        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/debug/slow"));
-
-        AtomicReference<String> downstreamId = new AtomicReference<>();
-
-        GatewayFilterChain chain = updatedExchange -> {
-            String id = updatedExchange.getRequest().getHeaders().getFirst(HEADER);
-
-            downstreamId.set(id);
-            return Mono.empty();
-        };
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        String responseId = exchange.getResponse().getHeaders().getFirst(HEADER);
-
-        assertNotNull(responseId);
-        assertDoesNotThrow(() -> UUID.fromString(responseId));
-        assertEquals(responseId, downstreamId.get());
+        assertGeneratedId();
     }
 
     @Test
-    void shouldPreserveIncomingCorrelationId() {
-        String incomingId = "request-123";
-
-        MockServerWebExchange exchange = MockServerWebExchange
-                .from(MockServerHttpRequest.get("/debug/slow").header(HEADER, incomingId));
-
-        AtomicReference<String> downstreamId = new AtomicReference<>();
-
-        GatewayFilterChain chain = updatedExchange -> {
-            downstreamId.set(updatedExchange.getRequest().getHeaders().getFirst(HEADER));
-
-            return Mono.empty();
-        };
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        assertEquals(incomingId, downstreamId.get());
-
-        assertEquals(incomingId, exchange.getResponse().getHeaders().getFirst(HEADER));
+    void shouldGenerateCorrelationIdWhenHeaderIsEmpty() {
+        assertGeneratedId("");
     }
 
     @Test
     void shouldGenerateCorrelationIdWhenHeaderIsBlank() {
-        MockServerWebExchange exchange = MockServerWebExchange
-                .from(MockServerHttpRequest.get("/debug/slow").header(HEADER, "   "));
+        assertGeneratedId("   ");
+    }
 
-        AtomicReference<String> downstreamId = new AtomicReference<>();
+    @Test
+    void shouldGenerateCorrelationIdWhenHeaderContainsSpaces() {
+        assertGeneratedId("request 123");
+    }
 
-        GatewayFilterChain chain = updatedExchange -> {
-            downstreamId.set(updatedExchange.getRequest().getHeaders().getFirst(HEADER));
+    @Test
+    void shouldGenerateCorrelationIdWhenHeaderIsTooLong() {
+        assertGeneratedId("a".repeat(129));
+    }
 
-            return Mono.empty();
+    @Test
+    void shouldGenerateCorrelationIdWhenHeaderHasMultipleValues() {
+        assertGeneratedId("request-111", "request-222");
+    }
+
+    @Test
+    void shouldPreserveValidCorrelationId() {
+        assertPreservedId("request-123_ABC.456");
+    }
+
+    @Test
+    void shouldPreserveCorrelationIdWithMaximumAllowedLength() {
+        assertPreservedId("a".repeat(128));
+    }
+
+    @Test
+    void shouldReplaceCorrelationIdProvidedByDownstream() {
+        String correlationId = "request-123";
+
+        MockServerWebExchange exchange = createExchange(correlationId);
+
+        WebFilterChain chain = updatedExchange -> {
+            updatedExchange.getResponse().getHeaders().add(HEADER, "downstream-id");
+
+            return updatedExchange.getResponse().setComplete();
+        };
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        assertEquals(List.of(correlationId), exchange.getResponse().getHeaders().get(HEADER));
+    }
+
+    private void assertGeneratedId(String... incomingIds) {
+        String actualId = executeFilter(incomingIds);
+
+        assertDoesNotThrow(() -> UUID.fromString(actualId));
+
+        for (String incomingId : incomingIds) {
+            assertNotEquals(incomingId, actualId);
+        }
+    }
+
+    private void assertPreservedId(String incomingId) {
+        assertEquals(incomingId, executeFilter(incomingId));
+    }
+
+    private String executeFilter(String... incomingIds) {
+        MockServerWebExchange exchange = createExchange(incomingIds);
+
+        AtomicReference<List<String>> downstreamIds = new AtomicReference<>();
+        AtomicReference<String> attributeId = new AtomicReference<>();
+
+        WebFilterChain chain = updatedExchange -> {
+            downstreamIds.set(updatedExchange.getRequest().getHeaders().get(HEADER));
+
+            attributeId.set(updatedExchange.getAttribute(HEADER));
+
+            return updatedExchange.getResponse().setComplete();
         };
 
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
@@ -90,30 +112,20 @@ class CorrelationIdFilterTest {
         String responseId = exchange.getResponse().getHeaders().getFirst(HEADER);
 
         assertNotNull(responseId);
-        assertDoesNotThrow(() -> UUID.fromString(responseId));
-        assertEquals(responseId, downstreamId.get());
+        assertEquals(List.of(responseId), downstreamIds.get());
+        assertEquals(responseId, attributeId.get());
+        assertEquals(List.of(responseId), exchange.getResponse().getHeaders().get(HEADER));
+
+        return responseId;
     }
 
-    @Test
-    void shouldReturnFirstCorrelationIdWhenHeaderIncludesMultiple() {
-        MockServerWebExchange exchange = MockServerWebExchange
-                .from(MockServerHttpRequest.get("/debug/slow").header(HEADER, "request-111").header(HEADER, "request-222"));
+    private MockServerWebExchange createExchange(String... incomingIds) {
+        var request = MockServerHttpRequest.get("/api/v1/catalog/events");
 
-        AtomicReference<List<String>> downstreamIds = new AtomicReference<>();
+        if (incomingIds.length > 0) {
+            request.header(HEADER, incomingIds);
+        }
 
-        GatewayFilterChain chain = updatedExchange -> {
-            downstreamIds.set(updatedExchange.getRequest()
-                    .getHeaders()
-                    .get(HEADER));
-
-            return Mono.empty();
-        };
-
-        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
-
-        String responseId = exchange.getResponse().getHeaders().getFirst(HEADER);
-
-        assertEquals("request-111", responseId);
-        assertEquals(List.of("request-111"), downstreamIds.get());
+        return MockServerWebExchange.from(request);
     }
 }

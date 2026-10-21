@@ -1,60 +1,73 @@
 package ru.ticketcraft.gateway.filter;
 
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
 
 import reactor.core.publisher.Mono;
 
+/**
+ * Добавляет идентификатор корреляции к запросу и ответу.
+ *
+ * <p>
+ * Выполняется перед Spring Security, поэтому идентификатор присутствует в том
+ * числе в ответах об отказе в доступе.
+ *
+ * <p>
+ * Принимает единственный непустой входящий идентификатор, содержащий не более
+ * 128 разрешённых символов. При отсутствии или некорректном значении генерирует
+ * UUID.
+ */
 @Component
-@Order(-100)
-public class CorrelationIdFilter implements GlobalFilter {
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class CorrelationIdFilter implements WebFilter {
 
-    private static final Logger log = LoggerFactory.getLogger(CorrelationIdFilter.class);
+    public static final String HTTP_HEADER_CORRELATION_ID = "X-Correlation-ID";
 
-    private static final String HTTP_HEADER_CORRELATION_ID = "X-Correlation-ID";
+    private static final Pattern VALID_ID = Pattern.compile("[A-Za-z0-9._-]{1,128}");
 
     @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String incomingId = exchange.getRequest().getHeaders().getFirst(HTTP_HEADER_CORRELATION_ID);
+    public Mono<Void> filter(ServerWebExchange exchange,
+                             WebFilterChain chain) {
+        String correlationId = resolveCorrelationId(exchange);
 
-        final String correlationId = (incomingId == null || incomingId.isBlank()) 
-                ? UUID.randomUUID().toString() : incomingId;
+        ServerHttpRequest request = exchange.getRequest()
+                                            .mutate()
+                                            .headers(headers -> headers.set(HTTP_HEADER_CORRELATION_ID, correlationId))
+                                            .build();
 
-        exchange.getResponse().getHeaders().set(HTTP_HEADER_CORRELATION_ID, correlationId);
+        ServerWebExchange updatedExchange = exchange.mutate().request(request).build();
 
-        ServerHttpRequest updatedRequest = exchange.getRequest().mutate()
-                .headers(headers -> headers.set(HTTP_HEADER_CORRELATION_ID, correlationId)).build();
+        updatedExchange.getAttributes().put(HTTP_HEADER_CORRELATION_ID, correlationId);
 
-        ServerWebExchange updatedExchange = exchange.mutate().request(updatedRequest).build();
+        updatedExchange.getResponse().beforeCommit(() -> {
+            updatedExchange.getResponse().getHeaders().set(HTTP_HEADER_CORRELATION_ID, correlationId);
 
-        long startTime = System.nanoTime();
-
-        return chain.filter(updatedExchange).doFinally(signalType -> {
-            long durationMs = TimeUnit.NANOSECONDS.toMillis(
-                    System.nanoTime() - startTime
-            );
-
-            HttpStatusCode status = updatedExchange.getResponse().getStatusCode();
-
-            log.info(
-                    "Gateway request: method={}, path={}, correlationId={}, status={}, durationMs={}",
-                    updatedRequest.getMethod(),
-                    updatedRequest.getURI().getRawPath(),
-                    correlationId,
-                    status,
-                    durationMs
-            );
+            return Mono.empty();
         });
+
+        return chain.filter(updatedExchange);
     }
 
+    private String resolveCorrelationId(ServerWebExchange exchange) {
+        List<String> values = exchange.getRequest().getHeaders().get(HTTP_HEADER_CORRELATION_ID);
+
+        if (values != null && values.size() == 1) {
+            String value = values.getFirst();
+
+            if (value != null && VALID_ID.matcher(value).matches()) {
+                return value;
+            }
+        }
+
+        return UUID.randomUUID().toString();
+    }
 }
