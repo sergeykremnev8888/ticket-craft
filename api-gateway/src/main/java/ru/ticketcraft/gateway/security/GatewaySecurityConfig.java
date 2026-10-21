@@ -2,6 +2,7 @@ package ru.ticketcraft.gateway.security;
 
 import java.util.List;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,6 +16,7 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebFluxSecurity
+@EnableConfigurationProperties(GatewayCorsProperties.class)
 public class GatewaySecurityConfig {
 
     @Bean
@@ -37,13 +39,13 @@ public class GatewaySecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource() {
+    CorsConfigurationSource corsConfigurationSource(GatewayCorsProperties сorsProperties) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-ID"));
-        config.setExposedHeaders(List.of("X-Correlation-ID"));
-        config.setMaxAge(3600L);
+        config.setAllowedOrigins(сorsProperties.allowedOrigins());
+        config.setAllowedMethods(сorsProperties.allowedMethods());
+        config.setAllowedHeaders(сorsProperties.allowedHeaders());
+        config.setExposedHeaders(сorsProperties.exposedHeaders());
+        config.setMaxAge(сorsProperties.maxAge());
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

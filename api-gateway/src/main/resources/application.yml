@@ -113,6 +113,21 @@ ticketcraft:
   gateway:
     rate-limiter:
       timeout: 500ms
+    cors:
+      allowed-origins:
+        - http://localhost:3000
+      allowed-methods:
+        - GET
+        - POST
+      allowed-headers:
+        - Authorization
+        - Content-Type
+        - X-Correlation-ID
+        - Idempotency-Key
+      exposed-headers:
+        - X-Correlation-ID
+        - Location
+      max-age: 1h
 
 management:
   otlp:
