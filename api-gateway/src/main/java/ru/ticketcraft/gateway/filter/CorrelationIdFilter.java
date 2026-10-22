@@ -1,5 +1,6 @@
 package ru.ticketcraft.gateway.filter;
 
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -30,6 +31,9 @@ import reactor.core.publisher.Mono;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class CorrelationIdFilter implements WebFilter {
 
+    public static final String ORIGINAL_REQUEST_PATH_ATTRIBUTE =
+            CorrelationIdFilter.class.getName() + ".originalRequestPath";
+
     public static final String HEADER_NAME = "X-Correlation-ID";
 
     private static final Pattern VALID_ID = Pattern.compile("[A-Za-z0-9._-]{1,128}");
@@ -37,6 +41,9 @@ public class CorrelationIdFilter implements WebFilter {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange,
                              WebFilterChain chain) {
+        URI originalPath = URI.create(exchange.getRequest().getURI().getRawPath());
+        exchange.getAttributes().putIfAbsent(ORIGINAL_REQUEST_PATH_ATTRIBUTE, originalPath);
+
         String correlationId = resolveCorrelationId(exchange);
 
         ServerHttpRequest request = exchange.getRequest()

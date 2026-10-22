@@ -83,24 +83,6 @@ class GatewayProblemWriterTest {
     }
 
     @Test
-    void shouldUseExplicitOriginalInstance() {
-        MockServerWebExchange exchange = createExchange("/fallback/order");
-
-        StepVerifier.create(problemWriter.write(exchange,
-                                                HttpStatus.GATEWAY_TIMEOUT,
-                                                "ORDER_SERVICE_TIMEOUT",
-                                                "Order service did not respond in time.",
-                                                URI.create("/api/v1/orders")))
-                    .verifyComplete();
-
-        StepVerifier.create(exchange.getResponse().getBodyAsString()).assertNext(body -> {
-            Map<?, ?> problem = jsonMapper.readValue(body, Map.class);
-
-            assertEquals("/api/v1/orders", problem.get("instance"));
-        }).verifyComplete();
-    }
-
-    @Test
     void shouldOmitCorrelationIdWhenAttributeIsMissing() {
         MockServerWebExchange exchange = createExchange("/api/v1/orders/1");
 
@@ -130,6 +112,25 @@ class GatewayProblemWriterTest {
                     .verify();
 
         assertEquals(HttpStatus.OK, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    void shouldUseSavedOriginalPathAfterInternalForward() {
+        MockServerWebExchange exchange = createExchange("/fallback/order");
+
+        exchange.getAttributes().put(CorrelationIdFilter.ORIGINAL_REQUEST_PATH_ATTRIBUTE, URI.create("/api/v1/orders"));
+
+        StepVerifier.create(problemWriter.write(exchange,
+                                                HttpStatus.SERVICE_UNAVAILABLE,
+                                                "ORDER_SERVICE_UNAVAILABLE",
+                                                "Order service is temporarily unavailable."))
+                    .verifyComplete();
+
+        StepVerifier.create(exchange.getResponse().getBodyAsString()).assertNext(body -> {
+            Map<?, ?> problem = jsonMapper.readValue(body, Map.class);
+
+            assertEquals("/api/v1/orders", problem.get("instance"));
+        }).verifyComplete();
     }
 
     private MockServerWebExchange createExchange(String path) {

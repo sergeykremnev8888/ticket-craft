@@ -44,8 +44,7 @@ class FallbackControllerTest {
         when(problemWriter.write(any(ServerWebExchange.class),
                                  any(HttpStatus.class),
                                  anyString(),
-                                 anyString(),
-                                 any(URI.class))).thenReturn(Mono.empty());
+                                 anyString())).thenReturn(Mono.empty());
     }
 
     @Test
@@ -126,8 +125,7 @@ class FallbackControllerTest {
         verify(problemWriter).write(eq(exchange),
                                     eq(HttpStatus.SERVICE_UNAVAILABLE),
                                     eq("CATALOG_UNAVAILABLE"),
-                                    anyString(),
-                                    eq(URI.create("/fallback/catalog")));
+                                    anyString());
 
         verifyNoMoreInteractions(problemWriter);
     }
@@ -161,8 +159,7 @@ class FallbackControllerTest {
         when(problemWriter.write(eq(exchange),
                                  any(HttpStatus.class),
                                  anyString(),
-                                 anyString(),
-                                 any(URI.class))).thenReturn(Mono.error(failure));
+                                 anyString())).thenReturn(Mono.error(failure));
 
         StepVerifier.create(controller.catalogFallback(exchange))
                     .expectErrorSatisfies(actual -> assertSame(failure, actual))
@@ -176,8 +173,7 @@ class FallbackControllerTest {
         verify(problemWriter).write(eq(exchange),
                                     eq(expectedStatus),
                                     eq(expectedCode),
-                                    anyString(),
-                                    eq(URI.create("/api/v1/catalog/events")));
+                                    anyString());
 
         verifyNoMoreInteractions(problemWriter);
     }
@@ -189,8 +185,7 @@ class FallbackControllerTest {
         verify(problemWriter).write(eq(exchange),
                                     eq(expectedStatus),
                                     eq(expectedCode),
-                                    contains("operation may still have completed"),
-                                    eq(URI.create("/api/v1/orders")));
+                                    contains("operation may still have completed"));
 
         verifyNoMoreInteractions(problemWriter);
     }

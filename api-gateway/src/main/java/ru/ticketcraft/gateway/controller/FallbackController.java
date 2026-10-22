@@ -1,7 +1,5 @@
 package ru.ticketcraft.gateway.controller;
 
-import java.net.URI;
-import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
@@ -34,8 +32,7 @@ public class FallbackController {
                                    timeout ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.SERVICE_UNAVAILABLE,
                                    timeout ? "CATALOG_TIMEOUT" : "CATALOG_UNAVAILABLE",
                                    timeout ? "Catalog service did not respond in time."
-                                           : "Catalog service is temporarily unavailable.",
-                                   originalInstance(exchange));
+                                           : "Catalog service is temporarily unavailable.");
     }
 
     @RequestMapping("/order")
@@ -50,20 +47,7 @@ public class FallbackController {
         return problemWriter.write(exchange,
                                    timeout ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.SERVICE_UNAVAILABLE,
                                    timeout ? "ORDER_SERVICE_TIMEOUT" : "ORDER_SERVICE_UNAVAILABLE",
-                                   detail,
-                                   originalInstance(exchange));
-    }
-
-    private URI originalInstance(ServerWebExchange exchange) {
-        Set<URI> originalUris = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ORIGINAL_REQUEST_URL_ATTR);
-
-        if (originalUris != null && !originalUris.isEmpty()) {
-            URI originalUri = originalUris.iterator().next();
-
-            return URI.create(originalUri.getRawPath());
-        }
-
-        return URI.create(exchange.getRequest().getURI().getRawPath());
+                                   detail);
     }
 
     private boolean isTimeout(ServerWebExchange exchange) {

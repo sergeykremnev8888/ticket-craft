@@ -31,7 +31,11 @@ public class GatewayProblemWriter {
     }
 
     public Mono<Void> write(ServerWebExchange exchange, HttpStatus status, String code, String detail) {
-        URI instance = URI.create(exchange.getRequest().getURI().getRawPath());
+        URI instance = exchange.getAttribute(CorrelationIdFilter.ORIGINAL_REQUEST_PATH_ATTRIBUTE);
+
+        if (instance == null) {
+            instance = URI.create(exchange.getRequest().getURI().getRawPath());
+        }
         return write(exchange, status, code, detail, instance);
     }
 
@@ -42,7 +46,7 @@ public class GatewayProblemWriter {
      * Используется, в частности, при внутреннем перенаправлении на fallback, когда
      * текущий путь запроса уже изменён.
      */
-    public Mono<Void> write(ServerWebExchange exchange, HttpStatus status, String code, String detail, URI instance) {
+    private Mono<Void> write(ServerWebExchange exchange, HttpStatus status, String code, String detail, URI instance) {
         return Mono.defer(() -> {
             ServerHttpResponse response = exchange.getResponse();
 
