@@ -28,7 +28,7 @@ API Gateway — единая точка входа для HTTP API учебно�
 | GET | `/fallback/catalog` | Публичный в текущей конфигурации | Fallback каталога |
 | Без ограничения метода в контроллере | `/fallback/order` | Публичный в текущей конфигурации | Fallback заказов, включая POST |
 
-Для остальных запросов действует `denyAll`. Отказ Security зависит от наличия аутентификации: обычно `401` для анонимного запроса и `403` для аутентифицированного.
+Для остальных запросов действует `denyAll`.
 
 Основные маршруты заданы в [application.yml](src/main/resources/application.yml). Диагностический маршрут регистрируется отдельно через [LocalDebugRoutesConfig](src/main/java/ru/ticketcraft/gateway/config/LocalDebugRoutesConfig.java), поэтому не переопределяет список основных маршрутов.
 
@@ -39,11 +39,11 @@ Gateway проверяет JWT: подпись, срок действия, issue
 - issuer: `http://localhost:9000/realms/ticketcraft`;
 - audience: `ticketcraft-api`.
 
-Gateway требует аутентификацию для API заказов, но не дублирует проверки `orders.read` и `orders.write`. Проверка scopes, владельца заказа и допустимости бизнес-операции выполняется в Order Service. Каждый сервис самостоятельно защищает свою границу и проверяет JWT.
+Проверка scopes и допустимости бизнес-операции выполняется в downstream-сервисах. Каждый сервис самостоятельно защищает свою границу и проверяет JWT.
 
 Для stateless Bearer API в Gateway отключён CSRF. Браузерный доступ настраивается через CORS. Публичный каталог не требует токена; переданный невалидный Bearer-токен может быть отклонён Resource Server даже на публичном пути.
 
-Gateway не реализует идемпотентность создания заказа. Он передаёт `Idempotency-Key` в Order Service, который отвечает за обработку повторов. Автоматический retry POST на Gateway не включён.
+Gateway не реализует идемпотентность downstream-сервисов. Он передаёт `Idempotency-Key` в downstream-сервис, который отвечает за обработку повторов. Автоматический retry POST на Gateway не включён.
 
 ## CORS
 
@@ -88,7 +88,7 @@ ticketcraft:
 
 Ключ пользователя берётся из проверенного principal Spring Security. При отсутствии или пустом `sub` resolver возвращает пустой результат, и фильтр отклоняет запрос с `403 RATE_LIMIT_KEY_MISSING`. Resolver по умолчанию — пользовательский; маршруты явно выбирают нужный resolver.
 
-Состояние token bucket хранится в Redis и разделяется по маршруту и ключу клиента. Несколько Gateway с одинаковой конфигурацией могут использовать общий Redis; отдельный интеграционный тест двух экземпляров пока не добавлен.
+Состояние token bucket хранится в Redis и разделяется по маршруту и ключу клиента. Несколько Gateway с одинаковой конфигурацией могут использовать общий Redis.
 
 `ProblemRequestRateLimiter` оборачивает стандартный фильтр Gateway, сохраняет заголовки `X-RateLimit-*` и формирует ProblemDetail только для локальных отказов. Ответы `403/429` от downstream не преобразуются этой обёрткой.
 
@@ -225,8 +225,6 @@ Bearer-обработчики сохраняют стандартный заго
 | `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `http://localhost:9000/realms/ticketcraft` |
 | `management.opentelemetry.tracing.export.otlp.endpoint` | `http://localhost:4318/v1/traces` |
 | `management.tracing.sampling.probability` | `1.0` |
-
-Значения можно переопределять стандартными средствами Spring Boot: аргументами запуска, переменными окружения и конфигурацией профиля. Адрес debug-маршрута пока задан непосредственно в Java-конфигурации.
 
 ## Сборка и запуск
 
