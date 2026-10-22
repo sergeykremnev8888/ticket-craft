@@ -1,201 +1,352 @@
 # TicketCraft — API Gateway
 
-API Gateway — единая точка входа для HTTP API TicketCraft. Сервис отвечает за маршрутизацию, проверку JWT, ограничение частоты запросов, защиту от сбоев downstream-сервисов, CORS и базовую наблюдаемость. Бизнес-логика остаётся в соответствующих сервисах.
+API Gateway — единая точка входа для HTTP API учебного проекта TicketCraft. Шлюз маршрутизирует запросы, проверяет JWT, ограничивает частоту обращений и защищает HTTP-вызовы сервисов через Circuit Breaker и таймауты. Бизнес-авторизация и бизнес-логика остаются в downstream-сервисах.
 
-## Технологии
+## Стек
 
-- Java 21, Spring Boot 4.1.1, Spring Cloud Gateway (WebFlux), Spring Security OAuth2 Resource Server.
-- Keycloak — выпуск JWT;
-- Redis — распределённый rate limiting.
-- Resilience4j — Circuit Breaker;
-- Spring Boot Actuator + Micrometer — метрики.
-- Prometheus и Grafana — сбор и визуализация метрик.
-- Micrometer Tracing / OpenTelemetry → Grafana Tempo — распределённая трассировка (distributed tracing).
+- Java 21, Spring Boot 4.1.1, Spring Cloud 2025.1.3.
+- Spring Cloud Gateway Server WebFlux, Reactor Netty.
+- Spring Security OAuth2 Resource Server; Keycloak выпускает JWT.
+- Redis и реактивный Redis-клиент Lettuce для распределённого rate limiting.
+- Resilience4j: Circuit Breaker и TimeLimiter.
+- Actuator, Micrometer, Prometheus, Grafana.
+- Micrometer Tracing / OpenTelemetry, экспорт OTLP в Tempo.
+- JUnit, Mockito, Reactor Test, WebTestClient, Testcontainers 2.0.5.
 
-Локальный адрес Gateway: `http://localhost:8080`.
+## Маршруты и доступ
 
-## HTTP API и маршруты
+Адрес Gateway по умолчанию: `http://localhost:8080`.
 
-| Метод | Путь | Доступ | Назначение |
+| Метод | Путь | Правило Gateway | Назначение |
 |---|---|---|---|
-| GET | `/api/v1/catalog/events` и `/api/v1/catalog/events/**` | Public | Просмотр событий через Catalog Service |
-| POST | `/api/v1/orders` | Public (текущее правило Gateway) | Создание заказа через Order Service |
-| GET | `/api/v1/orders/**` | JWT с `SCOPE_orders.read` | Получение информации о заказе |
-| GET | `/debug/slow` | Public, диагностический | Тестирование таймаутов/CB; **убрать из публичного доступа** |
-| `/fallback/**` | Внутренний fallback-маршрут | Разрешён текущей конфигурацией | Ответ при недоступности downstream; **закрыть от внешнего вызова** |
-| GET | `/actuator/health` | Public | Health check |
-| GET | `/actuator/prometheus` | Public для локальной разработки | Экспорт метрик; **ограничить доступ вне dev** |
-| GET | `/actuator/metrics` и `/actuator/metrics/**` | **Не разрешён** текущим `GatewaySecurityConfig` | Endpoint включён в exposure, но доступ блокируется политикой `denyAll` |
+| GET | `/api/v1/catalog/events`, `/api/v1/catalog/events/**` | Публичный | Каталог мероприятий |
+| POST | `/api/v1/orders` | Аутентифицированный пользователь | Создание заказа |
+| GET | `/api/v1/orders/**` | Аутентифицированный пользователь | Чтение заказа |
+| GET | `/debug/slow` | Публичный, только профиль `local` | Диагностика таймаутов и CB |
+| GET | `/actuator/health` | Публичный | Состояние приложения |
+| GET | `/actuator/prometheus` | Публичный в текущей конфигурации | Экспорт метрик |
+| GET | `/fallback/catalog` | Публичный в текущей конфигурации | Fallback каталога |
+| Без ограничения метода в контроллере | `/fallback/order` | Публичный в текущей конфигурации | Fallback заказов, включая POST |
 
-## Безопасность
+Для остальных запросов действует `denyAll`. Отказ Security зависит от наличия аутентификации: обычно `401` для анонимного запроса и `403` для аутентифицированного.
 
-- JWT валидируется Spring Security Resource Server с использованием настроенного Keycloak issuer/JWK.
-- Для чтения заказов требуется authority `SCOPE_orders.read`.
-- Для остальных не перечисленных маршрутов действует `denyAll`.
-- CSRF отключён для stateless API.
-- **Важное ограничение:** создание заказа разрешено без JWT на уровне Gateway, но **Order Service требует Bearer JWT**. Реальный контракт `POST /api/v1/orders`: заголовок `Idempotency-Key`, тело `{"ticketId":"<UUID>"}`; `userId` берётся из JWT. Анонимный вызов без токена возвращает `401` из Order Service. Правила на edge следует согласовать с downstream.
+Основные маршруты заданы в [application.yml](src/main/resources/application.yml). Диагностический маршрут регистрируется отдельно через [LocalDebugRoutesConfig](src/main/java/ru/ticketcraft/gateway/config/LocalDebugRoutesConfig.java), поэтому не переопределяет список основных маршрутов.
+
+## Границы ответственности и безопасность
+
+Gateway проверяет JWT: подпись, срок действия, issuer и audience. По умолчанию:
+
+- issuer: `http://localhost:9000/realms/ticketcraft`;
+- audience: `ticketcraft-api`.
+
+Gateway требует аутентификацию для API заказов, но не дублирует проверки `orders.read` и `orders.write`. Проверка scopes, владельца заказа и допустимости бизнес-операции выполняется в Order Service. Каждый сервис самостоятельно защищает свою границу и проверяет JWT.
+
+Для stateless Bearer API в Gateway отключён CSRF. Браузерный доступ настраивается через CORS. Публичный каталог не требует токена; переданный невалидный Bearer-токен может быть отклонён Resource Server даже на публичном пути.
+
+Gateway не реализует идемпотентность создания заказа. Он передаёт `Idempotency-Key` в Order Service, который отвечает за обработку повторов. Автоматический retry POST на Gateway не включён.
 
 ## CORS
 
-Разрешённый Origin: `http://localhost:3000`.
+Параметры привязываются к [GatewayCorsProperties](src/main/java/ru/ticketcraft/gateway/security/GatewayCorsProperties.java) и применяются через Spring Security.
 
-- Методы: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`.
-- Разрешённые заголовки: `Authorization`, `Content-Type`, `X-Correlation-ID`.
-- Доступный frontend заголовок ответа: `X-Correlation-ID`.
-- Preflight cache (`maxAge`): 3600 секунд.
-- Конфигурация CORS находится в Spring Security.
+```yaml
+ticketcraft:
+  gateway:
+    cors:
+      allowed-origins:
+        - http://localhost:3000
+      allowed-methods:
+        - GET
+        - POST
+      allowed-headers:
+        - Authorization
+        - Content-Type
+        - X-Correlation-ID
+        - Idempotency-Key
+      exposed-headers:
+        - X-Correlation-ID
+        - Location
+      max-age: 1h
+```
 
-## Resilience
+`allowed-headers` определяет заголовки, разрешённые в браузерном запросе; `exposed-headers` — заголовки ответа, доступные JavaScript. Preflight OPTIONS обрабатывается CORS-механизмом и не требует отдельного разрешения OPTIONS как бизнес-метода API.
 
-### Rate limiting
+## Rate limiting
 
-Redis-backed `RequestRateLimiter` с идентификацией клиента по IP-адресу (`ipKeyResolver`):
+На обоих основных маршрутах порядок фильтров:
 
-| Маршрут | `replenishRate` | `burstCapacity` | `requestedTokens` |
-|---|---:|---:|---:|
-| Catalog | 10 токенов/с | 20 | 1 |
-| Order | 5 токенов/с | 10 | 1 |
+1. `ProblemRequestRateLimiter`;
+2. `CircuitBreaker`;
+3. HTTP-вызов downstream.
 
-При превышении лимита возвращается HTTP `429 Too Many Requests`.
+Если лимит исчерпан, возвращается локальный `429`: downstream не вызывается и CB не учитывает этот запрос. Ожидание Redis происходит до входа в CB.
 
-Используется обёртка `ResilientRateLimiter` над `RedisRateLimiter`: ожидание Redis ограничено `500ms`; при ошибке/таймауте Redis действует **fail-open** — запрос пропускается с предупреждением в логе. Это сознательный компромисс в пользу доступности; при длительном отказе Redis защита от перегрузки ослабевает. Нужны отдельные метрики/алерты на fail-open.
+| Маршрут | Resolver и ключ | Пополнение | Ёмкость корзины | Токенов на запрос |
+|---|---|---:|---:|---:|
+| Catalog | `ipKeyResolver`: IP прямого подключения | 10/с | 20 | 1 |
+| Order | `userKeyResolver`: `user:<JWT sub>` | 5/с | 10 | 1 |
 
-### Timeouts и Circuit Breaker
+Ключ пользователя берётся из проверенного principal Spring Security. При отсутствии или пустом `sub` resolver возвращает пустой результат, и фильтр отклоняет запрос с `403 RATE_LIMIT_KEY_MISSING`. Resolver по умолчанию — пользовательский; маршруты явно выбирают нужный resolver.
 
-HTTP-клиент Gateway:
+Состояние token bucket хранится в Redis и разделяется по маршруту и ключу клиента. Несколько Gateway с одинаковой конфигурацией могут использовать общий Redis; отдельный интеграционный тест двух экземпляров пока не добавлен.
 
-- `connect-timeout`: **2000 мс**.
-- `response-timeout`: **5 секунд**.
+`ProblemRequestRateLimiter` оборачивает стандартный фильтр Gateway, сохраняет заголовки `X-RateLimit-*` и формирует ProblemDetail только для локальных отказов. Ответы `403/429` от downstream не преобразуются этой обёрткой.
 
-Resilience4j Circuit Breaker (CB) настроен для двух маршрутов:
+### Отказ Redis
 
-| Маршрут | Имя CB | Fallback | HTTP |
-|---|---|---|---|
-| Catalog | `catalogCircuitBreaker` | `forward:/fallback/catalog` | 503, `CATALOG_UNAVAILABLE` |
-| Order | `orderCircuitBreaker` | `forward:/fallback/order` | 503, `ORDER_SERVICE_UNAVAILABLE` |
+[ResilientRateLimiter](src/main/java/ru/ticketcraft/gateway/ratelimiter/ResilientRateLimiter.java) реализует fail-open: при ошибке или превышении времени ожидания запрос разрешается. Это сохраняет доступность API, но ослабляет защиту от перегрузки.
 
-Параметры обоих CB:
+```yaml
+ticketcraft:
+  gateway:
+    rate-limiter:
+      timeout: 500ms
+      warn-interval: 30s
+```
 
-| Параметр | Значение |
+Параметры читаются через `GatewayRateLimiterProperties`, оба должны быть положительными.
+
+Счётчик Micrometer: `ticketcraft.gateway.rate.limiter.fail.open`. В Prometheus: `ticketcraft_gateway_rate_limiter_fail_open_total`.
+
+Теги:
+
+- `route` — ID маршрута;
+- `reason` — `timeout`, `error` или `delegate_fail_open`.
+
+Метрика учитывает каждый случай деградации. Собственные WARN обёртки ограничены общим интервалом на экземпляр, а не отдельным интервалом для каждого маршрута. Стандартный RedisRateLimiter может дополнительно писать собственные ERROR.
+
+Обнаружение внутреннего fail-open делегата основано на `allowed=true` и `X-RateLimit-Remaining: -1`. Оно зависит от текущего поведения Gateway, стандартного имени заголовка и включённого `includeHeaders`.
+
+### IP и reverse proxy
+
+Сейчас `ipKeyResolver` использует `remoteAddress` и не доверяет произвольному `X-Forwarded-For`. При отсутствии адреса используется общий ключ `unknown`.
+
+За reverse proxy/Ingress адресом клиента может оказаться адрес proxy. Перед таким размещением нужно отдельно настроить доверенную цепочку proxy и получение клиентского IP. Пользователи за одним NAT также делят IP-лимит каталога.
+
+## Circuit Breaker и таймауты
+
+| Настройка | Значение |
 |---|---|
-| `slidingWindowType` | `COUNT_BASED` |
-| `slidingWindowSize` | `10` |
-| `minimumNumberOfCalls` | `10` |
-| `failureRateThreshold` | `50%` |
-| `waitDurationInOpenState` | `10s` |
-| `permittedNumberOfCallsInHalfOpenState` | `3` |
-| `slowCallDurationThreshold` | `2s` |
-| `slowCallRateThreshold` | `50%` |
-| `TimeLimiter.timeoutDuration` | `4s` |
-| `statusCodes` | `503` |
+| HTTP connect timeout | 2000 мс |
+| HTTP response timeout | 5 с |
+| TimeLimiter для основных CB | 4 с |
+| Тип и размер окна CB | COUNT_BASED, 10 |
+| Минимальное число вызовов | 10 |
+| Порог ошибок | 50% |
+| Порог медленного вызова | 2 с |
+| Порог медленных вызовов | 50% |
+| Ожидание в OPEN | 10 с |
+| Разрешённых вызовов в HALF_OPEN | 3 |
 
-Fallback для Order принимает в том числе `POST` (при `forward:` исходный HTTP-метод сохраняется). Тело ответа при недоступности:
+HTTP response timeout и TimeLimiter — разные ограничения; в обычном сценарии TimeLimiter может завершить операцию раньше HTTP response timeout.
+
+| Маршрут | Circuit Breaker | Внутренний fallback |
+|---|---|---|
+| Catalog | `catalogCircuitBreaker` | `forward:/fallback/catalog` |
+| Order | `orderCircuitBreaker` | `forward:/fallback/order` |
+
+На основных маршрутах `statusCodes: "500,502,503,504"`. Эти ответы учитываются как сбои CB и заменяются fallback. Клиентские `4xx` передаются без преобразования Circuit Breaker и не считаются ошибками по этому списку; длительность вызова при этом всё равно может влиять на статистику медленных вызовов.
+
+| Сценарий | Ответ fallback |
+|---|---|
+| Downstream вернул 500, 502 или 503 | 503, сервисный код недоступности |
+| Downstream вернул 504 | 504, сервисный код таймаута |
+| Таймаут соединения/выполнения | 504 |
+| Ошибка соединения или открытый CB | 503 |
+
+При таймауте POST отмена ожидания Gateway не гарантирует отмену операции в Order Service. Ответ содержит предупреждение о возможном завершении операции; повтор создания заказа выполняется с тем же `Idempotency-Key`.
+
+### Диагностический маршрут
+
+`LocalDebugRoutesConfig` активен только с профилем `local`:
+
+- маршрут `GET /debug/slow` ведёт на `http://localhost:8081`;
+- используется отдельный `catalogDebugCircuitBreaker`;
+- настройки CB находятся в [application-local.yml](src/main/resources/application-local.yml);
+- для debug-маршрута сейчас настроен HTTP-статус ошибки `503`, а не полный список основных маршрутов;
+- диагностические вызовы не изменяют статистику `catalogCircuitBreaker`.
+
+Сам endpoint должен существовать в запущенном Catalog Service. Этот README описывает только конфигурацию Gateway.
+
+## Correlation ID и исходный путь
+
+[CorrelationIdFilter](src/main/java/ru/ticketcraft/gateway/filter/CorrelationIdFilter.java) — ранний WebFilter, который выполняется до Spring Security.
+
+- Принимается ровно одно значение `X-Correlation-ID`, соответствующее `[A-Za-z0-9._-]{1,128}`.
+- Отсутствующее, пустое, некорректное или неоднозначное значение заменяется UUID.
+- ID передаётся downstream и записывается в ответ через `beforeCommit`.
+- ID сохраняется в атрибуте exchange для формирования ошибок.
+- Исходный путь без query-параметров сохраняется до маршрутизации и внутреннего forward.
+
+Поэтому сформированные Gateway ошибки, включая `401/403` и fallback при открытом CB, могут содержать исходный путь и согласованный correlation ID.
+
+`X-Correlation-ID` — прикладной идентификатор; он не равен OpenTelemetry `traceId`.
+
+## Формат ошибок
+
+[GatewayProblemWriter](src/main/java/ru/ticketcraft/gateway/exception/GatewayProblemWriter.java) записывает `application/problem+json` через Jackson 3.
 
 ```json
 {
-  "code": "ORDER_SERVICE_UNAVAILABLE",
-  "message": "Order service is temporarily unavailable. The result of a previous request may be unknown."
+  "type": "about:blank",
+  "title": "Gateway Timeout",
+  "status": 504,
+  "detail": "Catalog service did not respond in time.",
+  "instance": "/api/v1/catalog/events",
+  "code": "CATALOG_TIMEOUT",
+  "correlationId": "request-123"
 }
 ```
 
-**Важный риск для POST:** если downstream обработал запрос, но ответ потерялся, клиент не знает, был ли создан заказ. Поэтому автоматический retry на создание заказа **не включён**. **Идемпотентность уже реализована в Order Service**: контроллер требует `Idempotency-Key`, а `OrderService.createOrder()` вызывает `IdempotencyService` с хешем пары `(userId, ticketId)`. Повторный запрос с завершённым ключом возвращает существующий заказ. Следует отдельно проверить сценарии конкурентных запросов, ошибки и повтор после таймаута.
+| Источник | HTTP | code |
+|---|---:|---|
+| Security: отсутствующий или невалидный токен | 401 | UNAUTHORIZED |
+| Security: запрет доступа | 403 | FORBIDDEN |
+| Rate limiter: пустой ключ | 403 | RATE_LIMIT_KEY_MISSING |
+| Rate limiter: исчерпан лимит | 429 | RATE_LIMIT_EXCEEDED |
+| Fallback каталога | 503 / 504 | CATALOG_UNAVAILABLE / CATALOG_TIMEOUT |
+| Fallback заказов | 503 / 504 | ORDER_SERVICE_UNAVAILABLE / ORDER_SERVICE_TIMEOUT |
+| Обработчик ошибок соединения/таймаута | 503 / 504 | SERVICE_UNAVAILABLE / GATEWAY_TIMEOUT |
 
-### Correlation ID
+Bearer-обработчики сохраняют стандартный заголовок `WWW-Authenticate`. Writer не переписывает уже отправленный ответ; неизвестные исключения `GatewayExceptionHandler` передаёт дальше.
 
-Gateway принимает входящий `X-Correlation-ID` либо генерирует его, если идентификатор отсутствует/пуст. ID передаётся downstream и возвращается в ответе. В логах Gateway фиксируются метод, путь, статус и длительность запроса.
+Контракт относится к перечисленным обработчикам Gateway. Он не означает, что любые ошибки сервера или CORS автоматически преобразуются в ProblemDetail. Бизнес-ответы downstream обычно передаются как есть, за исключением серверных статусов, явно включённых в Circuit Breaker.
 
-## Observability
+## Конфигурация окружения
 
-- `GET /actuator/health` — HTTP 200, `status=UP`.
-- `GET /actuator/prometheus` — выдача JVM/HTTP/Resilience4j-метрик.
-- Prometheus опрашивает `host.docker.internal:8080/actuator/prometheus` с job `api-gateway` (локальный запуск Gateway на Windows, Prometheus в Docker).
-- Grafana использует provisioned Prometheus datasource с UID `prometheus`.
-- Дашборд: `observability/grafana/dashboards/api-gateway.json`; автоматически подхватывается Grafana provisioning.
-- D Grafana: `up{job="api-gateway"} = 1`; доступны метрики `catalogCircuitBreaker` и `orderCircuitBreaker`.
+| Параметр | Значение по умолчанию |
+|---|---|
+| `ticketcraft.gateway.catalog-uri` | `http://localhost:8081` |
+| `ticketcraft.gateway.order-uri` | `http://localhost:8082` |
+| `spring.data.redis.host` / `port` | `localhost` / `6379` |
+| `spring.data.redis.timeout` | `500ms` |
+| `ticketcraft.gateway.rate-limiter.timeout` | `500ms` |
+| `ticketcraft.gateway.rate-limiter.warn-interval` | `30s` |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `http://localhost:9000/realms/ticketcraft` |
+| `management.opentelemetry.tracing.export.otlp.endpoint` | `http://localhost:4318/v1/traces` |
+| `management.tracing.sampling.probability` | `1.0` |
 
-### Distributed Tracing: OpenTelemetry → Tempo
+Значения можно переопределять стандартными средствами Spring Boot: аргументами запуска, переменными окружения и конфигурацией профиля. Адрес debug-маршрута пока задан непосредственно в Java-конфигурации.
 
-В `api-gateway/pom.xml` подключён `spring-boot-starter-opentelemetry`. Конфигурация в `application.yml`:
+## Сборка и запуск
 
-- `spring.reactor.context-propagation: auto` — передача контекста в Reactor, необходимая для корректного отображения Trace ID/Span ID в реактивных логах.
-- `management.tracing.sampling.probability: 1.0` — 100% запросов в локальной разработке; для production значение следует снизить.
-- `management.opentelemetry.tracing.export.otlp.endpoint: http://localhost:4318/v1/traces` — OTLP HTTP экспорт трассировок в Tempo (порт 4318 опубликован в `docker-compose.yml`, приёмник задан в `observability/tempo/tempo.yml`).
-- `management.otlp.metrics.export.enabled: false` — OTLP **метрики** не отправляются в Tempo; для метрик остаётся Prometheus. Это устраняет `404` на `/v1/metrics`.
+Команды ниже выполняются в PowerShell из корня репозитория. Требуются JDK 21 и Docker Desktop либо другой поддержанный Testcontainers Docker runtime. Maven Wrapper скачивает Maven при первом запуске.
 
-`X-Correlation-ID` — отдельный прикладной идентификатор запроса (UUID/переданное значение); **он не равен** OpenTelemetry `traceId`. Trace ID — 32 hex-символа, Span ID — 16 hex-символов. Сейчас оба механизма существуют параллельно.
+Для ручной работы подними Redis, Keycloak и нужные downstream-сервисы. Для экспорта трасс нужен Tempo. Инфраструктура описана в [docker-compose.yml](../docker-compose.yml); Java-приложения запускаются отдельно. Дополнительные инструкции — в [корневом README](../README.md).
 
-Для поиска: Grafana `http://localhost:3000` → **Explore** → datasource **Tempo** → поиск по Trace ID. Retention Tempo в локальной конфигурации: `1h`; старые traces могут исчезать.
+Полная проверка модуля и сборка исполняемого JAR:
 
-`UP` у Gateway **не означает**, что все downstream-сервисы и Redis доступны.
+```powershell
+.\mvnw.cmd -pl api-gateway clean verify
+```
 
-## Локальная проверка
+Compiler использует Java release 21 и сохраняет имена параметров. Surefire запускает тесты, а Spring Boot Maven Plugin выполняет `repackage` на фазе `package`.
 
-Предполагается, что инфраструктура запущена через Docker Compose, а Gateway — из IDE или Maven.
+Запуск:
+
+```powershell
+java -jar .\api-gateway\target\api-gateway-1.0.0-SNAPSHOT.jar
+```
+
+С диагностическим маршрутом:
+
+```powershell
+java -jar .\api-gateway\target\api-gateway-1.0.0-SNAPSHOT.jar --spring.profiles.active=local
+```
+
+Без запущенного OTLP-приёмника экспорт трасс можно отключить только для этого запуска:
+
+```powershell
+java -jar .\api-gateway\target\api-gateway-1.0.0-SNAPSHOT.jar --management.tracing.export.otlp.enabled=false
+```
+
+## Тесты
+
+Исходники находятся в [src/test/java](src/test/java).
+
+| Область | Проверки |
+|---|---|
+| CORS | Разрешённый/запрещённый origin, preflight создания заказа с Idempotency-Key |
+| Security | 401 без токена и с невалидным токеном, 403 на запрещённом пути, WWW-Authenticate, correlation ID |
+| Correlation ID | Генерация и валидация ID, несколько значений, передача downstream и замена заголовка ответа |
+| ProblemDetail | Сериализация, верхний уровень дополнительных полей, исходный путь, committed response |
+| Обработчик исключений и fallback | Классификация 503/504, вложенные таймауты, предупреждение для операций заказа |
+| Порядок фильтров | Локальный 429 не вызывает downstream и не учитывается CB |
+| Fallback через HTTP | Серверные статусы downstream, таймауты, открытый CB, исходный путь, POST без retry, передача проверенных 4xx |
+| Обёртка rate limiter | Разрешение/отказ, ошибки, timeout, внутренний fail-open, счётчики |
+| Настоящий Redis | Настройки из YAML, отдельные лимиты пользователей, локальный 429, fail-open при CLIENT PAUSE |
+
+HTTP-интеграционные тесты используют локальные заглушки downstream. Security-тесты подменяют JWT decoder и не проверяют криптографическую подпись или реальный Keycloak.
+
+`RedisRateLimiterIntegrationTest` запускает собственный `redis:7.4-alpine` на случайном порту. Локальный Redis на 6379 для него не нужен; Docker нужен. Тест создаёт пустую корзину напрямую в Redis, поэтому его fixture зависит от формата ключей RedisRateLimiter. Задержка Redis моделируется через `CLIENT PAUSE`, после чего выполняется `CLIENT UNPAUSE`.
+
+В Redis-тесте отключён OTLP-экспорт. Redis-клиент останавливается перед завершением контейнера, контекст помечен `@DirtiesContext`. WARN с `reason=timeout` в сценарии fail-open ожидаем.
+
+Запуск отдельных групп:
+
+```powershell
+.\mvnw.cmd -pl api-gateway test "-Dtest=GatewaySecurityIntegrationTest,GatewayFallbackIntegrationTest"
+.\mvnw.cmd -pl api-gateway test "-Dtest=RedisRateLimiterIntegrationTest"
+```
+
+Пока не добавлены отдельные проверки двух экземпляров Gateway, полного цикла восстановления CB HALF_OPEN → CLOSED и реальной валидации JWT через Keycloak/JWK.
+
+## Наблюдаемость
+
+- Actuator exposure: `health,info,prometheus,metrics`. Security публично разрешает только GET `/actuator/health` и `/actuator/prometheus`; остальные endpoints из exposure не становятся публичными автоматически.
+- Prometheus опрашивает `host.docker.internal:8080/actuator/prometheus` с job `api-gateway`: [конфигурация](../observability/prometheus/prometheus.yml).
+- Grafana dashboard: [api-gateway.json](../observability/grafana/dashboards/api-gateway.json).
+- OpenTelemetry отправляет трассы по OTLP HTTP в Tempo на `http://localhost:4318/v1/traces`.
+- `spring.reactor.context-propagation: auto` включает автоматическую передачу контекста Reactor.
+- OTLP-экспорт метрик отключён; метрики собирает Prometheus.
 
 ```powershell
 curl.exe -i http://localhost:8080/actuator/health
-curl.exe -s http://localhost:8080/actuator/prometheus
-
-# CORS preflight
-curl.exe -i -X OPTIONS http://localhost:8080/api/v1/catalog/events `
-  -H "Origin: http://localhost:3000" `
-  -H "Access-Control-Request-Method: GET"
-
-# Public catalog route
-curl.exe -i http://localhost:8080/api/v1/catalog/events
-
-# Проверка Order при остановленном downstream (ожидается fallback 503)
-curl.exe -i -X POST http://localhost:8080/api/v1/orders `
-  -H "Content-Type: application/json" `
-  -d "{}"
-
-# Метрики состояния Order CB
 curl.exe -s http://localhost:8080/actuator/prometheus |
-  Select-String 'resilience4j_circuitbreaker_(state|calls_seconds_count|not_permitted_calls_total).*orderCircuitBreaker'
+    Select-String 'ticketcraft_gateway_rate_limiter_fail_open|resilience4j_circuitbreaker'
 ```
 
-# После включения tracing — ищи Trace ID в логах Gateway,
-# затем открой Grafana → Explore → Tempo → Trace ID.
+Статус health определяется настроенными индикаторами; он не является проверкой каждого HTTP downstream и всего бизнес-сценария.
 
-Мониторинг: Prometheus `http://localhost:9090/targets`, Grafana `http://localhost:3000`.
+## Ручная проверка
 
-Запуск тестов из корня multi-module Maven проекта (при корректно настроенных зависимостях):
+Публичный каталог:
 
-```bash
-mvn -pl api-gateway -am test
+```powershell
+curl.exe -i http://localhost:8080/api/v1/catalog/events
 ```
 
-## TODO
+Закрытый API без токена — ожидаются 401, ProblemDetail и X-Correlation-ID:
 
-### Приоритет 1
+```powershell
+curl.exe -i http://localhost:8080/api/v1/orders/1
+```
 
-- [ ] Убрать или защитить `/debug/slow` и прямой доступ к `/fallback/**`.
-- [ ] Закрыть `/actuator/prometheus` от публичного интернета (внутренняя сеть, отдельный management port или auth); пересмотреть необходимость публикации `/actuator/metrics` (сейчас блокируется Security).
-- [ ] Согласовать правила доступа для `POST /api/v1/orders`: Gateway разрешает анонимный POST, но Order Service требует JWT (`401` без токена); на Gateway логично требовать аутентификацию и отдельно проверить scope/roles. Владелец заказа уже определяется в Order Service по JWT.
-- [ ] Проверить модель доверия к `X-Correlation-ID`: валидация длины/символов, предотвращение log injection, единообразное поведение при нескольких значениях.
-- [ ] Протестировать политику Redis fail-open при реальном отказе/таймауте и поведение при недоступности Keycloak/JWK endpoint; добавить мониторинг таких случаев.
-- [x] Зафиксировать текущие значения rate limits, timeout и CB для Catalog и Order; сверять при изменениях `application.yml`.
+Preflight создания заказа:
 
-### Приоритет 2
+```powershell
+curl.exe -i -X OPTIONS http://localhost:8080/api/v1/orders `
+    -H "Origin: http://localhost:3000" `
+    -H "Access-Control-Request-Method: POST" `
+    -H "Access-Control-Request-Headers: authorization,content-type,idempotency-key,x-correlation-id"
+```
 
-- [ ] Автоматизировать интеграционные тесты: 401/403, 429, timeout, fallback, CB transitions, propagation correlation ID (часть сценариев уже проверена вручную).
-- [ ] Проверить retry policy (только для безопасных/идемпотентных операций, с backoff/jitter и ограничением бюджета попыток); для POST не включать автоматический retry без отдельной проверки гарантий уже реализованного `Idempotency-Key`.
-- [ ] Добавить HTTP latency histogram для корректных p95/p99 и панели/алерты по SLO.
-- [ ] Настроить алерты: недоступность Gateway, рост 5xx, latency, CB OPEN, ошибки Redis.
-- [ ] Добавить метрики rate limiter и Redis fail-open; проверить отсутствие дублирования `X-RateLimit-*` заголовков.
-- [x] Подключить OpenTelemetry → Tempo; проверить сквозную трассировку Gateway → Catalog в Grafana.
-- [ ] Настроить structured JSON logs и удобную связь `traceId` / `spanId` / `correlationId` в логах; проверить tracing для Gateway → Order.
-- [ ] Провести нагрузочные тесты и проверить поведение при отказах Catalog/Order/Redis.
-- [ ] Уточнить Kubernetes/Docker deployment, readiness/liveness probes и управление секретами.
+Для вызова API заказов с токеном, полученным из Keycloak:
 
-### После MVP
+```powershell
+$accessToken = Read-Host "Bearer token"
+curl.exe -i http://localhost:8080/api/v1/orders/1 `
+    -H "Authorization: Bearer $accessToken" `
+    -H "X-Correlation-ID: manual-order-check"
+```
 
-- [ ] Опубликовать контракт API (OpenAPI) и примеры типовых ошибок Gateway.
-- [ ] Добавить автоматические smoke-тесты в CI и поддерживать README синхронно с конфигурацией.
+Для получения успешного бизнес-ответа токен должен также удовлетворять правилам Order Service.
 
-## Известные ограничения и технические замечания
+## Оставшиеся задачи
 
-- В `ResilientRateLimiter.isAllowed()` остался диагностический `log.info("RateLimiter route={}, config={}", ...)` на каждый запрос. После проверки конфигурации удалить либо перевести в DEBUG.
-- `ipKeyResolver` берёт `remoteAddress`, а не проверенный клиентский IP из доверенного proxy. При запуске за reverse proxy/Kubernetes Ingress это может приводить к общему лимиту на IP прокси. Нужна отдельная настройка доверенных forwarded headers.
-- `/fallback/**` доступен извне из-за `permitAll`; желательно закрыть прямой вызов fallback, сохранив внутренний `forward:`. `/debug/slow` сейчас публичен.
-- В текущей YAML-конфигурации на обоих маршрутах фильтр `CircuitBreaker` объявлен **перед** `RequestRateLimiter`. Проверить порядок выполнения фильтров и желаемую семантику: rate limit обычно выгоднее применять до обращения к downstream/CB.
+- Ограничить внешний доступ к `/actuator/prometheus` и прямые вызовы `/fallback/**`, сохранив внутренний forward; сейчас эти правила намеренно не изменены.
+- Настроить получение клиентского IP для доверенной цепочки reverse proxy/Ingress.
+- Проверить несколько экземпляров Gateway с общим Redis и реальное восстановление CB.
+- Добавить сценарии реального JWT/JWK, ротации ключей и недоступности Keycloak.
+- Настроить histogram latency, SLO-панели и алерты на 5xx, задержки, OPEN и fail-open Redis.
+- Завершить эксплуатационную конфигурацию: readiness/liveness, TLS на внешней границе, sampling для production и нагрузочные проверки.
