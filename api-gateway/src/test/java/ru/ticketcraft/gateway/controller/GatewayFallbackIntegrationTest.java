@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
@@ -104,9 +106,10 @@ class GatewayFallbackIntegrationTest {
         DOWNSTREAM.disposeNow();
     }
 
-    @Test
-    void shouldReturnCatalogProblemWhenDownstreamReturns503() {
-        DOWNSTREAM_STATUS.set(503);
+    @ParameterizedTest
+    @ValueSource(ints = { 500, 502, 503 })
+    void shouldReturn503WhenDownstreamReturnsServerError(int downstreamStatus) {
+        DOWNSTREAM_STATUS.set(downstreamStatus);
 
         WebTestClient.ResponseSpec response = webTestClient.get()
                                                            .uri(CATALOG_PATH)
@@ -116,6 +119,52 @@ class GatewayFallbackIntegrationTest {
         assertProblem(response, 503, "CATALOG_UNAVAILABLE", CATALOG_PATH);
 
         assertEquals(1, DOWNSTREAM_REQUESTS.get());
+
+        assertEquals(1,
+                     circuitBreakerRegistry.circuitBreaker("catalogCircuitBreaker")
+                                           .getMetrics()
+                                           .getNumberOfFailedCalls());
+    }
+
+    @Test
+    void shouldPreserveTimeoutMeaningWhenDownstreamReturns504() {
+        DOWNSTREAM_STATUS.set(504);
+
+        WebTestClient.ResponseSpec response = webTestClient.get()
+                                                           .uri(CATALOG_PATH)
+                                                           .header("X-Correlation-ID", CORRELATION_ID)
+                                                           .exchange();
+
+        assertProblem(response, 504, "CATALOG_TIMEOUT", CATALOG_PATH);
+
+        assertEquals(1, DOWNSTREAM_REQUESTS.get());
+
+        assertEquals(1,
+                     circuitBreakerRegistry.circuitBreaker("catalogCircuitBreaker")
+                                           .getMetrics()
+                                           .getNumberOfFailedCalls());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 400, 403, 404, 409, 429 })
+    void shouldPassClientErrorsThroughWithoutRecordingCircuitBreakerFailure(int downstreamStatus) {
+        DOWNSTREAM_STATUS.set(downstreamStatus);
+
+        webTestClient.get()
+                     .uri(CATALOG_PATH)
+                     .header("X-Correlation-ID", CORRELATION_ID)
+                     .exchange()
+                     .expectStatus()
+                     .isEqualTo(downstreamStatus)
+                     .expectBody(String.class)
+                     .isEqualTo("Original downstream body");
+
+        assertEquals(1, DOWNSTREAM_REQUESTS.get());
+
+        assertEquals(0,
+                     circuitBreakerRegistry.circuitBreaker("catalogCircuitBreaker")
+                                           .getMetrics()
+                                           .getNumberOfFailedCalls());
     }
 
     @Test

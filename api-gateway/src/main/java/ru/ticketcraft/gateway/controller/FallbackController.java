@@ -2,6 +2,7 @@ package ru.ticketcraft.gateway.controller;
 
 import java.util.concurrent.TimeoutException;
 
+import org.springframework.cloud.gateway.filter.factory.SpringCloudCircuitBreakerFilterFactory;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -61,6 +62,11 @@ public class FallbackController {
             }
 
             if (exception instanceof ResponseStatusException statusException
+                    && statusException.getStatusCode().value() == HttpStatus.GATEWAY_TIMEOUT.value()) {
+                return true;
+            }
+
+            if (exception instanceof SpringCloudCircuitBreakerFilterFactory.CircuitBreakerStatusCodeException statusException
                     && statusException.getStatusCode().value() == HttpStatus.GATEWAY_TIMEOUT.value()) {
                 return true;
             }
