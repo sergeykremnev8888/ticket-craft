@@ -24,6 +24,7 @@ public class RateLimiterConfig {
     }
 
     @Bean
+    @Primary
     KeyResolver userKeyResolver() {
         return exchange -> exchange.getPrincipal()
                                    .ofType(JwtAuthenticationToken.class)

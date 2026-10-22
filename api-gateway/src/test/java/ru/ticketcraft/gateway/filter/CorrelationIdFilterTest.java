@@ -18,7 +18,7 @@ import reactor.test.StepVerifier;
 
 class CorrelationIdFilterTest {
 
-    private static final String HEADER = CorrelationIdFilter.HTTP_HEADER_CORRELATION_ID;
+    private static final String HEADER = CorrelationIdFilter.HEADER_NAME;
 
     private final CorrelationIdFilter filter = new CorrelationIdFilter();
 

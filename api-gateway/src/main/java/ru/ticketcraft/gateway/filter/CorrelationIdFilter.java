@@ -30,7 +30,7 @@ import reactor.core.publisher.Mono;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class CorrelationIdFilter implements WebFilter {
 
-    public static final String HTTP_HEADER_CORRELATION_ID = "X-Correlation-ID";
+    public static final String HEADER_NAME = "X-Correlation-ID";
 
     private static final Pattern VALID_ID = Pattern.compile("[A-Za-z0-9._-]{1,128}");
 
@@ -41,15 +41,15 @@ public class CorrelationIdFilter implements WebFilter {
 
         ServerHttpRequest request = exchange.getRequest()
                                             .mutate()
-                                            .headers(headers -> headers.set(HTTP_HEADER_CORRELATION_ID, correlationId))
+                                            .headers(headers -> headers.set(HEADER_NAME, correlationId))
                                             .build();
 
         ServerWebExchange updatedExchange = exchange.mutate().request(request).build();
 
-        updatedExchange.getAttributes().put(HTTP_HEADER_CORRELATION_ID, correlationId);
+        updatedExchange.getAttributes().put(HEADER_NAME, correlationId);
 
         updatedExchange.getResponse().beforeCommit(() -> {
-            updatedExchange.getResponse().getHeaders().set(HTTP_HEADER_CORRELATION_ID, correlationId);
+            updatedExchange.getResponse().getHeaders().set(HEADER_NAME, correlationId);
 
             return Mono.empty();
         });
@@ -58,7 +58,7 @@ public class CorrelationIdFilter implements WebFilter {
     }
 
     private String resolveCorrelationId(ServerWebExchange exchange) {
-        List<String> values = exchange.getRequest().getHeaders().get(HTTP_HEADER_CORRELATION_ID);
+        List<String> values = exchange.getRequest().getHeaders().get(HEADER_NAME);
 
         if (values != null && values.size() == 1) {
             String value = values.getFirst();

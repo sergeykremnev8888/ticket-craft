@@ -19,12 +19,13 @@ spring:
               predicates:
                 - Path=/api/v1/orders,/api/v1/orders/**
               filters:
-                - name: RequestRateLimiter
+                - name: ProblemRequestRateLimiter
                   args:
                     rate-limiter: "#{@resilientRateLimiter}"
                     key-resolver: "#{@userKeyResolver}"
                     deny-empty-key: true
                     empty-key-status: FORBIDDEN
+                    throw-on-limit: false
                     '[redis-rate-limiter.replenishRate]': 5
                     '[redis-rate-limiter.burstCapacity]': 10
                     '[redis-rate-limiter.requestedTokens]': 1
@@ -39,7 +40,7 @@ spring:
               predicates:
                 - Path=/api/v1/catalog/events,/api/v1/catalog/events/**
               filters:
-                - name: RequestRateLimiter
+                - name: ProblemRequestRateLimiter
                   args:
                     rate-limiter: "#{@resilientRateLimiter}"
                     key-resolver: "#{@ipKeyResolver}"

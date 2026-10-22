@@ -21,7 +21,9 @@ public class GatewaySecurityConfig {
 
     @Bean
     SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
-        Environment environment) {
+                                                  Environment environment,
+                                                  GatewayAuthenticationEntryPoint authenticationEntryPoint,
+                                                  GatewayAccessDeniedHandler accessDeniedHandler) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(Customizer.withDefaults())
@@ -45,7 +47,14 @@ public class GatewaySecurityConfig {
 
                             .anyExchange().denyAll();
                 })
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults())).build();
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                        .jwt(Customizer.withDefaults()))
+                .build();
     }
 
     @Bean
