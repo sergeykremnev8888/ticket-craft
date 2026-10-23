@@ -36,13 +36,25 @@
 
 ## Запуск и тесты
 
+Команды выполняются из корня репозитория после запуска инфраструктуры Docker Compose.
+
+Сборка и запуск:
+
 ```powershell
-# Из корня репозитория, после запуска docker compose
 .\mvnw.cmd -pl catalog-service -am install -DskipTests
 .\mvnw.cmd -pl catalog-service spring-boot:run
 ```
 
-Порт БД с хоста: `5432`. Профили и параметры подключения: `application-local.yml`, `application-prod.yml`.
+Запуск тестов:
+
+```powershell
+.\mvnw.cmd -pl catalog-service -am test
+```
+
+Для интеграционных тестов с Testcontainers необходим работающий Docker.
+
+Порт БД с хоста: `5432`. Профили и параметры подключения: 
+`application-local.yml`, `application-prod.yml`.
 
 ## Важные ограничения
 
