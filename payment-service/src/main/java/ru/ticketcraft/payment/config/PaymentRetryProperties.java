@@ -3,26 +3,24 @@ package ru.ticketcraft.payment.config;
 import java.time.Duration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 @ConfigurationProperties(prefix = "ticketcraft.kafka.retry")
-public class PaymentRetryProperties {
+public record PaymentRetryProperties(@DefaultValue("3") int maxAttempts,
+                                     @DefaultValue("1s") Duration backOff) {
 
-    private int maxAttempts = 3;
-    private Duration backOff = Duration.ofSeconds(1);
+    public PaymentRetryProperties {
+        if (maxAttempts < 1) {
+            throw new IllegalArgumentException("ticketcraft.kafka.retry.max-attempts must be at least 1");
+        }
 
-    public int getMaxAttempts() {
-        return maxAttempts;
-    }
+        if (backOff == null || backOff.isNegative()) {
+            throw new IllegalArgumentException("ticketcraft.kafka.retry.back-off must not be negative");
+        }
 
-    public void setMaxAttempts(int maxAttempts) {
-        this.maxAttempts = maxAttempts;
-    }
-
-    public Duration getBackOff() {
-        return backOff;
-    }
-
-    public void setBackOff(Duration backOff) {
-        this.backOff = backOff;
+        if (!backOff.isZero() && backOff.toMillis() == 0) {
+            throw new IllegalArgumentException(
+                    "ticketcraft.kafka.retry.back-off must be zero " + "or at least 1 millisecond");
+        }
     }
 }

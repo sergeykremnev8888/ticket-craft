@@ -75,7 +75,8 @@ class PaymentOutboxPublisherTest {
 
     @BeforeEach
     void setUp() {
-        PaymentOutboxProperties outboxProperties = new PaymentOutboxProperties();
+        PaymentOutboxProperties outboxProperties = 
+                new PaymentOutboxProperties(100, Duration.ofSeconds(30), Duration.ofSeconds(1));
 
         publisher = new PaymentOutboxPublisher(outboxRepository, kafkaTemplate, kafkaProperties, outboxProperties,
                 objectMapper, outboxMetrics);

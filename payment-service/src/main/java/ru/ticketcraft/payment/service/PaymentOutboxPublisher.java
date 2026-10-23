@@ -61,10 +61,10 @@ public class PaymentOutboxPublisher {
         String claimId = instanceId + ":" + UUID.randomUUID();
 
         List<PaymentOutboxRecord> records = 
-                outboxRepository.claimBatch(outboxProperties.getBatchSize(),
+                outboxRepository.claimBatch(outboxProperties.batchSize(),
                                             claimId,
                                             now,
-                                            now.minus(outboxProperties.getClaimLease()));
+                                            now.minus(outboxProperties.claimLease()));
 
         List<PendingPublication> publications = new ArrayList<>(records.size());
         for (PaymentOutboxRecord record : records) {

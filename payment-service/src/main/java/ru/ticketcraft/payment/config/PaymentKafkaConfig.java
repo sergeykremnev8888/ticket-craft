@@ -230,8 +230,8 @@ public class PaymentKafkaConfig {
     }
 
     private DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer recoverer) {
-        FixedBackOff backOff = new FixedBackOff(paymentRetryProperties.getBackOff().toMillis(),
-                                                paymentRetryProperties.getMaxAttempts() - 1L);
+        FixedBackOff backOff = new FixedBackOff(paymentRetryProperties.backOff().toMillis(),
+                                                paymentRetryProperties.maxAttempts() - 1L);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
         errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);

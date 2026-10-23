@@ -3,37 +3,29 @@ package ru.ticketcraft.payment.config;
 import java.time.Duration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 @ConfigurationProperties(prefix = "ticketcraft.outbox")
-public class PaymentOutboxProperties {
+public record PaymentOutboxProperties(@DefaultValue("100") int batchSize,
+                                      @DefaultValue("30s") Duration claimLease,
+                                      @DefaultValue("1s") Duration publishDelay) {
 
-    private int batchSize = 100;
+    public PaymentOutboxProperties {
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("ticketcraft.outbox.batch-size must be positive");
+        }
 
-    private Duration claimLease = Duration.ofSeconds(30);
-
-    private Duration publishDelay = Duration.ofSeconds(1);
-
-    public int getBatchSize() {
-        return batchSize;
+        validatePositiveDuration(claimLease, "ticketcraft.outbox.claim-lease");
+        validatePositiveDuration(publishDelay, "ticketcraft.outbox.publish-delay");
     }
 
-    public void setBatchSize(int batchSize) {
-        this.batchSize = batchSize;
-    }
+    private void validatePositiveDuration(Duration value, String property) {
+        if (value == null || value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(property + " must be positive");
+        }
 
-    public Duration getClaimLease() {
-        return claimLease;
-    }
-
-    public void setClaimLease(Duration claimLease) {
-        this.claimLease = claimLease;
-    }
-
-    public Duration getPublishDelay() {
-        return publishDelay;
-    }
-
-    public void setPublishDelay(Duration publishDelay) {
-        this.publishDelay = publishDelay;
+        if (value.toMillis() == 0) {
+            throw new IllegalArgumentException(property + " must be at least 1 millisecond");
+        }
     }
 }
