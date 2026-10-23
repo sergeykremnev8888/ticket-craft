@@ -59,7 +59,7 @@ class PaymentRefundCompensationTest {
 
         paymentTransactionService = new PaymentTransactionService(paymentRepository, paymentOutboxService);
 
-        paymentService = new PaymentService(paymentTransactionService, paymentGateway);
+        paymentService = new PaymentService(paymentTransactionService, paymentGateway, new PaymentCommandValidator());
     }
 
     @Test

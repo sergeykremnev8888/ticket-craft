@@ -229,15 +229,13 @@ public class PaymentKafkaConfig {
         return properties;
     }
 
-    private DefaultErrorHandler errorHandler(
-            DeadLetterPublishingRecoverer recoverer) {
+    private DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer recoverer) {
+        FixedBackOff backOff = new FixedBackOff(paymentRetryProperties.getBackOff().toMillis(),
+                                                paymentRetryProperties.getMaxAttempts() - 1L);
 
-        FixedBackOff backOff =
-                new FixedBackOff(
-                        paymentRetryProperties.getBackOff().toMillis(),
-                        paymentRetryProperties.getMaxAttempts() - 1L);
-
-        return new DefaultErrorHandler(recoverer, backOff);
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
+        errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);
+        return errorHandler;
     }
 
     private <T> void configureFactory(

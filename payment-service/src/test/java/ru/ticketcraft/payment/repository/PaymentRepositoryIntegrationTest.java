@@ -1,17 +1,23 @@
 package ru.ticketcraft.payment.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jdbc.test.autoconfigure.DataJdbcTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -37,6 +43,9 @@ class PaymentRepositoryIntegrationTest {
 
     @Autowired
     private PaymentRepository paymentRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void shouldInsertAndFindPayment() {
@@ -76,5 +85,36 @@ class PaymentRepositoryIntegrationTest {
 
         assertThat(paymentRepository.insertIfAbsent(firstPayment)).isTrue();
         assertThat(paymentRepository.insertIfAbsent(secondPayment)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "0.00", "-0.01" })
+    void shouldRejectNonPositiveAmountAtDatabaseLevel(String value) {
+        UUID paymentId = UUID.randomUUID();
+        String messageId = "invalid-amount-" + paymentId;
+        Timestamp now = Timestamp.from(Instant.now());
+
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO payments (
+                    id,
+                    order_id,
+                    user_id,
+                    amount,
+                    status,
+                    message_id,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                 paymentId,
+                 987654321L,
+                 10L,
+                 new BigDecimal(value),
+                 "PENDING",
+                 messageId,
+                 now,
+                 now)).isInstanceOf(DataIntegrityViolationException.class)
+                      .hasStackTraceContaining("chk_payments_amount_positive");
     }
 }

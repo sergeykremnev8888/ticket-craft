@@ -38,7 +38,7 @@ class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
-        paymentService = new PaymentService(paymentTransactionService, paymentGateway);
+        paymentService = new PaymentService(paymentTransactionService, paymentGateway, new PaymentCommandValidator());
     }
 
     @Test

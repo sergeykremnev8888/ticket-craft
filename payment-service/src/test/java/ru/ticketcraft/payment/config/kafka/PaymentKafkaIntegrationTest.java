@@ -30,6 +30,9 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -50,6 +53,7 @@ import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -57,11 +61,15 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
 import ru.ticketcraft.dto.PaymentSucceededEvent;
+import ru.ticketcraft.dto.RefundPaymentCommand;
+import ru.ticketcraft.dto.TicketConfirmationFailureReason;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;
 import ru.ticketcraft.payment.model.PaymentStatus;
 import ru.ticketcraft.payment.repository.PaymentRepository;
+import ru.ticketcraft.payment.service.PaymentCommandValidator;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(properties = { "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
 
@@ -77,10 +85,20 @@ import ru.ticketcraft.payment.repository.PaymentRepository;
         "ticketcraft.kafka.dlt-topic=payment-requests.DLT", "ticketcraft.kafka.concurrency=3",
         "ticketcraft.kafka.partitions=3", "ticketcraft.kafka.replicas=1",
 
+        "ticketcraft.kafka.command-topic=payment-commands",
+        "ticketcraft.kafka.command-dlt-topic=payment-commands.DLT",
+
         "ticketcraft.kafka.retry.max-attempts=3", "ticketcraft.kafka.retry.back-off=100ms" })
-@EmbeddedKafka(partitions = 3, topics = { PaymentKafkaIntegrationTest.REQUEST_TOPIC,
-        PaymentKafkaIntegrationTest.RESULT_TOPIC, PaymentKafkaIntegrationTest.DLT_TOPIC,
-        PaymentKafkaIntegrationTest.PARTITIONING_TOPIC })
+@EmbeddedKafka(partitions = 3,
+               topics = {
+                       PaymentKafkaIntegrationTest.REQUEST_TOPIC,
+                       PaymentKafkaIntegrationTest.RESULT_TOPIC,
+                       PaymentKafkaIntegrationTest.DLT_TOPIC,
+                       PaymentKafkaIntegrationTest.PARTITIONING_TOPIC,
+                       PaymentKafkaIntegrationTest.COMMAND_TOPIC,
+                       PaymentKafkaIntegrationTest.COMMAND_DLT_TOPIC
+               }
+       )
 @Testcontainers
 @ActiveProfiles("test")
 class PaymentKafkaIntegrationTest {
@@ -89,6 +107,8 @@ class PaymentKafkaIntegrationTest {
     static final String RESULT_TOPIC = "payment-results";
     static final String DLT_TOPIC = "payment-requests.DLT";
     static final String PARTITIONING_TOPIC = "payment-partitioning-test";
+    static final String COMMAND_TOPIC = "payment-commands";
+    static final String COMMAND_DLT_TOPIC = "payment-commands.DLT";
 
     @Container
     @ServiceConnection
@@ -111,6 +131,8 @@ class PaymentKafkaIntegrationTest {
     @MockitoBean
     private PaymentGateway paymentGateway;
 
+    @MockitoSpyBean
+    private PaymentCommandValidator commandValidator;
 
     @Test
     void shouldStartThreeConcurrentPaymentConsumers() {
@@ -408,6 +430,89 @@ class PaymentKafkaIntegrationTest {
         }
     }
 
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = { "0.00", "-1.00", "100.001", "100000000000000000.00" })
+    void shouldSendInvalidPaymentToDltWithoutRetry(String amountValue) {
+        int partition = 1;
+        Long orderId = 91001L;
+
+        BigDecimal amount = amountValue == null ? null : new BigDecimal(amountValue);
+
+        PaymentRequestedEvent event = new PaymentRequestedEvent("invalid-payment-" + UUID.randomUUID(), orderId, 200L,
+                amount, Instant.parse("2026-01-01T10:00:00Z"));
+
+        try (Consumer<String, byte[]> dltConsumer = createRawDltConsumer("invalid-payment-dlt-" + UUID.randomUUID(),
+                                                                         DLT_TOPIC,
+                                                                         partition)) {
+
+            waitForListenerAssignment();
+
+            kafkaTemplate.send(new ProducerRecord<String, Object>(REQUEST_TOPIC, partition, event.messageId(), event))
+                         .join();
+
+            ConsumerRecord<String, byte[]> dltRecord = awaitRecordByKey(dltConsumer,
+                                                                        event.messageId(),
+                                                                        Duration.ofSeconds(10));
+
+            assertThat(dltRecord.partition()).isEqualTo(partition);
+
+            PaymentRequestedEvent restored = JsonMapper.builder()
+                                                       .build()
+                                                       .readValue(dltRecord.value(), PaymentRequestedEvent.class);
+
+            assertThat(restored).isEqualTo(event);
+
+            verify(commandValidator, times(1)).validate(eq(event));
+
+            verifyNoInteractions(paymentGateway);
+
+            assertThat(paymentRepository.findByOrderId(orderId)).isEmpty();
+        }
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = { "0.00", "-1.00", "100.001", "100000000000000000.00" })
+    void shouldSendInvalidRefundToDltWithoutRetry(String amountValue) {
+        int partition = 1;
+
+        BigDecimal amount = amountValue == null ? null : new BigDecimal(amountValue);
+
+        RefundPaymentCommand command = new RefundPaymentCommand("invalid-refund-" + UUID.randomUUID(), 91002L,
+                UUID.randomUUID(), amount, TicketConfirmationFailureReason.RESERVATION_EXPIRED,
+                Instant.parse("2026-01-01T10:00:00Z"));
+
+        try (Consumer<String, byte[]> dltConsumer = createRawDltConsumer("invalid-refund-dlt-" + UUID.randomUUID(),
+                                                                         COMMAND_DLT_TOPIC,
+                                                                         partition)) {
+
+            MessageListenerContainer container = listenerRegistry.getListenerContainer("paymentRefundConsumer");
+
+            assertThat(container).isNotNull();
+            ContainerTestUtils.waitForAssignment(container, 3);
+
+            kafkaTemplate.send(new ProducerRecord<String, Object>(COMMAND_TOPIC, partition, command.messageId(),
+                    command)).join();
+
+            ConsumerRecord<String, byte[]> dltRecord = awaitRecordByKey(dltConsumer,
+                                                                        command.messageId(),
+                                                                        Duration.ofSeconds(10));
+
+            assertThat(dltRecord.partition()).isEqualTo(partition);
+
+            RefundPaymentCommand restored = JsonMapper.builder()
+                                                      .build()
+                                                      .readValue(dltRecord.value(), RefundPaymentCommand.class);
+
+            assertThat(restored).isEqualTo(command);
+
+            verify(commandValidator, times(1)).validate(eq(command));
+
+            verifyNoInteractions(paymentGateway);
+        }
+    }
+
     private <T> ConsumerRecord<String, T> awaitRecordByKey(Consumer<String, T> consumer, String expectedKey,
             Duration timeout) {
 
@@ -445,18 +550,24 @@ class PaymentKafkaIntegrationTest {
     }
 
     private Consumer<String, byte[]> createRawDltConsumer(String groupId, int partition) {
+        return createRawDltConsumer(groupId, DLT_TOPIC, partition);
+    }
 
-        Map<String, Object> consumerProperties = KafkaTestUtils.consumerProps(embeddedKafkaBroker, groupId, false);
+    private Consumer<String, byte[]> createRawDltConsumer(String groupId, String topic, int partition) {
+        Map<String, Object> properties = KafkaTestUtils.consumerProps(embeddedKafkaBroker, groupId, false);
 
-        ConsumerFactory<String, byte[]> consumerFactory = new DefaultKafkaConsumerFactory<>(consumerProperties,
+        ConsumerFactory<String, byte[]> consumerFactory = new DefaultKafkaConsumerFactory<>(properties,
                 new StringDeserializer(), new ByteArrayDeserializer());
 
         Consumer<String, byte[]> consumer = consumerFactory.createConsumer();
 
-        TopicPartition topicPartition = new TopicPartition(DLT_TOPIC, partition);
+        TopicPartition topicPartition = new TopicPartition(topic, partition);
 
         consumer.assign(List.of(topicPartition));
         consumer.seekToEnd(List.of(topicPartition));
+
+        // Завершаем определение offset до отправки тестового сообщения.
+        consumer.position(topicPartition);
 
         return consumer;
     }
@@ -503,6 +614,7 @@ class PaymentKafkaIntegrationTest {
 
         consumer.assign(List.of(topicPartition));
         consumer.seekToEnd(List.of(topicPartition));
+        consumer.position(topicPartition);
 
         return consumer;
     }

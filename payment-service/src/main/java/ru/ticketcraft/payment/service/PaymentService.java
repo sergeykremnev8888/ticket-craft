@@ -20,14 +20,18 @@ public class PaymentService {
 
     private final PaymentTransactionService paymentTransactionService;
     private final PaymentGateway paymentGateway;
+    private final PaymentCommandValidator commandValidator;
 
-    public PaymentService(PaymentTransactionService paymentTransactionService, PaymentGateway paymentGateway) {
-
+    public PaymentService(PaymentTransactionService paymentTransactionService,
+                          PaymentGateway paymentGateway,
+                          PaymentCommandValidator commandValidator) {
         this.paymentTransactionService = paymentTransactionService;
         this.paymentGateway = paymentGateway;
+        this.commandValidator = commandValidator;
     }
 
     public PaymentResult process(PaymentRequestedEvent event) {
+        commandValidator.validate(event);
 
         Payment payment = paymentTransactionService.getOrCreatePayment(event);
 
@@ -66,6 +70,7 @@ public class PaymentService {
     }
 
     public PaymentResult process(RefundPaymentCommand command) {
+        commandValidator.validate(command);
 
         Payment payment = paymentTransactionService.findPayment(command.paymentId());
 
@@ -100,7 +105,6 @@ public class PaymentService {
     }
 
     private void validateRefundCommand(Payment payment, RefundPaymentCommand command) {
-
         if (!payment.getOrderId().equals(command.orderId())) {
             throw new IllegalStateException("Refund order mismatch" + ": paymentId=" + payment.getId()
                     + ", expectedOrderId=" + payment.getOrderId() + ", actualOrderId=" + command.orderId());
