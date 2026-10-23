@@ -8,16 +8,19 @@ spring:
       minimum-idle: 5
       connection-timeout: 5000
       validation-timeout: 1000
+
   data:
     redis:
       url: ${REDIS_URL:redis://localhost:6379}
+
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${JWT_ISSUER_URI:http://localhost:9000}
-          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9000/oauth2/jwks}
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:9000/realms/ticketcraft}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9000/realms/ticketcraft/protocol/openid-connect/certs}
           audiences: ${JWT_AUDIENCE:ticketcraft-api}
+
 ticketcraft:
   kafka:
     consumer:
@@ -25,8 +28,10 @@ ticketcraft:
     topic:
       partitions: 1
       replicas: 1
+
   security:
     metrics-public: ${METRICS_PUBLIC:true}
+
 logging:
   level:
     '[ru.ticketcraft]': DEBUG
