@@ -24,17 +24,17 @@ import ru.ticketcraft.dto.OrderEvent;
 class DeadLetterPublishingRecovererTest {
 
     @Mock
-    private KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Captor
-    private ArgumentCaptor<ProducerRecord<String, OrderEvent>> producerRecordCaptor;
+    private ArgumentCaptor<ProducerRecord<String, Object>> producerRecordCaptor;
 
     @Test
     void shouldPublishFailedRecordToConfiguredDltWithSamePartition() {
         KafkaTopicProperties properties = new KafkaTopicProperties();
         properties.setDltTopic("order-events.DLT");
 
-        when(kafkaTemplate.send(ArgumentMatchers.<ProducerRecord<String, OrderEvent>>any()))
+        when(kafkaTemplate.send(ArgumentMatchers.<ProducerRecord<String, Object>>any()))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         KafkaConsumerConfig config = new KafkaConsumerConfig();
@@ -51,7 +51,7 @@ class DeadLetterPublishingRecovererTest {
 
         verify(kafkaTemplate).send(producerRecordCaptor.capture());
 
-        ProducerRecord<String, OrderEvent> dltRecord = producerRecordCaptor.getValue();
+        ProducerRecord<String, Object> dltRecord = producerRecordCaptor.getValue();
 
         assertThat(dltRecord.topic()).isEqualTo("order-events.DLT");
 

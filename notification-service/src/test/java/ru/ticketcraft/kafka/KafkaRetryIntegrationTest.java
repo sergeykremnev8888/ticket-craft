@@ -7,6 +7,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -22,7 +23,11 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,9 +36,11 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
@@ -47,6 +54,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.service.IdempotentNotificationProcessor;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(properties = {
         "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
@@ -93,7 +101,7 @@ class KafkaRetryIntegrationTest {
             .withDatabaseName("notification_db").withUsername("postgres").withPassword("postgres");
 
     @Autowired
-    private KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Autowired
     private EmbeddedKafkaBroker embeddedKafkaBroker;
@@ -110,8 +118,7 @@ class KafkaRetryIntegrationTest {
         MessageListenerContainer container =
                 listenerRegistry.getListenerContainer("notificationConsumer");
 
-        assertThat(container)
-                .isInstanceOf(ConcurrentMessageListenerContainer.class);
+        assertThat(container).isInstanceOf(ConcurrentMessageListenerContainer.class);
 
         @SuppressWarnings("unchecked")
         ConcurrentMessageListenerContainer<String, OrderEvent> concurrentContainer =
@@ -133,42 +140,35 @@ class KafkaRetryIntegrationTest {
 
     @Test
     void shouldRetryThreeTimesAndPublishToDlt() {
-
         OrderEvent event = createEvent();
 
         doThrow(new RuntimeException("Processing failed")).when(processor).process(any(OrderEvent.class));
 
-        try (Consumer<String, OrderEvent> dltConsumer = createDltConsumer()) {
-
+        try (Consumer<String, byte[]> dltConsumer = createRawDltConsumer()) {
             waitForListenerAssignment();
 
-            ProducerRecord<String, OrderEvent> record = new ProducerRecord<>(SOURCE_TOPIC, 2, event.getMessageId(),
-                    event);
+            ProducerRecord<String, Object> record = new ProducerRecord<>(SOURCE_TOPIC, 2, event.getMessageId(), event);
 
             kafkaTemplate.send(record).join();
 
             verify(processor, timeout(10_000).times(3)).process(any(OrderEvent.class));
 
-            ConsumerRecord<String, OrderEvent> dltRecord = KafkaTestUtils.getSingleRecord(dltConsumer, DLT_TOPIC,
-                    Duration.ofSeconds(10));
-
+            ConsumerRecord<String, byte[]> dltRecord = 
+                    KafkaTestUtils.getSingleRecord(dltConsumer, DLT_TOPIC, Duration.ofSeconds(10));
             assertThat(dltRecord.value()).isNotNull();
-
-            assertThat(dltRecord.value().getMessageId()).isEqualTo(event.getMessageId());
-
             assertThat(dltRecord.key()).isEqualTo(event.getMessageId());
-
             assertThat(dltRecord.partition()).isEqualTo(2);
+
+            OrderEvent restoredEvent = JsonMapper.builder().build().readValue(dltRecord.value(), OrderEvent.class);
+            assertThat(restoredEvent.getMessageId()).isEqualTo(event.getMessageId());
         }
     }
 
     @Test
     void shouldProcessSuccessfullyWithoutRetryAndDlt() {
-
         OrderEvent event = createEvent();
 
-        try (Consumer<String, OrderEvent> dltConsumer = createDltConsumer()) {
-
+        try (Consumer<String, byte[]> dltConsumer = createRawDltConsumer()) {
             waitForListenerAssignment();
 
             kafkaTemplate.send(SOURCE_TOPIC, event.getMessageId(), event).join();
@@ -187,8 +187,68 @@ class KafkaRetryIntegrationTest {
             assertThat(processedEvent.getState()).isEqualTo(event.getState());
             assertThat(processedEvent.getCreatedAt()).isEqualTo(event.getCreatedAt());
 
-            ConsumerRecords<String, OrderEvent> records = dltConsumer.poll(Duration.ofSeconds(2));
+            ConsumerRecords<String, byte[]> records = dltConsumer.poll(Duration.ofSeconds(2));
             assertThat(records).isEmpty();
+        }
+    }
+
+    @Test
+    void shouldPublishMalformedMessageToDltAndContinueProcessingSamePartition() {
+        int partition = 1;
+        String malformedKey = "malformed-" + UUID.randomUUID();
+
+        byte[] malformedJson = """
+                {
+                  "messageId": "broken-message",
+                  "orderId":
+                }
+                """.getBytes(StandardCharsets.UTF_8);
+
+        OrderEvent validEvent = createEvent();
+
+        try (Consumer<String, byte[]> dltConsumer = createRawDltConsumer()) {
+            waitForListenerAssignment();
+
+            sendRawMessage(malformedKey, malformedJson, partition);
+
+            ProducerRecord<String, Object> validRecord = new ProducerRecord<>(SOURCE_TOPIC, partition,
+                    validEvent.getMessageId(), validEvent);
+
+            kafkaTemplate.send(validRecord).join();
+
+            ConsumerRecord<String, byte[]> dltRecord = KafkaTestUtils.getSingleRecord(dltConsumer,
+                                                                                      DLT_TOPIC,
+                                                                                      Duration.ofSeconds(10));
+
+            assertThat(dltRecord.key()).isEqualTo(malformedKey);
+            assertThat(dltRecord.partition()).isEqualTo(partition);
+            assertThat(dltRecord.value()).containsExactly(malformedJson);
+
+            assertThat(dltRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_FQCN)).isNotNull();
+
+            ArgumentCaptor<OrderEvent> eventCaptor = ArgumentCaptor.forClass(OrderEvent.class);
+
+            verify(processor, timeout(10_000).times(1)).process(eventCaptor.capture());
+
+            assertThat(eventCaptor.getValue().getMessageId()).isEqualTo(validEvent.getMessageId());
+
+            assertThat(eventCaptor.getValue().getOrderId()).isEqualTo(validEvent.getOrderId());
+        }
+    }
+
+    private void sendRawMessage(String key, byte[] value, int partition) {
+        Map<String, Object> properties = KafkaTestUtils.producerProps(embeddedKafkaBroker);
+
+        DefaultKafkaProducerFactory<String, byte[]> producerFactory = new DefaultKafkaProducerFactory<>(properties,
+                new StringSerializer(), new ByteArraySerializer());
+
+        try {
+            KafkaTemplate<String, byte[]> rawTemplate = new KafkaTemplate<>(producerFactory);
+            ProducerRecord<String, byte[]> record = new ProducerRecord<>(SOURCE_TOPIC, partition, key, value);
+
+            rawTemplate.send(record).join();
+        } finally {
+            producerFactory.destroy();
         }
     }
 
@@ -218,9 +278,34 @@ class KafkaRetryIntegrationTest {
         return consumer;
     }
 
+    private Consumer<String, byte[]> createRawDltConsumer() {
+        Map<String, Object> properties = KafkaTestUtils.consumerProps(embeddedKafkaBroker,
+                                                                      "notification-raw-dlt-" + UUID.randomUUID(),
+                                                                      false);
+
+        ConsumerFactory<String, byte[]> consumerFactory = new DefaultKafkaConsumerFactory<>(properties,
+                new StringDeserializer(), new ByteArrayDeserializer());
+
+        Consumer<String, byte[]> consumer = consumerFactory.createConsumer();
+
+        moveDltConsumerToEnd(consumer);
+
+        return consumer;
+    }
+
+    private void moveDltConsumerToEnd(Consumer<String, ?> consumer) {
+        List<TopicPartition> partitions = List.of(new TopicPartition(DLT_TOPIC, 0),
+                                                  new TopicPartition(DLT_TOPIC, 1),
+                                                  new TopicPartition(DLT_TOPIC, 2));
+        consumer.assign(partitions);
+        consumer.seekToEnd(partitions);
+        for (TopicPartition partition : partitions) {
+            consumer.position(partition);
+        }
+    }
+
     private OrderEvent createEvent() {
         UUID eventId = UUID.fromString("22222222-2222-2222-2222-222222222222");
-
         UUID ticketId = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
         return new OrderEvent("11111111-1111-1111-1111-111111111111", 123L, 10L, eventId, List.of(ticketId),
