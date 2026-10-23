@@ -1,3 +1,6 @@
+server:
+  port: ${SERVER_PORT:8084}
+
 spring:
   application:
     name: payment-service
@@ -21,8 +24,7 @@ spring:
       observation-enabled: true
     template:
       observation-enabled: true
-server:
-  port: ${SERVER_PORT:8084}
+
 management:
   endpoints:
     web:
@@ -47,6 +49,7 @@ management:
     metrics:
       export:
         enabled: false
+
 logging:
   level:
     root: INFO
@@ -54,6 +57,7 @@ logging:
   pattern:
     correlation: '[${spring.application.name:},%X{traceId:-},%X{spanId:-}] '
   include-application-name: false
+
 ticketcraft:
   payment:
     provider:
@@ -62,6 +66,8 @@ ticketcraft:
       refund-path: ${PAYMENT_PROVIDER_REFUND_PATH:/api/v1/payments/refunds}
       connect-timeout: ${PAYMENT_PROVIDER_CONNECT_TIMEOUT:2s}
       read-timeout: ${PAYMENT_PROVIDER_READ_TIMEOUT:5s}
+      charge-status-path: ${PAYMENT_PROVIDER_CHARGE_STATUS_PATH:/api/v1/payments/charges/status}
+      refund-status-path: ${PAYMENT_PROVIDER_REFUND_STATUS_PATH:/api/v1/payments/refunds/status}
   outbox:
     batch-size: ${PAYMENT_OUTBOX_BATCH_SIZE:100}
     claim-lease: ${PAYMENT_OUTBOX_CLAIM_LEASE:30s}
