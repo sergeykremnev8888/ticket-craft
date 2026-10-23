@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import ru.ticketcraft.controller.OrderController;
 import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.exception.OrderNotFoundException;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.service.OrderService;
 
@@ -63,7 +64,6 @@ class OrderSecurityConfigurationTest {
 
     @Test
     void shouldRequireAuthenticationForOrderCreation() throws Exception {
-
         mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON).content(orderRequest())).andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
@@ -73,7 +73,6 @@ class OrderSecurityConfigurationTest {
 
     @Test
     void shouldRequireOrdersWriteScope() throws Exception {
-
         mockMvc.perform(post("/api/v1/orders").with(jwt().jwt(token -> token.claim("user_id", 42L)))
                 .header("Idempotency-Key", "idem-1").contentType(MediaType.APPLICATION_JSON).content(orderRequest()))
                 .andExpect(status().isForbidden());
@@ -83,7 +82,6 @@ class OrderSecurityConfigurationTest {
 
     @Test
     void shouldTakeUserIdFromJwtAndCreateOrder() throws Exception {
-
         Order order = new Order(10L, 42L, EVENT_ID, TICKET_ID, PRICE, OrderState.CREATED, Instant.now());
 
         when(orderService.createOrder(eq("idem-1"), eq(42L), eq(TICKET_ID))).thenReturn(order);
@@ -99,7 +97,6 @@ class OrderSecurityConfigurationTest {
 
     @Test
     void shouldRejectTokenWithoutUserIdClaim() throws Exception {
-
         mockMvc.perform(post("/api/v1/orders").with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_orders.write")))
                 .header("Idempotency-Key", "idem-1").contentType(MediaType.APPLICATION_JSON).content(orderRequest()))
                 .andExpect(status().isForbidden());
@@ -130,7 +127,6 @@ class OrderSecurityConfigurationTest {
 
     @Test
     void shouldProtectPrometheusWithMetricsScope() throws Exception {
-
         mockMvc.perform(get("/actuator/prometheus")).andExpect(status().isUnauthorized());
 
         mockMvc.perform(
@@ -140,8 +136,43 @@ class OrderSecurityConfigurationTest {
 
     @Test
     void shouldAllowHealthWithoutAuthentication() throws Exception {
-
         mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenOrderIsMissingOrBelongsToAnotherUser() throws Exception {
+        when(orderService.getOrder(10L, 42L)).thenThrow(new OrderNotFoundException(10L));
+
+        mockMvc.perform(get("/api/v1/orders/10").with(jwt().jwt(token -> token.claim("user_id", 42L))
+                                                           .authorities(new SimpleGrantedAuthority(
+                                                                   "SCOPE_orders.read"))))
+               .andExpect(status().isNotFound())
+               .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verify(orderService).getOrder(10L, 42L);
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenIdempotencyKeyIsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/orders").with(jwt().jwt(token -> token.claim("user_id", 42L))
+                                                         .authorities(new SimpleGrantedAuthority("SCOPE_orders.write")))
+                                              .contentType(MediaType.APPLICATION_JSON)
+                                              .content(orderRequest()))
+               .andExpect(status().isBadRequest())
+               .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenOrderIdIsNotNumeric() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/not-a-number").with(jwt().jwt(token -> token.claim("user_id", 42L))
+                                                                     .authorities(new SimpleGrantedAuthority(
+                                                                             "SCOPE_orders.read"))))
+               .andExpect(status().isBadRequest())
+               .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verifyNoInteractions(orderService);
     }
 
     private static String orderRequest() {
