@@ -58,10 +58,11 @@ public class PaymentOutboxPublisher {
                scheduler = "paymentOutboxScheduler")
     public void publish() {
         Instant now = Instant.now();
+        String claimId = instanceId + ":" + UUID.randomUUID();
 
         List<PaymentOutboxRecord> records = 
                 outboxRepository.claimBatch(outboxProperties.getBatchSize(),
-                                            instanceId,
+                                            claimId,
                                             now,
                                             now.minus(outboxProperties.getClaimLease()));
 
@@ -133,16 +134,15 @@ public class PaymentOutboxPublisher {
 
     private void markPublished(PaymentOutboxRecord record) {
         try {
-            int updatedRows = outboxRepository.markPublished(record.id(), instanceId, Instant.now());
-
+            int updatedRows = outboxRepository.markPublished(record.id(), record.claimedBy(), Instant.now());
             if (updatedRows != 1) {
-                log.warn("Payment outbox event was sent to Kafka, " + "but its publication mark was not updated "
+                log.warn("Payment outbox event was sent to Kafka, but its publication mark was not updated "
                         + "[id={}, messageId={}, updatedRows={}]", record.id(), record.messageId(), updatedRows);
             }
 
         } catch (RuntimeException exception) {
             log.error("Payment outbox event was sent to Kafka, "
-                    + "but updating its publication mark failed " + "[id={}, messageId={}]. "
+                    + "but updating its publication mark failed [id={}, messageId={}]. "
                     + "Claim will expire; duplicate delivery is possible.", record.id(), record.messageId(), exception);
         }
     }
@@ -164,7 +164,7 @@ public class PaymentOutboxPublisher {
 
     private void releaseClaim(PaymentOutboxRecord record) {
         try {
-            int updatedRows = outboxRepository.releaseClaim(record.id(), instanceId);
+            int updatedRows = outboxRepository.releaseClaim(record.id(), record.claimedBy());
 
             if (updatedRows != 1) {
                 log.warn("Payment outbox claim was not released " + "[id={}, messageId={}, updatedRows={}]",

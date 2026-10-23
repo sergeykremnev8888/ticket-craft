@@ -209,6 +209,56 @@ class PaymentOutboxRepositoryIntegrationTest {
         assertThat(secondClaim).isEmpty();
     }
 
+    @Test
+    void shouldRejectStaleClaimAfterReclaimBySameInstance() {
+        UUID outboxId = UUID.randomUUID();
+        String messageId = "stale-claim-" + UUID.randomUUID();
+
+        Instant createdAt = Instant.parse("2026-01-01T10:00:00Z");
+        Instant firstClaimAt = createdAt.plusSeconds(1);
+        Instant secondClaimAt = firstClaimAt.plusSeconds(31);
+
+        String firstClaimId = "instance-A:" + UUID.randomUUID();
+        String secondClaimId = "instance-A:" + UUID.randomUUID();
+
+        boolean inserted = outboxRepository.insertIfAbsent(outboxId,
+                                                           messageId,
+                                                           123L,
+                                                           PaymentOutboxEventType.PAYMENT_SUCCEEDED.getPersistedValue(),
+                                                           "{}",
+                                                           createdAt);
+
+        assertThat(inserted).isTrue();
+
+        List<PaymentOutboxRecord> firstBatch = outboxRepository.claimBatch(1,
+                                                                           firstClaimId,
+                                                                           firstClaimAt,
+                                                                           firstClaimAt.minusSeconds(30));
+
+        assertThat(firstBatch).hasSize(1);
+        assertThat(firstBatch.getFirst().id()).isEqualTo(outboxId);
+
+        List<PaymentOutboxRecord> secondBatch = outboxRepository.claimBatch(1,
+                                                                            secondClaimId,
+                                                                            secondClaimAt,
+                                                                            secondClaimAt.minusSeconds(30));
+
+        assertThat(secondBatch).hasSize(1);
+        assertThat(secondBatch.getFirst().claimedBy()).isEqualTo(secondClaimId);
+
+        int staleMark = outboxRepository.markPublished(outboxId, firstClaimId, secondClaimAt.plusSeconds(1));
+
+        assertThat(staleMark).isZero();
+
+        int staleRelease = outboxRepository.releaseClaim(outboxId, firstClaimId);
+
+        assertThat(staleRelease).isZero();
+
+        int currentMark = outboxRepository.markPublished(outboxId, secondClaimId, secondClaimAt.plusSeconds(2));
+
+        assertThat(currentMark).isEqualTo(1);
+    }
+
     private Set<UUID> extractIds(List<PaymentOutboxRecord> records) {
         Set<UUID> ids = new HashSet<>();
 

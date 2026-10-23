@@ -46,6 +46,7 @@ class PaymentOutboxPublisherTest {
 
     private static final String RESULT_TOPIC = "payment-results";
     private static final String PAYLOAD = "{\"messageId\":\"payment-test\"}";
+    private static final String CLAIM_ID = "instance-test:claim-test";
 
     private static final UUID OUTBOX_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
@@ -79,30 +80,34 @@ class PaymentOutboxPublisherTest {
         publisher = new PaymentOutboxPublisher(outboxRepository, kafkaTemplate, kafkaProperties, outboxProperties,
                 objectMapper, outboxMetrics);
 
-        record = new PaymentOutboxRecord(OUTBOX_ID, "payment-test", 123L, EVENT_TYPE.getPersistedValue(), PAYLOAD,
-                Instant.parse("2026-01-01T10:00:00Z"), null, null);
+        record = new PaymentOutboxRecord(OUTBOX_ID,
+                                         "payment-test",
+                                         123L,
+                                         EVENT_TYPE.getPersistedValue(),
+                                         PAYLOAD,
+                                         Instant.parse("2026-01-01T10:00:00Z"),
+                                         Instant.parse("2026-01-01T10:01:00Z"),
+                                         CLAIM_ID);
 
         when(outboxRepository.claimBatch(anyInt(),
                                          anyString(),
                                          any(Instant.class),
                                          any(Instant.class))).thenReturn(List.of(record));
-
         when(objectMapper.readValue(PAYLOAD, PaymentSucceededEvent.class)).thenReturn(event);
-
         when(kafkaProperties.getResultTopic()).thenReturn(RESULT_TOPIC);
     }
 
     @Test
     void shouldMarkPublishedAfterKafkaAcknowledgment() {
         when(kafkaTemplate.send(RESULT_TOPIC, "123", event)).thenReturn(CompletableFuture.completedFuture(null));
-        when(outboxRepository.markPublished(eq(OUTBOX_ID), anyString(), any(Instant.class))).thenReturn(1);
+        when(outboxRepository.markPublished(eq(OUTBOX_ID), eq(CLAIM_ID), any(Instant.class))).thenReturn(1);
 
         publisher.publish();
 
-        verify(outboxRepository).markPublished(eq(OUTBOX_ID), anyString(), any(Instant.class));
+        verify(outboxRepository).markPublished(eq(OUTBOX_ID), eq(CLAIM_ID), any(Instant.class));
         verify(outboxMetrics).recordPublished(eq(EVENT_TYPE), any(Duration.class));
         verify(outboxMetrics, never()).recordFailed(any());
-        verify(outboxRepository, never()).releaseClaim(any(), anyString());
+        verify(outboxRepository, never()).releaseClaim(any(), eq(CLAIM_ID));
     }
 
     @Test
@@ -111,39 +116,39 @@ class PaymentOutboxPublisherTest {
                 "Kafka unavailable"));
 
         when(kafkaTemplate.send(RESULT_TOPIC, "123", event)).thenReturn(future);
-        when(outboxRepository.releaseClaim(eq(OUTBOX_ID), anyString())).thenReturn(1);
+        when(outboxRepository.releaseClaim(eq(OUTBOX_ID), eq(CLAIM_ID))).thenReturn(1);
 
         assertDoesNotThrow(publisher::publish);
 
         verify(outboxMetrics).recordFailed(EVENT_TYPE);
-        verify(outboxRepository).releaseClaim(eq(OUTBOX_ID), anyString());
-        verify(outboxRepository, never()).markPublished(any(), anyString(), any(Instant.class));
+        verify(outboxRepository).releaseClaim(eq(OUTBOX_ID), eq(CLAIM_ID));
+        verify(outboxRepository, never()).markPublished(any(), eq(CLAIM_ID), any(Instant.class));
         verify(outboxMetrics, never()).recordPublished(any(), any(Duration.class));
     }
 
     @Test
     void shouldReleaseClaimWhenSendThrowsSynchronously() {
         when(kafkaTemplate.send(RESULT_TOPIC, "123", event)).thenThrow(new IllegalStateException("Producer closed"));
-        when(outboxRepository.releaseClaim(eq(OUTBOX_ID), anyString())).thenReturn(1);
+        when(outboxRepository.releaseClaim(eq(OUTBOX_ID), eq(CLAIM_ID))).thenReturn(1);
 
         assertDoesNotThrow(publisher::publish);
 
         verify(outboxMetrics).recordFailed(EVENT_TYPE);
-        verify(outboxRepository).releaseClaim(eq(OUTBOX_ID), anyString());
-        verify(outboxRepository, never()).markPublished(any(), anyString(), any(Instant.class));
+        verify(outboxRepository).releaseClaim(eq(OUTBOX_ID),eq(CLAIM_ID));
+        verify(outboxRepository, never()).markPublished(any(), eq(CLAIM_ID), any(Instant.class));
     }
 
     @Test
     void shouldLeaveClaimToExpireWhenMarkPublishedFails() {
         when(kafkaTemplate.send(RESULT_TOPIC, "123", event)).thenReturn(CompletableFuture.completedFuture(null));
         when(outboxRepository.markPublished(eq(OUTBOX_ID),
-                                            anyString(),
+                                            eq(CLAIM_ID),
                                             any(Instant.class))).thenThrow(new IllegalStateException(
                                                     "Database unavailable"));
 
         assertDoesNotThrow(publisher::publish);
 
-        verify(outboxRepository).markPublished(eq(OUTBOX_ID), anyString(), any(Instant.class));
+        verify(outboxRepository).markPublished(eq(OUTBOX_ID), eq(CLAIM_ID), any(Instant.class));
 
         // Kafka подтвердила отправку, несмотря на ошибку записи в БД.
         verify(outboxMetrics).recordPublished(eq(EVENT_TYPE), any(Duration.class));
@@ -151,7 +156,7 @@ class PaymentOutboxPublisherTest {
         verify(outboxMetrics, never()).recordFailed(any());
 
         // Не освобождаем захват сразу после подтверждённой отправки.
-        verify(outboxRepository, never()).releaseClaim(any(), anyString());
+        verify(outboxRepository, never()).releaseClaim(any(), eq(CLAIM_ID));
     }
 
     @Test
@@ -159,14 +164,14 @@ class PaymentOutboxPublisherTest {
         when(kafkaTemplate.send(RESULT_TOPIC,
                                 "123",
                                 event)).thenReturn(CompletableFuture.failedFuture(new IllegalStateException("Kafka unavailable")));
-        when(outboxRepository.releaseClaim(eq(OUTBOX_ID), anyString())).thenThrow(new IllegalStateException(
+        when(outboxRepository.releaseClaim(eq(OUTBOX_ID), eq(CLAIM_ID))).thenThrow(new IllegalStateException(
                 "Database unavailable"));
 
         assertDoesNotThrow(publisher::publish);
 
         verify(outboxMetrics).recordFailed(EVENT_TYPE);
-        verify(outboxRepository).releaseClaim(eq(OUTBOX_ID), anyString());
-        verify(outboxRepository, never()).markPublished(any(), anyString(), any(Instant.class));
+        verify(outboxRepository).releaseClaim(eq(OUTBOX_ID), eq(CLAIM_ID));
+        verify(outboxRepository, never()).markPublished(any(), eq(CLAIM_ID), any(Instant.class));
     }
 
     @Test
@@ -177,7 +182,7 @@ class PaymentOutboxPublisherTest {
         AtomicReference<Thread> databaseThread = new AtomicReference<>();
 
         when(kafkaTemplate.send(RESULT_TOPIC, "123", event)).thenReturn(future);
-        when(outboxRepository.markPublished(eq(OUTBOX_ID), anyString(), any(Instant.class))).thenAnswer(invocation -> {
+        when(outboxRepository.markPublished(eq(OUTBOX_ID), eq(CLAIM_ID), any(Instant.class))).thenAnswer(invocation -> {
             databaseThread.set(Thread.currentThread());
             return 1;
         });
@@ -192,7 +197,7 @@ class PaymentOutboxPublisherTest {
 
             assertThat(future.awaitGet()).isTrue();
 
-            verify(outboxRepository, never()).markPublished(any(), anyString(), any(Instant.class));
+            verify(outboxRepository, never()).markPublished(any(), eq(CLAIM_ID), any(Instant.class));
 
             assertThat(task.isDone()).isFalse();
 
@@ -242,8 +247,8 @@ class PaymentOutboxPublisherTest {
             assertThat(unexpectedFailure.get()).isNull();
             assertThat(interruptedAfterPublish.get()).isTrue();
 
-            verify(outboxRepository, never()).markPublished(any(), anyString(), any(Instant.class));
-            verify(outboxRepository, never()).releaseClaim(any(), anyString());
+            verify(outboxRepository, never()).markPublished(any(), eq(CLAIM_ID), any(Instant.class));
+            verify(outboxRepository, never()).releaseClaim(any(), eq(CLAIM_ID));
             verify(outboxMetrics, never()).recordPublished(any(), any(Duration.class));
             verify(outboxMetrics, never()).recordFailed(any());
 
