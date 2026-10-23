@@ -4,20 +4,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +32,7 @@ import org.mockito.MockitoAnnotations;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import ru.ticketcraft.config.OutboxPublisherProperties;
 import ru.ticketcraft.dto.OrderEvent;
 import ru.ticketcraft.dto.OrderState;
@@ -58,6 +64,9 @@ class OutboxPublisherTest {
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Mock
+    private CompletableFuture<SendResult<String, Object>> sendFuture;
+
     private ObjectMapper objectMapper;
     private OutboxPublisherProperties properties;
     private OutboxPublisher publisher;
@@ -82,8 +91,12 @@ class OutboxPublisherTest {
 
         String payload = objectMapper.writeValueAsString(expectedEvent);
 
-        when(claimService.claimPending(any(UUID.class), any(Instant.class), any(Instant.class), any(Instant.class),
-                anyString(), eq(BATCH_SIZE))).thenReturn(1);
+        when(claimService.claimPending(any(UUID.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       anyString(),
+                                       eq(1))).thenReturn(1, 0);
 
         when(claimService.findClaimed(any(UUID.class))).thenAnswer(invocation -> {
             UUID claimId = invocation.getArgument(0);
@@ -97,7 +110,6 @@ class OutboxPublisherTest {
         CompletableFuture<SendResult<String, Object>> future = CompletableFuture.completedFuture(null);
 
         when(kafkaTemplate.send(eq(TOPIC), eq(ORDER_ID.toString()), any(OrderEvent.class))).thenReturn(future);
-
         when(claimService.markPublished(eq(EVENT_ID), any(UUID.class))).thenReturn(true);
 
         publisher.publishPendingEvents();
@@ -124,8 +136,12 @@ class OutboxPublisherTest {
 
     @Test
     void shouldReleaseClaimWhenKafkaSendFails() throws Exception {
-        when(claimService.claimPending(any(UUID.class), any(Instant.class), any(Instant.class), any(Instant.class),
-                any(String.class), eq(BATCH_SIZE))).thenReturn(1);
+        when(claimService.claimPending(any(UUID.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       any(String.class),
+                                       eq(1))).thenReturn(1, 0);
 
         when(claimService.findClaimed(any(UUID.class))).thenAnswer(invocation -> {
             UUID claimId = invocation.getArgument(0);
@@ -138,31 +154,31 @@ class OutboxPublisherTest {
         future.completeExceptionally(new IllegalStateException("Kafka unavailable"));
 
         when(kafkaTemplate.send(eq("order-events"), eq("123"), any(OrderEvent.class))).thenReturn(future);
-
         when(claimService.releaseClaim(eq(EVENT_ID), any(UUID.class), any(Instant.class))).thenReturn(true);
 
         assertDoesNotThrow(() -> publisher.publishPendingEvents());
 
         verify(claimService).releaseClaim(eq(EVENT_ID), any(UUID.class), any(Instant.class));
-
         verify(claimService, never()).markPublished(eq(EVENT_ID), any(UUID.class));
     }
 
     @Test
     void shouldDoNothingWhenNoEventsClaimed() {
-        when(claimService.claimPending(any(UUID.class), any(Instant.class), any(Instant.class), any(Instant.class),
-                any(String.class), eq(BATCH_SIZE))).thenReturn(0);
+        when(claimService.claimPending(any(UUID.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       any(String.class),
+                                       eq(1))).thenReturn(0);
 
         publisher.publishPendingEvents();
 
         verify(claimService, never()).findClaimed(any(UUID.class));
-
         verify(kafkaTemplate, never()).send(any(String.class), any(String.class), any(OrderEvent.class));
     }
 
     @Test
     void shouldPublishReserveTicketCommandUsingEventTopic() throws Exception {
-
         UUID sagaId = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
         ReserveTicketCommand command = new ReserveTicketCommand("saga:123:reserve-ticket", ORDER_ID, sagaId, TICKET_ID,
@@ -170,9 +186,12 @@ class OutboxPublisherTest {
 
         String payload = objectMapper.writeValueAsString(command);
 
-        when(claimService.claimPending(any(UUID.class), any(Instant.class), any(Instant.class), any(Instant.class),
-                anyString(), eq(BATCH_SIZE))).thenReturn(1);
-
+        when(claimService.claimPending(any(UUID.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       anyString(),
+                                       eq(1))).thenReturn(1, 0);
         when(claimService.findClaimed(any(UUID.class))).thenAnswer(invocation -> {
             UUID claimId = invocation.getArgument(0);
 
@@ -183,9 +202,9 @@ class OutboxPublisherTest {
 
         CompletableFuture<SendResult<String, Object>> future = CompletableFuture.completedFuture(null);
 
-        when(kafkaTemplate.send(eq("ticket-reservation-commands"), eq(ORDER_ID.toString()),
-                any(ReserveTicketCommand.class))).thenReturn(future);
-
+        when(kafkaTemplate.send(eq("ticket-reservation-commands"),
+                                eq(ORDER_ID.toString()),
+                                any(ReserveTicketCommand.class))).thenReturn(future);
         when(claimService.markPublished(eq(EVENT_ID), any(UUID.class))).thenReturn(true);
 
         publisher.publishPendingEvents();
@@ -199,12 +218,84 @@ class OutboxPublisherTest {
         ReserveTicketCommand actual = (ReserveTicketCommand) captor.getValue();
 
         assertThat(actual.orderId()).isEqualTo(ORDER_ID);
-
         assertThat(actual.reservationId()).isEqualTo(sagaId);
-
         assertThat(actual.ticketId()).isEqualTo(TICKET_ID);
 
         verify(claimService).markPublished(eq(EVENT_ID), any(UUID.class));
+    }
+
+    @Test
+    void shouldStopPublishingAndRestoreInterruptFlag() throws Exception {
+        UUID secondEventId = UUID.randomUUID();
+
+        stubClaimedEvents(EVENT_ID, secondEventId);
+
+        when(kafkaTemplate.send(eq(TOPIC), eq(ORDER_ID.toString()), any(OrderEvent.class))).thenReturn(sendFuture);
+        when(sendFuture.get(properties.sendTimeout().toMillis(),
+                            TimeUnit.MILLISECONDS)).thenThrow(new InterruptedException("Shutdown requested"));
+
+        try {
+            assertDoesNotThrow(publisher::publishPendingEvents);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+
+            verify(claimService, times(1)).claimPending(any(UUID.class),
+                                                        any(Instant.class),
+                                                        any(Instant.class),
+                                                        any(Instant.class),
+                                                        anyString(),
+                                                        anyInt());
+            verify(kafkaTemplate, times(1)).send(eq(TOPIC), eq(ORDER_ID.toString()), any(OrderEvent.class));
+            verify(claimService, never()).markPublished(any(UUID.class), any(UUID.class));
+            verify(claimService, never()).releaseClaim(any(UUID.class), any(UUID.class), any(Instant.class));
+
+        } finally {
+            // Не оставляем interrupt-флаг потоку, запускающему остальные тесты.
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void shouldLeaveClaimToExpireWhenMarkPublishedFails() {
+        stubClaimedEvents(EVENT_ID);
+
+        when(kafkaTemplate.send(eq(TOPIC),
+                                eq(ORDER_ID.toString()),
+                                any(OrderEvent.class))).thenReturn(CompletableFuture.completedFuture(null));
+        when(claimService.markPublished(eq(EVENT_ID), any(UUID.class))).thenThrow(new IllegalStateException(
+                "Database unavailable"));
+
+        assertDoesNotThrow(publisher::publishPendingEvents);
+
+        verify(claimService).markPublished(eq(EVENT_ID), any(UUID.class));
+        verify(claimService, never()).releaseClaim(any(UUID.class), any(UUID.class), any(Instant.class));
+    }
+
+    @Test
+    void shouldContinueWithNextEventWhenReleaseClaimFails() {
+        UUID secondEventId = UUID.randomUUID();
+
+        stubClaimedEvents(EVENT_ID, secondEventId);
+
+        CompletableFuture<SendResult<String, Object>> failedFuture = CompletableFuture.failedFuture(new IllegalStateException(
+                "Kafka unavailable"));
+
+        CompletableFuture<SendResult<String, Object>> successfulFuture = CompletableFuture.completedFuture(null);
+
+        when(kafkaTemplate.send(eq(TOPIC),
+                                eq(ORDER_ID.toString()),
+                                any(OrderEvent.class))).thenReturn(failedFuture, successfulFuture);
+        when(claimService.releaseClaim(eq(EVENT_ID),
+                                       any(UUID.class),
+                                       any(Instant.class))).thenThrow(new IllegalStateException(
+                                               "Database unavailable"));
+        when(claimService.markPublished(eq(secondEventId), any(UUID.class))).thenReturn(true);
+
+        assertDoesNotThrow(publisher::publishPendingEvents);
+
+        verify(claimService).releaseClaim(eq(EVENT_ID), any(UUID.class), any(Instant.class));
+        verify(claimService, never()).markPublished(eq(EVENT_ID), any(UUID.class));
+        verify(claimService).markPublished(eq(secondEventId), any(UUID.class));
+        verify(kafkaTemplate, times(2)).send(eq(TOPIC), eq(ORDER_ID.toString()), any(OrderEvent.class));
     }
 
     private OutboxEvent createEventWithClaim(UUID claimId) throws Exception {
@@ -216,7 +307,44 @@ class OutboxPublisherTest {
 
         String payload = objectMapper.writeValueAsString(orderEvent);
 
-        return new OutboxEvent(eventId, "ORDER", "123", "OrderConfirmed", TOPIC, payload, OutboxStatus.PENDING, CREATED_AT, null,
-                1, CREATED_AT, CREATED_AT, "publisher-1", claimId);
+        return new OutboxEvent(eventId, "ORDER", "123", "OrderConfirmed", TOPIC, payload, OutboxStatus.PENDING,
+                CREATED_AT, null, 1, CREATED_AT, CREATED_AT, "publisher-1", claimId);
+    }
+
+    private void stubClaimedEvents(UUID... eventIds) {
+        Deque<UUID> pendingIds = new ArrayDeque<>(List.of(eventIds));
+        Map<UUID, UUID> eventsByClaim = new HashMap<>();
+
+        when(claimService.claimPending(any(UUID.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       any(Instant.class),
+                                       anyString(),
+                                       eq(1))).thenAnswer(invocation -> {
+
+                                           UUID eventId = pendingIds.pollFirst();
+
+                                           if (eventId == null) {
+                                               return 0;
+                                           }
+
+                                           UUID claimId = invocation.getArgument(0);
+
+                                           eventsByClaim.put(claimId, eventId);
+
+                                           return 1;
+                                       });
+
+        when(claimService.findClaimed(any(UUID.class))).thenAnswer(invocation -> {
+
+            UUID claimId = invocation.getArgument(0);
+            UUID eventId = eventsByClaim.get(claimId);
+
+            String payload = objectMapper.writeValueAsString(new OrderEvent(eventId.toString(), ORDER_ID, USER_ID,
+                    EVENT_ID, List.of(TICKET_ID), TOTAL_PRICE, OrderState.CONFIRMED, CREATED_AT));
+
+            return List.of(new OutboxEvent(eventId, "ORDER", ORDER_ID.toString(), "OrderConfirmed", TOPIC, payload,
+                    OutboxStatus.PENDING, CREATED_AT, null, 1, CREATED_AT, CREATED_AT, "publisher-test", claimId));
+        });
     }
 }
