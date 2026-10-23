@@ -12,7 +12,6 @@ public class JwtUserIdResolver {
     static final String USER_ID_CLAIM = "user_id";
 
     public Long resolve(Jwt jwt) {
-
         Object claim = jwt.getClaims().get(USER_ID_CLAIM);
 
         if (claim instanceof Number number) {
@@ -31,7 +30,6 @@ public class JwtUserIdResolver {
     }
 
     private static Long resolveNumericClaim(Number number) {
-
         try {
             BigDecimal decimal = new BigDecimal(number.toString());
             long userId = decimal.longValueExact();
@@ -43,7 +41,6 @@ public class JwtUserIdResolver {
     }
 
     private static Long requirePositive(long userId) {
-
         if (userId <= 0) {
             throw invalidUserIdClaim();
         }

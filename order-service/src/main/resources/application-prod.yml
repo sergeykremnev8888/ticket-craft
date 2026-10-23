@@ -31,8 +31,6 @@ logging:
   level:
     root: INFO
     '[ru.ticketcraft]': INFO
-    '[org.hibernate.SQL]': 'OFF'
-    '[org.hibernate.orm.jdbc.bind]': 'OFF'
   structured:
     format:
       console: ecs

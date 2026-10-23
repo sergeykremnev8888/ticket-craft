@@ -57,16 +57,10 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Стартер для работы через чистый JDBC (JdbcTemplate,
-        NamedParameterJdbcTemplate) -->
+        <!-- Spring Data JDBC: отображение моделей и JDBC-репозитории -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jdbc</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
         <dependency>
@@ -74,7 +68,7 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <!-- Драйвер Oracle DB (совместимый с Java 21+ / Jakarta EE 11) -->
+        <!-- JDBC-драйвер PostgreSQL -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
