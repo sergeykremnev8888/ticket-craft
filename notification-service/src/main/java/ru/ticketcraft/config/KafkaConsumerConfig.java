@@ -67,7 +67,11 @@ public class KafkaConsumerConfig {
         long maxRetries = retryProperties.getMaxAttempts() - 1L;
 
         FixedBackOff backOff = new FixedBackOff(retryProperties.getBackoffMs(), maxRetries);
-        return new DefaultErrorHandler(recoverer, backOff);
+
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
+        errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);
+
+        return errorHandler;
     }
 
     @Bean

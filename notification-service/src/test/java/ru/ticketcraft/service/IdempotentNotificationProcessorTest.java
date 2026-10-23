@@ -1,7 +1,10 @@
 package ru.ticketcraft.service;
 
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -9,16 +12,17 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import ru.ticketcraft.dto.OrderEvent;
-import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
 import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
 import ru.ticketcraft.repository.ProcessedEventRepository;
 
 class IdempotentNotificationProcessorTest {
@@ -32,7 +36,6 @@ class IdempotentNotificationProcessorTest {
     private static final Long USER_ID = 10L;
 
     private static final BigDecimal TOTAL_PRICE = new BigDecimal("100.00");
-
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
 
     @Mock
@@ -41,14 +44,18 @@ class IdempotentNotificationProcessorTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private ConsumerDuplicateMetrics duplicateMetrics;
+
     private IdempotentNotificationProcessor processor;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
 
-        processor = new IdempotentNotificationProcessor(processedEventRepository, notificationService,
-                new ConsumerDuplicateMetrics(new SimpleMeterRegistry()));
+        processor = new IdempotentNotificationProcessor(processedEventRepository,
+                                                        notificationService,
+                                                        duplicateMetrics);
     }
 
     @Test
@@ -88,6 +95,40 @@ class IdempotentNotificationProcessorTest {
         verify(processedEventRepository).insertIfAbsent(event.getMessageId());
 
         verify(notificationService).process(event);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = { " ", "\t", "\n" })
+    void shouldRejectMissingOrBlankMessageId(String messageId) {
+        OrderEvent event = mock(OrderEvent.class);
+
+        when(event.getMessageId()).thenReturn(messageId);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> processor.process(event))
+                                            .withMessage("messageId must contain between 1 and 128 characters");
+
+        verifyNoInteractions(processedEventRepository, notificationService, duplicateMetrics);
+    }
+
+    @Test
+    void shouldRejectMessageIdLongerThan128Characters() {
+        OrderEvent event = mock(OrderEvent.class);
+
+        when(event.getMessageId()).thenReturn("a".repeat(129));
+
+        assertThatIllegalArgumentException().isThrownBy(() -> processor.process(event))
+                                            .withMessage("messageId must contain between 1 and 128 characters");
+
+        verifyNoInteractions(processedEventRepository, notificationService, duplicateMetrics);
+    }
+
+    @Test
+    void shouldRejectNullEvent() {
+        assertThatIllegalArgumentException().isThrownBy(() -> processor.process(null))
+                                            .withMessage("Order event must not be null");
+
+        verifyNoInteractions(processedEventRepository, notificationService, duplicateMetrics);
     }
 
     private OrderEvent createEvent() {

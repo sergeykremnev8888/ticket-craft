@@ -27,6 +27,8 @@ public class IdempotentNotificationProcessor {
 
     @Transactional
     public void process(OrderEvent event) {
+        validateMessageId(event);
+
         int inserted = processedEventRepository.insertIfAbsent(event.getMessageId());
 
         if (inserted == 0) {
@@ -38,5 +40,16 @@ public class IdempotentNotificationProcessor {
         notificationService.process(event);
 
         log.info("Событие обработано. messageId={}", event.getMessageId());
+    }
+
+    private void validateMessageId(OrderEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Order event must not be null");
+        }
+
+        String messageId = event.getMessageId();
+        if (messageId == null || messageId.isBlank() || messageId.length() > 128) {
+            throw new IllegalArgumentException("messageId must contain between 1 and 128 characters");
+        }
     }
 }
