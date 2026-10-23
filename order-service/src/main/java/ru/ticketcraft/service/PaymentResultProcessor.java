@@ -29,21 +29,24 @@ public class PaymentResultProcessor {
     private final OutboxService outboxService;
     private final ConsumerDuplicateMetrics duplicateMetrics;
     private final OrderSagaMetrics sagaMetrics;
+    private final OrderResultEventValidator eventValidator;
 
     public PaymentResultProcessor(ProcessedEventRepository processedEventRepository, OrderRepository orderRepository,
             OrderSagaRepository orderSagaRepository, OutboxService outboxService,
-            ConsumerDuplicateMetrics duplicateMetrics, OrderSagaMetrics sagaMetrics) {
-
+            ConsumerDuplicateMetrics duplicateMetrics, OrderSagaMetrics sagaMetrics,
+            OrderResultEventValidator eventValidator) {
         this.processedEventRepository = processedEventRepository;
         this.orderRepository = orderRepository;
         this.orderSagaRepository = orderSagaRepository;
         this.outboxService = outboxService;
         this.duplicateMetrics = duplicateMetrics;
         this.sagaMetrics = sagaMetrics;
+        this.eventValidator = eventValidator;
     }
 
     @Transactional
     public void process(PaymentSucceededEvent event) {
+        eventValidator.validate(event);
 
         if (!processedEventRepository.insertIfAbsent(event.messageId())) {
             duplicateMetrics.recordPaymentResultDuplicate();
@@ -65,6 +68,7 @@ public class PaymentResultProcessor {
 
     @Transactional
     public void process(PaymentFailedEvent event) {
+        eventValidator.validate(event);
 
         if (!processedEventRepository.insertIfAbsent(event.messageId())) {
             duplicateMetrics.recordPaymentResultDuplicate();
@@ -77,7 +81,6 @@ public class PaymentResultProcessor {
         validateAmount(order, event.amount());
 
         transitionSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT, OrderSagaStatus.COMPENSATING_RESERVATION);
-
         transitionOrder(order.getId(), OrderState.PAYMENT_PENDING, OrderState.PAYMENT_FAILED);
 
         ReleaseTicketCommand command = createReleaseTicketCommand(saga, order);
@@ -87,6 +90,7 @@ public class PaymentResultProcessor {
 
     @Transactional
     public void process(PaymentRefundedEvent event) {
+        eventValidator.validate(event);
 
         if (!processedEventRepository.insertIfAbsent(event.messageId())) {
             duplicateMetrics.recordPaymentResultDuplicate();
@@ -108,26 +112,22 @@ public class PaymentResultProcessor {
         }
 
         transitionOrder(order.getId(), OrderState.PAYMENT_PENDING, OrderState.CANCELED);
-
         transitionSaga(order.getId(), OrderSagaStatus.COMPENSATING_PAYMENT, OrderSagaStatus.FAILED);
 
         sagaMetrics.recordCompensatedAfterCommit();
     }
 
     private OrderSaga loadSaga(Long orderId) {
-
         return orderSagaRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new IllegalStateException("Saga not found for order " + orderId));
     }
 
     private Order loadOrder(Long orderId) {
-
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalStateException("Order not found: " + orderId));
     }
 
     private void validateAmount(Order order, java.math.BigDecimal paymentAmount) {
-
         if (order.getTotalPrice().compareTo(paymentAmount) != 0) {
             throw new IllegalStateException("Payment amount mismatch" + ": orderId=" + order.getId()
                     + ", expectedAmount=" + order.getTotalPrice() + ", actualAmount=" + paymentAmount);
@@ -136,10 +136,8 @@ public class PaymentResultProcessor {
 
     private void transitionSagaAndSetPaymentId(Long orderId, OrderSagaStatus expected, OrderSagaStatus target,
             java.util.UUID paymentId) {
-
         int updated = orderSagaRepository.transitionAndSetPaymentId(orderId, expected.name(), target.name(), paymentId,
                 Instant.now());
-
         if (updated != 1) {
             throw new IllegalStateException("Failed to transition saga and store payment id" + ": orderId=" + orderId
                     + ", expected=" + expected + ", target=" + target + ", paymentId=" + paymentId);
@@ -147,9 +145,7 @@ public class PaymentResultProcessor {
     }
 
     private void transitionSaga(Long orderId, OrderSagaStatus expected, OrderSagaStatus target) {
-
         int updated = orderSagaRepository.transition(orderId, expected.name(), target.name(), Instant.now());
-
         if (updated != 1) {
             throw new IllegalStateException(
                     "Failed to transition saga for order " + orderId + " from " + expected + " to " + target);
@@ -157,9 +153,7 @@ public class PaymentResultProcessor {
     }
 
     private void transitionOrder(Long orderId, OrderState expected, OrderState target) {
-
         boolean transitioned = orderRepository.transitionStatus(orderId, expected, target);
-
         if (!transitioned) {
             throw new IllegalStateException(
                     "Failed to transition order " + orderId + " from " + expected + " to " + target);
@@ -167,16 +161,12 @@ public class PaymentResultProcessor {
     }
 
     private ConfirmTicketCommand createConfirmTicketCommand(OrderSaga saga, Order order) {
-
         String messageId = "saga:" + saga.getId() + ":confirm-ticket";
-
         return new ConfirmTicketCommand(messageId, order.getId(), saga.getId(), order.getTicketId(), Instant.now());
     }
 
     private ReleaseTicketCommand createReleaseTicketCommand(OrderSaga saga, Order order) {
-
         String messageId = "saga:" + saga.getId() + ":release-ticket";
-
         return new ReleaseTicketCommand(messageId, order.getId(), saga.getId(), order.getTicketId(), Instant.now());
     }
 }
