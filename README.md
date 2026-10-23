@@ -127,7 +127,9 @@ docker compose ps
 | Grafana | `http://localhost:3000` |
 | Tempo | `http://localhost:3200` |
 
-PostgreSQL: catalog `5432`, order `5433`, notification `5434`, payment `5435`; Kafka `9092`, Redis `6379`. Значения и учётные данные задаются в `.env` (пример — `.env.example`).
+PostgreSQL: catalog `5432`, order `5433`, notification `5434`, payment `5435`; Kafka `9092`, Redis `6379`.
+
+Параметры Docker Compose передаются через локальный `.env` или переменные окружения. Параметры подключения Java-приложений необходимо передать отдельно, как описано выше.
 
 ### HTTP API
 
