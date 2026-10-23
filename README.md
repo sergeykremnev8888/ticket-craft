@@ -72,10 +72,29 @@ Java 21, Spring Boot 4.1.1, Spring MVC, Spring Cloud Gateway (WebFlux), Spring S
 
 Требуются **JDK 21**, Docker с Docker Compose и доступ к Maven-зависимостям. Для payment-flow дополнительно нужен **внешний payment provider**, совместимый с контрактом `payment-service`; он **не включён** в `docker-compose.yml`.
 
-```powershell
-Copy-Item .env.example .env
-# При необходимости отредактируйте .env
+Перед запуском задайте переменные, используемые Docker Compose:
 
+- `CATALOG_DB_NAME`, `CATALOG_DB_USERNAME`, `CATALOG_DB_PASSWORD`;
+- `ORDER_DB_NAME`, `ORDER_DB_USERNAME`, `ORDER_DB_PASSWORD`;
+- `PAYMENT_DB_NAME`, `PAYMENT_DB_USERNAME`, `PAYMENT_DB_PASSWORD`;
+- `NOTIFICATION_DB_NAME`, `NOTIFICATION_DB_USERNAME`, `NOTIFICATION_DB_PASSWORD`;
+- `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`.
+
+Их можно указать в локальном `.env` рядом с `docker-compose.yml`
+или передать через переменные окружения.
+
+Имена баз для стандартной локальной конфигурации:
+`catalog_db`, `order_db`, `payment_db`, `notification_db`.
+
+Учётные данные Java-приложений должны соответствовать данным PostgreSQL.
+Spring Boot автоматически не загружает `.env`, используемый Docker Compose:
+нужные переменные необходимо также передать процессам приложений
+через настройки запуска IDE или окружение терминала.
+
+Текущие healthchecks PostgreSQL используют пользователей
+`catalog_user`, `order_user`, `payment_user`, `notification_user`.
+
+```powershell
 docker compose up -d
 docker compose ps
 
@@ -131,8 +150,12 @@ PostgreSQL: catalog `5432`, order `5433`, notification `5434`, payment `5435`; K
 
 ## Известные ограничения
 
+- Notification Service сейчас имитирует уведомление записью в лог: email, SMS и push не реализованы.
+- Saga не имеет автоматического общего дедлайна. Отсутствующий результат или сообщение в DLT могут оставить её в ожидании.
+- Payment выполняет немедленный запрос статуса после некоторых ошибок HTTP-вызова, но фоновая сверка неопределённых операций не реализована.
+- Автоматическое восстановление Saga и повторная обработка DLT остаются в backlog.
 - Это локальная демонстрационная инфраструктура (один Kafka broker, development-настройки Keycloak и наблюдаемости).
 - Внешний payment provider требуется отдельно; без него полный успешный платёжный сценарий не воспроизводится.
-- Gateway README фиксирует открытые задачи по защите диагностических маршрутов, метрик и согласованию авторизации `POST /api/v1/orders`.
+- В Gateway остаются задачи по ограничению прямого доступа к `/fallback/**` и `/actuator/prometheus`. Диагностический маршрут Gateway включается только с профилем `local`. Аутентификация выполняется в Gateway, scopes и бизнес-авторизация — в соответствующем HTTP-сервисе.
 - Совместимость форматов Kafka-событий при rolling deployment требует отдельного контроля: `TicketReservedEvent` с `eventId`/`price` несовместим со старым форматом. См. [Catalog](catalog-service/README.md) и [Order](order-service/README.md).
 - Нагрузочные показатели, SLO и production readiness пока не заявлены.
