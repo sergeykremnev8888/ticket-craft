@@ -2,12 +2,16 @@ package ru.ticketcraft.payment.service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -36,10 +40,12 @@ public class PaymentOutboxPublisher {
     private final PaymentOutboxProperties outboxProperties;
     private final OutboxMetrics outboxMetrics;
 
-    public PaymentOutboxPublisher(PaymentOutboxRepository outboxRepository, KafkaTemplate<String, Object> kafkaTemplate,
-            PaymentKafkaProperties kafkaProperties, PaymentOutboxProperties outboxProperties, ObjectMapper objectMapper,
-            OutboxMetrics outboxMetrics) {
-
+    public PaymentOutboxPublisher(PaymentOutboxRepository outboxRepository,
+                                  KafkaTemplate<String, Object> kafkaTemplate,
+                                  PaymentKafkaProperties kafkaProperties,
+                                  PaymentOutboxProperties outboxProperties,
+                                  ObjectMapper objectMapper,
+                                  OutboxMetrics outboxMetrics) {
         this.outboxRepository = outboxRepository;
         this.kafkaTemplate = kafkaTemplate;
         this.kafkaProperties = kafkaProperties;
@@ -48,79 +54,145 @@ public class PaymentOutboxPublisher {
         this.outboxMetrics = outboxMetrics;
     }
 
-    @Scheduled(fixedDelayString = "${ticketcraft.outbox.publish-delay:1s}")
+    @Scheduled(fixedDelayString = "${ticketcraft.outbox.publish-delay:1s}",
+               scheduler = "paymentOutboxScheduler")
     public void publish() {
-
         Instant now = Instant.now();
 
-        List<PaymentOutboxRecord> records = outboxRepository.claimBatch(outboxProperties.getBatchSize(), instanceId,
-                now, now.minus(outboxProperties.getClaimLease()));
+        List<PaymentOutboxRecord> records = 
+                outboxRepository.claimBatch(outboxProperties.getBatchSize(),
+                                            instanceId,
+                                            now,
+                                            now.minus(outboxProperties.getClaimLease()));
 
+        List<PendingPublication> publications = new ArrayList<>(records.size());
         for (PaymentOutboxRecord record : records) {
-            publishRecord(record);
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
+
+            PendingPublication publication = startPublication(record);
+            if (publication != null) {
+                publications.add(publication);
+            }
+        }
+
+        for (PendingPublication publication : publications) {
+            if (!completePublication(publication)) {
+                return;
+            }
         }
     }
 
-    private void publishRecord(PaymentOutboxRecord record) {
-
+    private PendingPublication startPublication(PaymentOutboxRecord record) {
         long startedAt = System.nanoTime();
         PaymentOutboxEventType eventType = null;
 
         try {
             eventType = PaymentOutboxEventType.fromPersistedValue(record.eventType());
-
             Object event = deserializeEvent(record, eventType);
 
-            PaymentOutboxEventType publishedEventType = eventType;
+            CompletableFuture<SendResult<String, Object>> future = 
+                    kafkaTemplate.send(kafkaProperties.getResultTopic(), record.orderId().toString(), event);
 
-            kafkaTemplate.send(kafkaProperties.getResultTopic(), record.orderId().toString(), event)
-                    .whenComplete((result, exception) -> {
+            return new PendingPublication(record, eventType, future, startedAt);
 
-                        if (exception == null) {
+        } catch (RuntimeException exception) {
+            handlePublicationFailure(record, eventType, exception);
+            return null;
+        }
+    }
 
-                            int updatedRows = outboxRepository.markPublished(record.id(), instanceId, Instant.now());
+    private boolean completePublication(PendingPublication publication) {
+        try {
+            publication.future().get();
 
-                            if (updatedRows != 1) {
-                                log.warn("Outbox record was published but could " + "not be marked as published "
-                                        + "[id={}, messageId={}]", record.id(), record.messageId());
-                            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
 
-                            outboxMetrics.recordPublished(publishedEventType,
-                                    Duration.ofNanos(System.nanoTime() - startedAt));
+            log.warn("Interrupted while waiting for payment outbox publication "
+                    + "[id={}, messageId={}]. Claim will expire.",
+                     publication.record().id(),
+                     publication.record().messageId());
 
-                            return;
-                        }
+            return false;
 
-                        outboxMetrics.recordFailed(publishedEventType);
+        } catch (ExecutionException exception) {
+            handlePublicationFailure(publication.record(), publication.eventType(), exception.getCause());
 
-                        log.error("Failed to publish payment outbox event " + "[id={}, messageId={}]", record.id(),
-                                record.messageId(), exception);
+            return true;
+        }
 
-                        outboxRepository.releaseClaim(record.id(), instanceId);
-                    });
+        outboxMetrics.recordPublished(publication.eventType(),
+                                      Duration.ofNanos(System.nanoTime() - publication.startedAt()));
+
+        markPublished(publication.record());
+
+        return true;
+    }
+
+    private void markPublished(PaymentOutboxRecord record) {
+        try {
+            int updatedRows = outboxRepository.markPublished(record.id(), instanceId, Instant.now());
+
+            if (updatedRows != 1) {
+                log.warn("Payment outbox event was sent to Kafka, " + "but its publication mark was not updated "
+                        + "[id={}, messageId={}, updatedRows={}]", record.id(), record.messageId(), updatedRows);
+            }
+
+        } catch (RuntimeException exception) {
+            log.error("Payment outbox event was sent to Kafka, "
+                    + "but updating its publication mark failed " + "[id={}, messageId={}]. "
+                    + "Claim will expire; duplicate delivery is possible.", record.id(), record.messageId(), exception);
+        }
+    }
+
+    private void handlePublicationFailure(PaymentOutboxRecord record,
+                                          PaymentOutboxEventType eventType,
+                                          Throwable exception) {
+        if (eventType != null) {
+            outboxMetrics.recordFailed(eventType);
+        }
+
+        log.error("Failed to prepare or send payment outbox event " + "[id={}, messageId={}]",
+                  record.id(),
+                  record.messageId(),
+                  exception);
+
+        releaseClaim(record);
+    }
+
+    private void releaseClaim(PaymentOutboxRecord record) {
+        try {
+            int updatedRows = outboxRepository.releaseClaim(record.id(), instanceId);
+
+            if (updatedRows != 1) {
+                log.warn("Payment outbox claim was not released " + "[id={}, messageId={}, updatedRows={}]",
+                         record.id(),
+                         record.messageId(),
+                         updatedRows);
+            }
 
         } catch (RuntimeException exception) {
 
-            if (eventType != null) {
-                outboxMetrics.recordFailed(eventType);
-            }
-
-            log.error("Failed to prepare payment outbox event " + "[id={}, messageId={}]", record.id(),
-                    record.messageId(), exception);
-
-            outboxRepository.releaseClaim(record.id(), instanceId);
+            log.error("Failed to release payment outbox claim " + "[id={}, messageId={}]. Claim will expire.",
+                      record.id(),
+                      record.messageId(),
+                      exception);
         }
     }
 
     private Object deserializeEvent(PaymentOutboxRecord record, PaymentOutboxEventType eventType) {
-
         return switch (eventType) {
-
         case PAYMENT_SUCCEEDED -> objectMapper.readValue(record.payload(), PaymentSucceededEvent.class);
-
         case PAYMENT_FAILED -> objectMapper.readValue(record.payload(), PaymentFailedEvent.class);
-
         case PAYMENT_REFUNDED -> objectMapper.readValue(record.payload(), PaymentRefundedEvent.class);
         };
+    }
+
+    private record PendingPublication(PaymentOutboxRecord record,
+                                      PaymentOutboxEventType eventType,
+                                      CompletableFuture<SendResult<String, Object>> future,
+                                      long startedAt) {
     }
 }

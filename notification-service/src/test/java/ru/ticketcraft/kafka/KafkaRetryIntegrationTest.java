@@ -46,6 +46,7 @@ import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -88,6 +89,7 @@ import tools.jackson.databind.json.JsonMapper;
                 KafkaRetryIntegrationTest.DLT_TOPIC
         }
 )
+@ActiveProfiles("test")
 @Testcontainers
 class KafkaRetryIntegrationTest {
 

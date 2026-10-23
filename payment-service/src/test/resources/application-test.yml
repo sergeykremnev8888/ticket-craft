@@ -1,0 +1,5 @@
+management:
+  tracing:
+    export:
+      otlp:
+        enabled: false
