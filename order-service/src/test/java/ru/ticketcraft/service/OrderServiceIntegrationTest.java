@@ -39,7 +39,6 @@ import ru.ticketcraft.repository.OrderSagaRepository;
 
 @SpringBootTest(properties = {
         "spring.kafka.bootstrap-servers=localhost:9092",
-        "ticketcraft.outbox.publisher.enabled=false",
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",
         "spring.kafka.admin.enabled=false"

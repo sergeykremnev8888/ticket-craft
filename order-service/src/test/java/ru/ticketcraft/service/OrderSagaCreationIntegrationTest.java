@@ -31,7 +31,6 @@ import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
 @SpringBootTest(properties = { 
-        "ticketcraft.outbox.publisher.enabled=false",
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",
         "spring.kafka.admin.enabled=false"

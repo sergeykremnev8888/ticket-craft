@@ -131,11 +131,4 @@ public class OutboxEvent {
         return topic;
     }
 
-    public void markPublished(Instant publishedAt) {
-        this.status = OutboxStatus.PUBLISHED;
-        this.publishedAt = publishedAt;
-        this.lockedAt = null;
-        this.lockedBy = null;
-        this.claimId = null;
-    }
 }

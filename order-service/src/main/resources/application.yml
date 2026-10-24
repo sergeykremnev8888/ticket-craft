@@ -72,14 +72,6 @@ ticketcraft:
       payment-commands: payment-commands
       payment-results: payment-results
       payment-results-dlt: payment-results.DLT
-  outbox:
-    publisher:
-      enabled: false
-      batch-size: 100
-      fixed-delay: 1s
-      lock-duration: 30s
-      retry-delay: 5s
-      send-timeout: 10s
 
 logging:
   level:

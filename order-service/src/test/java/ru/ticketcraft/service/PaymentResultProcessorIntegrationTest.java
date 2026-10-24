@@ -35,8 +35,10 @@ import ru.ticketcraft.saga.OrderSagaStatus;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
-@SpringBootTest(properties = { "ticketcraft.outbox.publisher.enabled=false", "spring.kafka.admin.auto-create=false",
-        "spring.kafka.listener.auto-startup=false", "spring.kafka.admin.enabled=false" })
+@SpringBootTest(properties = { 
+        "spring.kafka.admin.auto-create=false",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.enabled=false" })
 class PaymentResultProcessorIntegrationTest {
 
     private static final Long USER_ID = 10L;
