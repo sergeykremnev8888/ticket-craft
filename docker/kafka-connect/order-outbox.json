@@ -1,0 +1,51 @@
+{
+  "name": "order-outbox",
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "postgres-order",
+  "database.port": "5432",
+  "database.user": "SET_AT_REGISTRATION",
+  "database.password": "SET_AT_REGISTRATION",
+  "database.dbname": "order_db",
+
+  "topic.prefix": "ticketcraft.order",
+
+  "plugin.name": "pgoutput",
+  "slot.name": "ticketcraft_order_outbox",
+  "slot.drop.on.stop": "false",
+  "publication.name": "ticketcraft_order_outbox_publication",
+  "publication.autocreate.mode": "filtered",
+
+  "table.include.list": "public\\.outbox_events",
+
+  "snapshot.mode": "initial",
+  "snapshot.select.statement.overrides": "public.outbox_events",
+  "snapshot.select.statement.overrides.public.outbox_events": "SELECT * FROM public.outbox_events WHERE status = 'PENDING' ORDER BY created_at, id",
+
+  "tombstones.on.delete": "false",
+  "include.schema.changes": "false",
+
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "header.converter": "org.apache.kafka.connect.storage.SimpleHeaderConverter",
+
+  "predicates": "isOutbox",
+  "predicates.isOutbox.type": "org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
+  "predicates.isOutbox.pattern": "ticketcraft\\.order\\.public\\.outbox_events",
+
+  "transforms": "outbox",
+  "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+  "transforms.outbox.predicate": "isOutbox",
+
+  "transforms.outbox.table.field.event.id": "id",
+  "transforms.outbox.table.field.event.key": "aggregate_id",
+  "transforms.outbox.table.field.event.payload": "payload",
+  "transforms.outbox.table.expand.json.payload": "false",
+  "transforms.outbox.table.fields.additional.placement": "event_type:header:__TypeId__",
+
+  "transforms.outbox.route.by.field": "topic",
+  "transforms.outbox.route.topic.replacement": "${routedByValue}",
+
+  "errors.tolerance": "none"
+}

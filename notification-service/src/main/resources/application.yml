@@ -29,6 +29,7 @@ spring:
         '[spring.deserializer.value.delegate.class]': org.springframework.kafka.support.serializer.JacksonJsonDeserializer
         '[spring.json.trusted.packages]': ru.ticketcraft.dto
         '[spring.json.value.default.type]': ru.ticketcraft.dto.OrderEvent
+        '[spring.json.type.mapping]': OrderConfirmed:ru.ticketcraft.dto.OrderEvent
     template:
       observation-enabled: true
 server:
