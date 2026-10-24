@@ -3,6 +3,14 @@ services:
   postgres-catalog:
     image: postgres:16-alpine
     container_name: postgres-catalog
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
     environment:
       POSTGRES_DB: ${CATALOG_DB_NAME}
       POSTGRES_USER: ${CATALOG_DB_USERNAME}
@@ -22,6 +30,14 @@ services:
   postgres-order:
     image: postgres:16-alpine
     container_name: postgres-order
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
     environment:
       POSTGRES_DB: ${ORDER_DB_NAME}
       POSTGRES_USER: ${ORDER_DB_USERNAME}
@@ -41,6 +57,14 @@ services:
   postgres-payment:
     image: postgres:16-alpine
     container_name: postgres-payment
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
     environment:
       POSTGRES_DB: ${PAYMENT_DB_NAME}
       POSTGRES_USER: ${PAYMENT_DB_USERNAME}
@@ -118,6 +142,45 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  kafka-connect:
+    image: quay.io/debezium/connect:3.3.2.Final
+    container_name: ticketcraft-kafka-connect
+    ports:
+      - 8085:8083
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: ticketcraft-connect
+
+      CONFIG_STORAGE_TOPIC: ticketcraft-connect-configs
+      OFFSET_STORAGE_TOPIC: ticketcraft-connect-offsets
+      STATUS_STORAGE_TOPIC: ticketcraft-connect-status
+
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+
+      CONNECT_OFFSET_STORAGE_PARTITIONS: "1"
+      CONNECT_STATUS_STORAGE_PARTITIONS: "1"
+
+      REST_HOST_NAME: 0.0.0.0
+      ADVERTISED_HOST_NAME: kafka-connect
+
+      KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl --fail --silent http://localhost:8083/connectors > /dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
