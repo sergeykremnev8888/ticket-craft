@@ -22,7 +22,7 @@ spring:
       '[enable.idempotence]': true
     consumer:
       enable-auto-commit: false
-      group-id: ${KAFKA_CONSUMER_GROUP:notification-group}
+      group-id: ${NOTIFICATION_KAFKA_GROUP_ID:notification-group}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:

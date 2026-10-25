@@ -6,6 +6,7 @@ x-java-service: &java-service
   environment: &java-environment
     SPRING_PROFILES_ACTIVE: docker
     OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+    TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
   healthcheck: &java-healthcheck
     test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8080/actuator/health"]
     interval: 10s
@@ -359,7 +360,7 @@ services:
       <<: *java-environment
       PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
-      PAYMENT_PROVIDER_BASE_URL: ${PAYMENT_PROVIDER_DOCKER_URL:-http://host.docker.internal:8090}
+      PAYMENT_PROVIDER_BASE_URL: ${PAYMENT_PROVIDER_BASE_URL:-http://host.docker.internal:8090}
     ports:
       - "8084:8084"
     healthcheck:
