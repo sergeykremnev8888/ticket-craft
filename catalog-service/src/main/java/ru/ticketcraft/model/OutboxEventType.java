@@ -1,58 +1,20 @@
 package ru.ticketcraft.model;
 
-import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
-import ru.ticketcraft.dto.TicketConfirmedEvent;
-import ru.ticketcraft.dto.TicketReleasedEvent;
-import ru.ticketcraft.dto.TicketReservationFailedEvent;
-import ru.ticketcraft.dto.TicketReservedEvent;
-
 public enum OutboxEventType {
 
-    TICKET_RESERVED(
-            "TicketReserved",
-            TicketReservedEvent.class),
-
-    TICKET_RESERVATION_FAILED(
-            "TicketReservationFailed",
-            TicketReservationFailedEvent.class),
-
-    TICKET_CONFIRMED(
-            "TicketConfirmed",
-            TicketConfirmedEvent.class),
-
-    TICKET_CONFIRMATION_FAILED(
-            "TicketConfirmationFailed",
-            TicketConfirmationFailedEvent.class),
-
-    TICKET_RELEASED(
-            "TicketReleased",
-            TicketReleasedEvent.class);
+    TICKET_RESERVED("TicketReserved"),
+    TICKET_RESERVATION_FAILED("TicketReservationFailed"),
+    TICKET_CONFIRMED("TicketConfirmed"),
+    TICKET_CONFIRMATION_FAILED("TicketConfirmationFailed"),
+    TICKET_RELEASED("TicketReleased");
 
     private final String value;
-    private final Class<?> payloadType;
 
-    OutboxEventType(String value, Class<?> payloadType) {
+    OutboxEventType(String value) {
         this.value = value;
-        this.payloadType = payloadType;
     }
 
     public String getValue() {
         return value;
-    }
-
-    public Class<?> getPayloadType() {
-        return payloadType;
-    }
-
-    public static OutboxEventType fromValue(String value) {
-
-        for (OutboxEventType type : values()) {
-            if (type.value.equals(value)) {
-                return type;
-            }
-        }
-
-        throw new IllegalArgumentException(
-                "Unknown outbox event type: " + value);
     }
 }

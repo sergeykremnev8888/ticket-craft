@@ -26,8 +26,6 @@ import ru.ticketcraft.model.Event;
 import ru.ticketcraft.repository.EventRepository;
 
 @SpringBootTest(properties = {
-        "ticketcraft.outbox.publisher.enabled=false",
-
         "spring.data.redis.url=redis://127.0.0.1:1",
         "spring.data.redis.connect-timeout=100ms",
         "spring.data.redis.timeout=100ms",

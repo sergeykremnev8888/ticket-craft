@@ -15,7 +15,6 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Testcontainers
 @SpringBootTest(properties = { 
-        "ticketcraft.outbox.publisher.enabled=false",
         "spring.cache.type=none",
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",

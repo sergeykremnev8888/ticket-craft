@@ -29,7 +29,6 @@ import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
 @SpringBootTest(properties = { 
-        "ticketcraft.outbox.publisher.enabled=false",
         "ticketcraft.rate-limit.enabled=false",
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",
@@ -62,17 +61,13 @@ class TicketReleaseCommandProcessingIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-
         jdbcTemplate.update("DELETE FROM outbox_events");
-
         jdbcTemplate.update("DELETE FROM tickets");
-
         jdbcTemplate.update("DELETE FROM events");
     }
 
     @Test
     void shouldReleaseTicketAndCreateReleasedOutboxEvent() throws Exception {
-
         // Given
         UUID reservationId = UUID.randomUUID();
 
@@ -87,11 +82,8 @@ class TicketReleaseCommandProcessingIntegrationTest {
 
         // Then
         Ticket persistedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.AVAILABLE);
-
         assertThat(persistedTicket.getReservationId()).isNull();
-
         assertThat(persistedTicket.getReservedUntil()).isNull();
 
         Integer outboxCount = jdbcTemplate.queryForObject("""
@@ -109,42 +101,28 @@ class TicketReleaseCommandProcessingIntegrationTest {
                     aggregate_id,
                     event_type,
                     topic,
-                    payload,
-                    status
+                    payload
                 FROM outbox_events
                 WHERE message_id = ?
                 """, expectedResultMessageId);
-
         assertThat(outbox.get("message_id")).isEqualTo(expectedResultMessageId);
-
         assertThat(outbox.get("aggregate_type")).isEqualTo("ORDER");
-
         assertThat(outbox.get("aggregate_id")).isEqualTo(ORDER_ID.toString());
-
         assertThat(outbox.get("event_type")).isEqualTo("TicketReleased");
-
         assertThat(outbox.get("topic")).isEqualTo("ticket-reservation-results");
-
-        assertThat(outbox.get("status")).isEqualTo("PENDING");
 
         String payload = (String) outbox.get("payload");
 
         TicketReleasedEvent event = objectMapper.readValue(payload, TicketReleasedEvent.class);
-
         assertThat(event.messageId()).isEqualTo(expectedResultMessageId);
-
         assertThat(event.orderId()).isEqualTo(ORDER_ID);
-
         assertThat(event.ticketId()).isEqualTo(ticket.getId());
-
         assertThat(event.reservationId()).isEqualTo(reservationId);
-
         assertThat(event.occurredAt()).isNotNull();
     }
 
     @Test
     void shouldTreatAlreadyAvailableTicketAsSuccessfulRelease() throws Exception {
-
         // Given
         UUID reservationId = UUID.randomUUID();
 
@@ -159,11 +137,8 @@ class TicketReleaseCommandProcessingIntegrationTest {
 
         // Then
         Ticket persistedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.AVAILABLE);
-
         assertThat(persistedTicket.getReservationId()).isNull();
-
         assertThat(persistedTicket.getReservedUntil()).isNull();
 
         Integer outboxCount = jdbcTemplate.queryForObject("""
@@ -171,7 +146,6 @@ class TicketReleaseCommandProcessingIntegrationTest {
                 FROM outbox_events
                 WHERE message_id = ?
                 """, Integer.class, expectedResultMessageId);
-
         assertThat(outboxCount).isEqualTo(1);
 
         String payload = jdbcTemplate.queryForObject("""
@@ -181,17 +155,13 @@ class TicketReleaseCommandProcessingIntegrationTest {
                 """, String.class, expectedResultMessageId);
 
         TicketReleasedEvent event = objectMapper.readValue(payload, TicketReleasedEvent.class);
-
         assertThat(event.orderId()).isEqualTo(ORDER_ID);
-
         assertThat(event.ticketId()).isEqualTo(ticket.getId());
-
         assertThat(event.reservationId()).isEqualTo(reservationId);
     }
 
     @Test
     void shouldIgnoreDuplicateReleaseCommand() {
-
         // Given
         UUID reservationId = UUID.randomUUID();
 
@@ -208,11 +178,8 @@ class TicketReleaseCommandProcessingIntegrationTest {
 
         // Then
         Ticket persistedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.AVAILABLE);
-
         assertThat(persistedTicket.getReservationId()).isNull();
-
         assertThat(persistedTicket.getReservedUntil()).isNull();
 
         Integer outboxCount = jdbcTemplate.queryForObject("""
@@ -220,16 +187,13 @@ class TicketReleaseCommandProcessingIntegrationTest {
                 FROM outbox_events
                 WHERE message_id = ?
                 """, Integer.class, expectedResultMessageId);
-
         assertThat(outboxCount).isEqualTo(1);
     }
 
     @Test
     void shouldNotReleaseTicketOwnedByAnotherReservation() {
-
         // Given
         UUID actualReservationId = UUID.randomUUID();
-
         UUID anotherReservationId = UUID.randomUUID();
 
         Ticket ticket = createReservedTicket("RELEASE-4", actualReservationId);
@@ -249,9 +213,7 @@ class TicketReleaseCommandProcessingIntegrationTest {
          * Главный invariant: чужая Saga не должна снять reservation.
          */
         assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.RESERVED);
-
         assertThat(persistedTicket.getReservationId()).isEqualTo(actualReservationId);
-
         assertThat(persistedTicket.getReservedUntil()).isNotNull();
 
         Integer outboxCount = jdbcTemplate.queryForObject("""
@@ -259,16 +221,13 @@ class TicketReleaseCommandProcessingIntegrationTest {
                 FROM outbox_events
                 WHERE message_id = ?
                 """, Integer.class, expectedResultMessageId);
-
         assertThat(outboxCount).isZero();
     }
 
     @Test
     void shouldFailWhenTicketDoesNotExist() {
-
         // Given
         UUID ticketId = UUID.randomUUID();
-
         UUID reservationId = UUID.randomUUID();
 
         ReleaseTicketCommand command = createCommand(ticketId, reservationId);
@@ -297,66 +256,46 @@ class TicketReleaseCommandProcessingIntegrationTest {
     }
 
     private ReleaseTicketCommand createCommand(UUID ticketId, UUID reservationId) {
-
         return new ReleaseTicketCommand("saga:" + reservationId + ":release-ticket", ORDER_ID, reservationId, ticketId,
                 Instant.now());
     }
 
     private String resultMessageId(ReleaseTicketCommand command) {
-
         return "result:" + command.messageId();
     }
 
     private Ticket createReservedTicket(String seatNumber, UUID reservationId) {
-
         Event savedEvent = createEvent();
 
         Ticket ticket = new Ticket();
-
         ticket.setEvent(savedEvent);
-
         ticket.setSeatNumber(seatNumber);
-
         ticket.setPrice(new BigDecimal("100.00"));
-
         ticket.setStatus(TicketStatus.RESERVED);
-
         ticket.setReservationId(reservationId);
-
         ticket.setReservedUntil(Instant.now().plusSeconds(600));
 
         return ticketRepository.save(ticket);
     }
 
     private Ticket createAvailableTicket(String seatNumber) {
-
         Event savedEvent = createEvent();
 
         Ticket ticket = new Ticket();
-
         ticket.setEvent(savedEvent);
-
         ticket.setSeatNumber(seatNumber);
-
         ticket.setPrice(new BigDecimal("100.00"));
-
         ticket.setStatus(TicketStatus.AVAILABLE);
 
         return ticketRepository.save(ticket);
     }
 
     private Event createEvent() {
-
         Event event = new Event();
-
         event.setTitle("Ticket release integration test");
-
         event.setDescription("Saga compensation integration test");
-
         event.setEventDate(Instant.now().plusSeconds(3600));
-
         event.setVenue("Test venue");
-
         return eventRepository.save(event);
     }
 }

@@ -26,7 +26,6 @@ import ru.ticketcraft.repository.EventRepository;
 import ru.ticketcraft.support.CatalogTestContainersConfiguration;
 
 @SpringBootTest(properties = {
-        "ticketcraft.outbox.publisher.enabled=false",
         "catalog.cache.events-ttl=5m",
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",

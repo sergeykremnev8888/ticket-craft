@@ -28,7 +28,6 @@ import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
 @SpringBootTest(properties = {
-        "ticketcraft.outbox.publisher.enabled=false",
         "ticketcraft.rate-limit.enabled=false",
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",
@@ -75,17 +74,13 @@ class TicketReservationCommandProcessingIntegrationTest {
         UUID reservationId = UUID.randomUUID();
 
         ReserveTicketCommand command = createCommand(ticket.getId(), reservationId);
-
         String expectedResultMessageId = resultMessageId(command);
 
         reservationService.processReserveTicketCommand(command);
 
         Ticket persistedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.RESERVED);
-
         assertThat(persistedTicket.getReservationId()).isEqualTo(reservationId);
-
         assertThat(persistedTicket.getReservedUntil()).isNotNull().isAfter(Instant.now());
 
         Integer count = jdbcTemplate.queryForObject("""
@@ -101,22 +96,15 @@ class TicketReservationCommandProcessingIntegrationTest {
                     aggregate_type,
                     aggregate_id,
                     event_type,
-                    topic,
-                    status
+                    topic
                 FROM outbox_events
                 """);
 
         assertThat(outbox.get("message_id")).isEqualTo(expectedResultMessageId);
-
         assertThat(outbox.get("aggregate_type")).isEqualTo("ORDER");
-
         assertThat(outbox.get("aggregate_id")).isEqualTo(ORDER_ID.toString());
-
         assertThat(outbox.get("event_type")).isEqualTo("TicketReserved");
-
         assertThat(outbox.get("topic")).isEqualTo("ticket-reservation-results");
-
-        assertThat(outbox.get("status")).isEqualTo("PENDING");
     }
 
     @Test
@@ -132,11 +120,8 @@ class TicketReservationCommandProcessingIntegrationTest {
         reservationService.processReserveTicketCommand(command);
 
         Ticket afterFirstProcessing = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(afterFirstProcessing.getStatus()).isEqualTo(TicketStatus.RESERVED);
-
         assertThat(afterFirstProcessing.getReservationId()).isEqualTo(reservationId);
-
         assertThat(afterFirstProcessing.getReservedUntil()).isNotNull();
 
         Instant originalReservedUntil = afterFirstProcessing.getReservedUntil();
@@ -152,11 +137,8 @@ class TicketReservationCommandProcessingIntegrationTest {
         reservationService.processReserveTicketCommand(command);
 
         Ticket afterDuplicate = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(afterDuplicate.getStatus()).isEqualTo(TicketStatus.RESERVED);
-
         assertThat(afterDuplicate.getReservationId()).isEqualTo(reservationId);
-
         assertThat(afterDuplicate.getReservedUntil()).isEqualTo(originalReservedUntil);
 
         Integer count = jdbcTemplate.queryForObject("""
@@ -164,13 +146,11 @@ class TicketReservationCommandProcessingIntegrationTest {
                 FROM outbox_events
                 WHERE message_id = ?
                 """, Integer.class, expectedResultMessageId);
-
         assertThat(count).isEqualTo(1);
     }
 
     @Test
     void shouldCreateFailureOutboxEventAndPreserveOwnerWhenTicketBelongsToAnotherReservation() throws Exception {
-
         Ticket ticket = createAvailableTicket("A-3");
 
         UUID firstReservationId = UUID.randomUUID();
@@ -180,11 +160,8 @@ class TicketReservationCommandProcessingIntegrationTest {
         reservationService.processReserveTicketCommand(firstCommand);
 
         Ticket afterFirstReservation = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(afterFirstReservation.getStatus()).isEqualTo(TicketStatus.RESERVED);
-
         assertThat(afterFirstReservation.getReservationId()).isEqualTo(firstReservationId);
-
         assertThat(afterFirstReservation.getReservedUntil()).isNotNull();
 
         Instant originalReservedUntil = afterFirstReservation.getReservedUntil();
@@ -192,7 +169,6 @@ class TicketReservationCommandProcessingIntegrationTest {
         UUID conflictingReservationId = UUID.randomUUID();
 
         ReserveTicketCommand conflictingCommand = createCommand(ticket.getId(), conflictingReservationId);
-
         String expectedResultMessageId = resultMessageId(conflictingCommand);
 
         /*
@@ -210,9 +186,7 @@ class TicketReservationCommandProcessingIntegrationTest {
          * существующий reservation TTL.
          */
         assertThat(persistedTicket.getStatus()).isEqualTo(TicketStatus.RESERVED);
-
         assertThat(persistedTicket.getReservationId()).isEqualTo(firstReservationId);
-
         assertThat(persistedTicket.getReservedUntil()).isEqualTo(originalReservedUntil);
 
         String payload = jdbcTemplate.queryForObject("""
@@ -224,15 +198,10 @@ class TicketReservationCommandProcessingIntegrationTest {
         assertThat(payload).isNotNull();
 
         TicketReservationFailedEvent event = objectMapper.readValue(payload, TicketReservationFailedEvent.class);
-
         assertThat(event.messageId()).isEqualTo(expectedResultMessageId);
-
         assertThat(event.orderId()).isEqualTo(ORDER_ID);
-
         assertThat(event.ticketId()).isEqualTo(ticket.getId());
-
         assertThat(event.reservationId()).isEqualTo(conflictingReservationId);
-
         assertThat(event.reason()).isEqualTo("TICKET_ALREADY_RESERVED");
 
         Integer failureEvents = jdbcTemplate.queryForObject("""
@@ -246,13 +215,10 @@ class TicketReservationCommandProcessingIntegrationTest {
 
     @Test
     void shouldCreateFailureOutboxEventWhenTicketDoesNotExist() throws Exception {
-
         UUID ticketId = UUID.randomUUID();
-
         UUID reservationId = UUID.randomUUID();
 
         ReserveTicketCommand command = createCommand(ticketId, reservationId);
-
         String expectedResultMessageId = resultMessageId(command);
 
         reservationService.processReserveTicketCommand(command);
@@ -262,7 +228,6 @@ class TicketReservationCommandProcessingIntegrationTest {
                 FROM tickets
                 WHERE id = ?
                 """, Integer.class, ticketId);
-
         assertThat(ticketCount).isZero();
 
         String payload = jdbcTemplate.queryForObject("""
@@ -270,19 +235,13 @@ class TicketReservationCommandProcessingIntegrationTest {
                 FROM outbox_events
                 WHERE message_id = ?
                 """, String.class, expectedResultMessageId);
-
         assertThat(payload).isNotNull();
 
         TicketReservationFailedEvent event = objectMapper.readValue(payload, TicketReservationFailedEvent.class);
-
         assertThat(event.messageId()).isEqualTo(expectedResultMessageId);
-
         assertThat(event.orderId()).isEqualTo(ORDER_ID);
-
         assertThat(event.ticketId()).isEqualTo(ticketId);
-
         assertThat(event.reservationId()).isEqualTo(reservationId);
-
         assertThat(event.reason()).isEqualTo("TICKET_NOT_FOUND");
     }
 
@@ -299,9 +258,7 @@ class TicketReservationCommandProcessingIntegrationTest {
         reservationService.processReserveTicketCommand(command);
 
         Ticket reservedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(reservedTicket.getStatus()).isEqualTo(TicketStatus.RESERVED);
-
         assertThat(reservedTicket.getReservationId()).isEqualTo(reservationId);
 
         /*
@@ -316,11 +273,8 @@ class TicketReservationCommandProcessingIntegrationTest {
                 """, ticket.getId());
 
         Ticket releasedTicket = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(releasedTicket.getStatus()).isEqualTo(TicketStatus.AVAILABLE);
-
         assertThat(releasedTicket.getReservationId()).isNull();
-
         assertThat(releasedTicket.getReservedUntil()).isNull();
 
         /*
@@ -332,11 +286,8 @@ class TicketReservationCommandProcessingIntegrationTest {
         reservationService.processReserveTicketCommand(command);
 
         Ticket afterRedelivery = ticketRepository.findById(ticket.getId()).orElseThrow();
-
         assertThat(afterRedelivery.getStatus()).isEqualTo(TicketStatus.AVAILABLE);
-
         assertThat(afterRedelivery.getReservationId()).isNull();
-
         assertThat(afterRedelivery.getReservedUntil()).isNull();
 
         Integer outboxCount = jdbcTemplate.queryForObject("""

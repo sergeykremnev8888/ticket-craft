@@ -36,7 +36,6 @@ import ru.ticketcraft.repository.TicketRepository;
 
 @Testcontainers
 @SpringBootTest(properties = {
-        "ticketcraft.outbox.publisher.enabled=false",
         "ticketcraft.rate-limit.enabled=false",
         "spring.kafka.admin.auto-create=false",
         "spring.kafka.listener.auto-startup=false",

@@ -25,7 +25,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import ru.ticketcraft.support.CatalogTestContainersConfiguration;
 
 @SpringBootTest(properties = {
-        "ticketcraft.outbox.publisher.enabled=false",
         "ticketcraft.rate-limit.enabled=true",
 
         "ticketcraft.rate-limit.catalog-read.capacity=10",
