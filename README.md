@@ -1,12 +1,9 @@
 # Ticket Craft
 
-**Ticket Craft** — учебный backend-проект системы бронирования и покупки билетов на **Java 21 / Spring Boot 4**. Проект предназначен для практического изучения микросервисной архитектуры, распределённых систем, согласованности данных и конкурентного резервирования.
-
-## Что интересно с технической точки зрения
-
+**Ticket Craft** — backend-проект системы бронирования и покупки билетов на **Java 21 / Spring Boot 4**. Проект предназначен для практического изучения микросервисной архитектуры, распределённых систем, согласованности данных и конкурентного резервирования.
 - **Database per Service:** четыре отдельные PostgreSQL-базы для каталога, заказов, платежей и уведомлений.
 - **Асинхронная Saga:** заказ проходит резервирование билета, оплату и подтверждение; для неуспешных сценариев предусмотрены компенсационные команды.
-- **Transactional Outbox:** бизнес-изменения и исходящие события фиксируются в одной транзакции БД. В Order публикация выполняется через Kafka Connect и Debezium.
+- **Transactional Outbox:** бизнес-изменения и исходящие события фиксируются в одной транзакции БД.
 - **Конкурентное бронирование:** атомарное изменение состояния билета на стороне PostgreSQL, защита от повторных команд.
 - **Идемпотентность:** `Idempotency-Key` для создания заказов, персистентный учёт обработанных событий у отдельных Kafka consumers.
 - **Security:** Keycloak, JWT/OAuth2 Resource Server, проверка scopes и владельца заказа.
@@ -33,11 +30,11 @@ flowchart TD
     CAT -. JWT/JWK .-> KC
     ORD -. JWT/JWK .-> KC
 ```
-Связи Kafka → сервис обозначают получение бизнес-команд и результатов. Исходящие бизнес-сообщения идут через outbox PostgreSQL и Debezium. Публикация ошибок в DLT остаётся в Java-приложениях и отдельно на схеме не показана.
+Связи Kafka → сервис обозначают получение бизнес-команд и результатов. Исходящие бизнес-сообщения идут через outbox PostgreSQL и Debezium. Публикация ошибок в DLT в Java-приложениях.
 
-Связи JWT/JWK обозначают использование Keycloak и его ключей для проверки токенов. Обращение к Keycloak на каждый запрос не требуется.
+Связи JWT/JWK обозначают использование Keycloak и его ключей для проверки токенов.
 
-`docker-compose.yml` поднимает **инфраструктуру**, но не сами Java-приложения: их нужно запускать отдельно. `common-dto` — Maven-библиотека, а не сетевой сервис.
+`docker-compose.yml` запускает инфраструктуру и пять Java-приложений с профилем `apps`. Сборка и запуск приложений выполняются в Docker. `common-dto` — Maven-библиотека, отдельный контейнер ей не нужен.
 
 ## Модули и подробная документация
 
@@ -53,7 +50,6 @@ flowchart TD
 ## Границы ответственности
 
 Order Service отвечает за:
-
 - принадлежность заказа пользователю;
 - состояние заказа;
 - состояние Saga;
@@ -67,56 +63,212 @@ Payment Service отвечает за взаимодействие с платё
 
 Notification Service получает событие подтверждённого заказа. Его обработка не является условием завершения Saga покупки.
 
-Order Service не вызывает Catalog Service и Payment Service по HTTP: взаимодействие выполняется через Kafka.
-
 ## Стек
 
 Java 21, Spring Boot 4.1.1, Spring MVC, Spring Cloud Gateway (WebFlux), Spring Security, Spring Data JPA/JDBC, Spring Kafka, PostgreSQL 16, Flyway, Apache Kafka, Redis, Keycloak, Maven, Docker Compose, JUnit/Mockito, Spring Boot Actuator, Micrometer, Prometheus, Grafana, OpenTelemetry/Jaeger.
 
-## Локальный запуск (Windows / PowerShell)
+## Запуск через Docker (Windows / PowerShell)
 
-Требуются **JDK 21**, Docker с Docker Compose и доступ к Maven-зависимостям. Для payment-flow дополнительно нужен **внешний payment provider**, совместимый с контрактом `payment-service`; он **не включён** в `docker-compose.yml`.
+Для запуска пяти сервисов нужны Docker с Docker Compose v2 и доступ к реестрам образов и Maven-зависимостям. JDK и Maven на компьютере не требуются: сборка выполняется внутри multi-stage Dockerfile. Все команды ниже выполняются из корня репозитория.
 
-Перед запуском задайте переменные, используемые Docker Compose:
+### 1. Настроить окружение
 
-- `CATALOG_DB_NAME`, `CATALOG_DB_USERNAME`, `CATALOG_DB_PASSWORD`;
-- `ORDER_DB_NAME`, `ORDER_DB_USERNAME`, `ORDER_DB_PASSWORD`;
-- `PAYMENT_DB_NAME`, `PAYMENT_DB_USERNAME`, `PAYMENT_DB_PASSWORD`;
-- `NOTIFICATION_DB_NAME`, `NOTIFICATION_DB_USERNAME`, `NOTIFICATION_DB_PASSWORD`;
-- `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`.
+Создайте локальный `.env` рядом с `docker-compose.yml`, например:
 
-Их можно указать в локальном `.env` рядом с `docker-compose.yml`
-или передать через переменные окружения.
+```dotenv
+CATALOG_DB_NAME=catalog_db
+CATALOG_DB_USERNAME=catalog_user
+CATALOG_DB_PASSWORD=local_catalog_password
+ORDER_DB_NAME=order_db
+ORDER_DB_USERNAME=order_user
+ORDER_DB_PASSWORD=local_order_password
+PAYMENT_DB_NAME=payment_db
+PAYMENT_DB_USERNAME=payment_user
+PAYMENT_DB_PASSWORD=local_payment_password
+NOTIFICATION_DB_NAME=notification_db
+NOTIFICATION_DB_USERNAME=notification_user
+NOTIFICATION_DB_PASSWORD=local_notification_password
+PGADMIN_EMAIL=admin@example.com
+PGADMIN_PASSWORD=local_pgadmin_password
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=local_grafana_password
+PAYMENT_PROVIDER_DOCKER_URL=http://host.docker.internal:8090
+```
 
-Имена баз для стандартной локальной конфигурации:
-`catalog_db`, `order_db`, `payment_db`, `notification_db`.
+Указанные имена баз и пользователей должны остаться как в примере: на них рассчитаны Docker-профили, PostgreSQL healthchecks и конфигурации CDC.
+При существующих PostgreSQL volumes используйте их действующие учётные данные: изменение `.env` не меняет пароль уже созданной базы.
 
-Учётные данные Java-приложений должны соответствовать данным PostgreSQL.
-Spring Boot автоматически не загружает `.env`, используемый Docker Compose:
-нужные переменные необходимо также передать процессам приложений
-через настройки запуска IDE или окружение терминала.
+Compose передаёт необходимые параметры приложениям и включает Spring-профиль `docker`.
+Адреса PostgreSQL, Kafka, Redis и Jaeger внутри Docker-сети уже заданы в `application-docker.yml`.
+Обычный `docker compose up -d` запускает инфраструктуру; Compose-профиль `apps` дополнительно включает пять приложений.
 
-Текущие healthchecks PostgreSQL используют пользователей
-`catalog_user`, `order_user`, `payment_user`, `notification_user`.
+### 2. Подготовить платёжный провайдер
+
+Внешний payment provider **не входит в репозиторий и Compose**. Для покупки до `CONFIRMED` нужен работающий провайдер, совместимый с [HTTP-контрактом Payment Service](payment-service/README.md).
+
+Укажите доступный из контейнера URL в `PAYMENT_PROVIDER_DOCKER_URL`.
+Значение по умолчанию `http://host.docker.internal:8090` обращается к провайдеру через опубликованный порт компьютера; оно подходит и для отдельно запущенного контейнера провайдера с опубликованным портом `8090`.
+`localhost` внутри Payment Service указывает на сам Payment Service.
+
+Готового образа и команды сборки провайдера в этом репозитории пока нет. Запуск пяти приложений выполняется полностью через Docker, но полный платёжный сценарий требует этой внешней зависимости.
+
+### 3. Собрать и запустить контейнеры
 
 ```powershell
+docker compose --profile apps config --quiet
+docker compose --profile apps build
 docker compose up -d
 docker compose ps
-
-.\mvnw.cmd clean install
 ```
 
-После сборки запустите приложения **в отдельных терминалах PowerShell** из корня репозитория:
+Дождитесь готовности PostgreSQL, Kafka и Kafka Connect:
 
 ```powershell
-.\mvnw.cmd -pl catalog-service spring-boot:run
-.\mvnw.cmd -pl order-service spring-boot:run
-.\mvnw.cmd -pl payment-service spring-boot:run
-.\mvnw.cmd -pl notification-service spring-boot:run
-.\mvnw.cmd -pl api-gateway spring-boot:run
+Invoke-RestMethod -Uri "http://localhost:8085/connectors"
 ```
 
-Для локального окружения проверьте настройки `application-local.yml` каждого сервиса, параметры Keycloak и адрес payment provider. Запуск приложений и интеграционные сценарии **не проверялись** при подготовке этой документации.
+Затем запустите приложения:
+
+```powershell
+docker compose --profile apps up -d
+docker compose --profile apps ps
+docker compose logs --tail 100 api-gateway catalog-service order-service payment-service notification-service
+```
+
+При первом старте Flyway создаёт схемы. Дождитесь успешного запуска всех приложений.
+
+**На чистом окружении до регистрации CDC-коннекторов не создавайте заказы и не отправляйте бизнес-команды в Kafka.** Следующий шаг рассчитан на новые базы и отсутствие накопленных команд. Если в Kafka уже есть необработанные сообщения, миграции и запуск consumers нужно разделить: простой запуск приложений может обработать команды до создания replication slots.
+
+### 4. Зарегистрировать CDC-коннекторы при первом запуске
+
+Kafka Connect не регистрирует коннекторы автоматически. После применения миграций выполните в PowerShell:
+
+```powershell
+$ErrorActionPreference = "Stop"
+
+$connectors = @(
+    @{ Name = "order-outbox"; Service = "order-service"; Prefix = "ORDER" },
+    @{ Name = "catalog-outbox"; Service = "catalog-service"; Prefix = "CATALOG" },
+    @{ Name = "payment-outbox"; Service = "payment-service"; Prefix = "PAYMENT" }
+)
+
+foreach ($connector in $connectors) {
+    $config = Get-Content -Raw "./docker/kafka-connect/$($connector.Name).json" |
+        ConvertFrom-Json
+    $serviceEnvironment = docker compose --profile apps run --rm --no-deps --entrypoint printenv $connector.Service
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot read environment for $($connector.Service)"
+    }
+
+    foreach ($setting in @("USERNAME", "PASSWORD")) {
+        $variableName = "$($connector.Prefix)_DB_$setting"
+        $line = $serviceEnvironment |
+            Where-Object { $_.StartsWith("$variableName=") } |
+            Select-Object -First 1
+        if (-not $line) {
+            throw "Missing $variableName"
+        }
+        $property = if ($setting -eq "USERNAME") { "database.user" } else { "database.password" }
+        $config.$property = $line.Substring($variableName.Length + 1)
+    }
+
+    $config.PSObject.Properties.Remove("name")
+    $body = $config | ConvertTo-Json -Depth 10
+    Invoke-RestMethod -Method Put `
+        -Uri "http://localhost:8085/connectors/$($connector.Name)/config" `
+        -ContentType "application/json" -Body $body | Out-Null
+}
+```
+
+Скрипт подставляет учётные данные из окружения Compose в REST-запрос, не меняя JSON-файлы в репозитории. Не выводите `$serviceEnvironment` или `$body`: они содержат пароли.
+
+Проверьте каждый connector и его task:
+
+```powershell
+foreach ($name in @("order-outbox", "catalog-outbox", "payment-outbox")) {
+    Invoke-RestMethod -Uri "http://localhost:8085/connectors/$name/status" |
+        ConvertTo-Json -Depth 10
+}
+```
+
+У всех ожидается `RUNNING`, включая task. При `FAILED` сначала устраните причину по полю `trace` и логам `docker compose logs --tail 100 kafka-connect`.
+Healthy Kafka Connect сам по себе не подтверждает готовность коннекторов.
+
+Для дополнительной проверки slots:
+
+```powershell
+docker compose exec -T postgres-order psql -U order_user -d order_db -c "SELECT slot_name, active FROM pg_replication_slots;"
+docker compose exec -T postgres-catalog psql -U catalog_user -d catalog_db -c "SELECT slot_name, active FROM pg_replication_slots;"
+docker compose exec -T postgres-payment psql -U payment_user -d payment_db -c "SELECT slot_name, active FROM pg_replication_slots;"
+```
+
+Ожидаются соответствующие `ticketcraft_*_outbox` с `active = t`.
+Коннекторы используют `snapshot.mode=no_data`: ранее записанные строки outbox не публикуются начальным сканированием.
+При обычном перезапуске повторная регистрация не требуется, если сохранились конфигурация, offsets, slots и WAL.
+
+### 5. Добавить демонстрационный билет
+
+В Docker-профиле автоматический SQL seed отключён. На новой базе выполните:
+
+```powershell
+Get-Content -Raw "./catalog-service/src/main/resources/db/local/seed.sql" |
+    docker compose exec -T postgres-catalog psql -v ON_ERROR_STOP=1 -U catalog_user -d catalog_db
+```
+
+Seed добавляет мероприятие `11111111-1111-1111-1111-111111111111` и билет `22222222-2222-2222-2222-222222222222`.
+Повторный запуск не сбрасывает состояние уже существующего билета. Для повторной покупки нужен другой доступный билет.
+Список мероприятий может обновиться после истечения кеша Catalog (по умолчанию 5 минут).
+
+### 6. Проверить работу
+
+```powershell
+curl.exe -i http://localhost:8080/api/v1/catalog/events
+curl.exe -i http://localhost:8080/api/v1/catalog/events/11111111-1111-1111-1111-111111111111
+```
+
+Каталог доступен без токена. Для создания и чтения заказа получите access token через Keycloak в Postman: realm `ticketcraft`, client `ticketcraft-postman`, пользователь `e2e-user`. Настройка OAuth2 описана в [README Gateway](api-gateway/README.md). Запросите scopes `openid orders.write orders.read`; клиент использует Authorization Code с PKCE S256, callback — `https://oauth.pstmn.io/v1/browser-callback`.
+Используйте issuer `http://localhost:9000/realms/ticketcraft`: он должен совпадать с `iss` токена. В контейнерах JWK Set доступен по `http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs`.
+
+Создайте заказ через Gateway с Bearer-токеном, новым `Idempotency-Key` и JSON `{"ticketId":"22222222-2222-2222-2222-222222222222"}`.
+Запрашивайте `GET /api/v1/orders/{orderId}` с действующим токеном того же пользователя до завершения покупки. Успешный результат — `CONFIRMED`.
+При `401` проверьте срок действия токена; для GET также нужен заголовок Authorization.
+
+Проверьте пять targets со статусом `UP` в Prometheus и новые трассы в Jaeger.
+В Grafana выберите Explore → Jaeger и найдите трассу по trace ID из лога приложения или URL открытой трассы в Jaeger.
+`X-Correlation-ID` — отдельный идентификатор, он не заменяет trace ID.
+
+В текущем окружении вручную проверены каталог через Gateway, пять Prometheus targets `UP` и покупка до `CONFIRMED` при работающем внешнем провайдере. Полный bootstrap с пустыми volumes по этой инструкции отдельно не проверялся.
+
+### Повторный запуск, обновление и остановка
+
+Обычный запуск подготовленного окружения:
+
+```powershell
+docker compose --profile apps up -d
+```
+
+После изменения исходников или `application-docker.yml`:
+
+```powershell
+docker compose --profile apps up -d --build
+```
+
+После изменения конфигурации Prometheus или provisioning Grafana:
+
+```powershell
+docker compose restart prometheus grafana
+```
+
+Остановить контейнеры с сохранением данных и конфигурации:
+
+```powershell
+docker compose --profile apps stop
+```
+
+В текущем Compose Kafka и Keycloak не имеют постоянных volumes. Используйте `stop`/`start` или `up -d` для обычной работы.
+`docker compose down` удаляет контейнеры и может привести к потере Kafka topics, offsets и конфигураций Connect, а также изменений Keycloak. Сохранённые PostgreSQL-базы после этого не делают CDC автоматически восстанавливаемым. Не используйте `down -v` для обычного перезапуска: эта команда дополнительно удаляет volumes с данными.
+
+### Адреса
 
 | Компонент | Локальный адрес |
 |---|---|
@@ -135,7 +287,7 @@ docker compose ps
 
 PostgreSQL: catalog `5432`, order `5433`, notification `5434`, payment `5435`; Kafka `9092`, Redis `6379`.
 
-Параметры Docker Compose передаются через локальный `.env` или переменные окружения. Параметры подключения Java-приложений необходимо передать отдельно, как описано выше.
+Compose передаёт параметры подключения контейнерам автоматически. Порты в таблице опубликованы для доступа с компьютера.
 
 ### HTTP API
 
@@ -145,16 +297,6 @@ PostgreSQL: catalog `5432`, order `5433`, notification `5434`, payment `5435`; K
 | `GET` | `/api/v1/catalog/events/{eventId}` | Мероприятие и билеты |
 | `POST` | `/api/v1/orders` | Создание заказа (`JWT`, `Idempotency-Key`, JSON `{"ticketId":"<uuid>"}`) |
 | `GET` | `/api/v1/orders/{orderId}` | Статус собственного заказа (`JWT`) |
-
-## Тесты и наблюдаемость
-
-В проекте есть unit- и интеграционные тесты, в том числе для Saga, idempotency, outbox, резервирования и Kafka. Для отдельных интеграционных тестов требуется Docker/Testcontainers. Пример запуска:
-
-```powershell
-.\mvnw.cmd test
-```
-
-Метрики доступны через Actuator с учётом security-настроек конкретного сервиса. Конфигурации Prometheus, Grafana и Jaeger находятся в `observability/`. Trace context через durable outbox **не сохраняется автоматически**: асинхронная публикация может начать новую трассу.
 
 ## Известные ограничения
 
