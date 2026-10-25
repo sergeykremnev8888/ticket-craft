@@ -1,0 +1,16 @@
+package ru.ticketcraft.catalog.ratelimit;
+
+public enum RateLimitPolicy {
+
+    CATALOG_READ("catalog-read");
+
+    private final String key;
+
+    RateLimitPolicy(String key) {
+        this.key = key;
+    }
+
+    public String key() {
+        return key;
+    }
+}
