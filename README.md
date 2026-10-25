@@ -19,9 +19,9 @@ flowchart TD
     Client[HTTP client] --> GW[API Gateway :8080]
     GW --> CAT[Catalog Service :8081]
     GW --> ORD[Order Service :8082]
-    ORD <--> K[(Kafka)]
-    CAT <--> K
-    PAY[Payment Service :8084] <--> K
+    K[(Kafka)] --> ORD
+    K --> CAT
+    K --> PAY[Payment Service :8084]
     NOT[Notification Service :8083] <-- K
     PAY --> Provider[External payment provider]
     CAT --> CDB[(catalog_db)]
@@ -33,6 +33,8 @@ flowchart TD
     CAT -. JWT/JWK .-> KC
     ORD -. JWT/JWK .-> KC
 ```
+Связи Kafka → сервис обозначают получение бизнес-команд и результатов. Исходящие бизнес-сообщения идут через outbox PostgreSQL и Debezium. Публикация ошибок в DLT остаётся в Java-приложениях и отдельно на схеме не показана.
+
 Связи JWT/JWK обозначают использование Keycloak и его ключей для проверки токенов. Обращение к Keycloak на каждый запрос не требуется.
 
 `docker-compose.yml` поднимает **инфраструктуру**, но не сами Java-приложения: их нужно запускать отдельно. `common-dto` — Maven-библиотека, а не сетевой сервис.
@@ -123,6 +125,7 @@ docker compose ps
 | Order | `http://localhost:8082` |
 | Notification (Actuator) | `http://localhost:8083` |
 | Payment (Actuator) | `http://localhost:8084` |
+| Kafka Connect REST API | `http://localhost:8085` |
 | Keycloak | `http://localhost:9000` |
 | Kafka UI | `http://localhost:8070` |
 | pgAdmin | `http://localhost:5050` |
