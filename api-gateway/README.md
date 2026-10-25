@@ -10,7 +10,7 @@ API Gateway — единая точка входа для HTTP API учебно�
 - Redis и реактивный Redis-клиент Lettuce для распределённого rate limiting.
 - Resilience4j: Circuit Breaker и TimeLimiter.
 - Actuator, Micrometer, Prometheus, Grafana.
-- Micrometer Tracing / OpenTelemetry, экспорт OTLP в Tempo.
+- Micrometer Tracing / OpenTelemetry, экспорт OTLP в Jaeger.
 - JUnit, Mockito, Reactor Test, WebTestClient, Testcontainers 2.0.5.
 
 ## Маршруты и доступ
@@ -257,7 +257,7 @@ Bearer-обработчики сохраняют стандартный заго
 
 Команды ниже выполняются в PowerShell из корня репозитория. Требуются JDK 21 и Docker Desktop либо другой поддержанный Testcontainers Docker runtime. Maven Wrapper скачивает Maven при первом запуске.
 
-Для ручной работы подними Redis, Keycloak и нужные downstream-сервисы. Для экспорта трасс нужен Tempo. Инфраструктура описана в [docker-compose.yml](../docker-compose.yml); Java-приложения запускаются отдельно. Дополнительные инструкции — в [корневом README](../README.md).
+Для ручной работы подними Redis, Keycloak и нужные downstream-сервисы. Для экспорта трасс нужен Jaeger. Инфраструктура описана в [docker-compose.yml](../docker-compose.yml); Java-приложения запускаются отдельно. Дополнительные инструкции — в [корневом README](../README.md).
 
 Полная проверка модуля и сборка исполняемого JAR:
 
@@ -321,7 +321,7 @@ HTTP-интеграционные тесты используют локальн
 - Actuator exposure: `health,info,prometheus,metrics`. Security публично разрешает только GET `/actuator/health` и `/actuator/prometheus`; остальные endpoints из exposure не становятся публичными автоматически.
 - Prometheus опрашивает `host.docker.internal:8080/actuator/prometheus` с job `api-gateway`: [конфигурация](../observability/prometheus/prometheus.yml).
 - Grafana dashboard: [api-gateway.json](../observability/grafana/dashboards/api-gateway.json).
-- OpenTelemetry отправляет трассы по OTLP HTTP в Tempo на `http://localhost:4318/v1/traces`.
+- OpenTelemetry отправляет трассы по OTLP HTTP в Jaeger на `http://localhost:4318/v1/traces`.
 - `spring.reactor.context-propagation: auto` включает автоматическую передачу контекста Reactor.
 - OTLP-экспорт метрик отключён; метрики собирает Prometheus.
 

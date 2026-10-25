@@ -10,7 +10,7 @@
 - **Конкурентное бронирование:** атомарное изменение состояния билета на стороне PostgreSQL, защита от повторных команд.
 - **Идемпотентность:** `Idempotency-Key` для создания заказов, персистентный учёт обработанных событий у отдельных Kafka consumers.
 - **Security:** Keycloak, JWT/OAuth2 Resource Server, проверка scopes и владельца заказа.
-- **Resilience и observability:** rate limiting с использованием Redis, Circuit Breaker в Gateway, Actuator, Prometheus, Grafana и OpenTelemetry/Tempo.
+- **Resilience и observability:** rate limiting с использованием Redis, Circuit Breaker в Gateway, Actuator, Prometheus, Grafana и OpenTelemetry/Jaeger.
 
 ## Архитектура
 
@@ -71,7 +71,7 @@ Order Service не вызывает Catalog Service и Payment Service по HTTP
 
 ## Стек
 
-Java 21, Spring Boot 4.1.1, Spring MVC, Spring Cloud Gateway (WebFlux), Spring Security, Spring Data JPA/JDBC, Spring Kafka, PostgreSQL 16, Flyway, Apache Kafka, Redis, Keycloak, Maven, Docker Compose, JUnit/Mockito, Spring Boot Actuator, Micrometer, Prometheus, Grafana, OpenTelemetry/Tempo.
+Java 21, Spring Boot 4.1.1, Spring MVC, Spring Cloud Gateway (WebFlux), Spring Security, Spring Data JPA/JDBC, Spring Kafka, PostgreSQL 16, Flyway, Apache Kafka, Redis, Keycloak, Maven, Docker Compose, JUnit/Mockito, Spring Boot Actuator, Micrometer, Prometheus, Grafana, OpenTelemetry/Jaeger.
 
 ## Локальный запуск (Windows / PowerShell)
 
@@ -131,7 +131,7 @@ docker compose ps
 | pgAdmin | `http://localhost:5050` |
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` |
-| Tempo | `http://localhost:3200` |
+| Jaeger UI | `http://localhost:16686` |
 
 PostgreSQL: catalog `5432`, order `5433`, notification `5434`, payment `5435`; Kafka `9092`, Redis `6379`.
 
@@ -154,7 +154,7 @@ PostgreSQL: catalog `5432`, order `5433`, notification `5434`, payment `5435`; K
 .\mvnw.cmd test
 ```
 
-Метрики доступны через Actuator с учётом security-настроек конкретного сервиса. Конфигурации Prometheus, Grafana и Tempo находятся в `observability/`. Trace context через durable outbox **не сохраняется автоматически**: асинхронная публикация может начать новую трассу.
+Метрики доступны через Actuator с учётом security-настроек конкретного сервиса. Конфигурации Prometheus, Grafana и Jaeger находятся в `observability/`. Trace context через durable outbox **не сохраняется автоматически**: асинхронная публикация может начать новую трассу.
 
 ## Известные ограничения
 

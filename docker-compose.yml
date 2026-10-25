@@ -228,18 +228,18 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
 
-  tempo:
-    image: grafana/tempo:2.8.2
-    container_name: ticketcraft-tempo
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0
+    container_name: ticketcraft-jaeger
     command:
-    - -config.file=/etc/tempo.yml
+      - --config=/etc/jaeger/jaeger.yml
     ports:
-    - 3200:3200
-    - 4317:4317
-    - 4318:4318
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
     volumes:
-    - ./observability/tempo/tempo.yml:/etc/tempo.yml:ro
-    - tempo_data:/var/tempo
+      - ./observability/jaeger/jaeger.yml:/etc/jaeger/jaeger.yml:ro
+      - jaeger_data:/tmp
 
   grafana:
     image: grafana/grafana:12.1.0
@@ -256,7 +256,7 @@ services:
     - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
     - prometheus
-    - tempo
+    - jaeger
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.3
@@ -287,7 +287,7 @@ volumes:
     name: ticketcraft_pgadmin_data
   prometheus_data:
     name: ticketcraft_prometheus_data
-  tempo_data:
-    name: ticketcraft_tempo_data
+  jaeger_data:
+    name: ticketcraft_jaeger_data
   grafana_data:
     name: ticketcraft_grafana_data
