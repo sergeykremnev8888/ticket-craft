@@ -1,22 +1,20 @@
 spring:
   data:
     redis:
-      host: redis
-      port: 6379
+      url: ${REDIS_URL:redis://redis:6379}
 
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:9000/realms/ticketcraft
-          jwk-set-uri: http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs
-          audiences:
-            - ticketcraft-api
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:9000/realms/ticketcraft}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs}
+          audiences: ${JWT_AUDIENCE:ticketcraft-api}
 
 ticketcraft:
   gateway:
-    catalog-uri: http://catalog-service:8081
-    order-uri: http://order-service:8082
+    catalog-uri: ${GATEWAY_CATALOG_URI:http://catalog-service:8081}
+    order-uri: ${GATEWAY_ORDER_URI:http://order-service:8082}
 
 management:
   opentelemetry:

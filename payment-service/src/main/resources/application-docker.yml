@@ -5,9 +5,16 @@ spring:
     password: ${PAYMENT_DB_PASSWORD}
 
   kafka:
-    bootstrap-servers: kafka:29092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
 
 ticketcraft:
   payment:
     provider:
       base-url: ${PAYMENT_PROVIDER_BASE_URL:http://host.docker.internal:8090}
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://jaeger:4318/v1/traces}

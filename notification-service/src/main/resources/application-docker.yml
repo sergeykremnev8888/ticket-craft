@@ -5,4 +5,11 @@ spring:
     password: ${NOTIFICATION_DB_PASSWORD}
 
   kafka:
-    bootstrap-servers: kafka:29092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://jaeger:4318/v1/traces}

@@ -57,14 +57,13 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:9000/realms/ticketcraft
-          audiences:
-            - ticketcraft-api
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:9000/realms/ticketcraft}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9000/realms/ticketcraft/protocol/openid-connect/certs}
+          audiences: ${JWT_AUDIENCE:ticketcraft-api}
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      url: ${REDIS_URL:redis://localhost:6379}
       timeout: 500ms
 
   reactor:
@@ -102,6 +101,8 @@ resilience4j:
         timeoutDuration: 4s
 
 ticketcraft:
+  catalog-uri: ${GATEWAY_CATALOG_URI:http://localhost:8081}
+  order-uri: ${GATEWAY_ORDER_URI:http://localhost:8082}
   gateway:
     rate-limiter:
       timeout: 500ms
@@ -143,4 +144,4 @@ management:
     tracing:
       export:
         otlp:
-          endpoint: http://localhost:4318/v1/traces
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}

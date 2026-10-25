@@ -1,0 +1,26 @@
+spring:
+  data:
+    redis:
+      url: ${REDIS_URL}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI}
+          jwk-set-uri: ${JWT_JWK_SET_URI}
+          audiences: ${JWT_AUDIENCE:ticketcraft-api}
+
+ticketcraft:
+  gateway:
+    catalog-uri: ${GATEWAY_CATALOG_URI}
+    order-uri: ${GATEWAY_ORDER_URI}
+    cors:
+      allowed-origins: ${GATEWAY_CORS_ALLOWED_ORIGINS}
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}

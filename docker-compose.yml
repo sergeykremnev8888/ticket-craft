@@ -5,7 +5,7 @@ x-java-service: &java-service
     - apps
   environment: &java-environment
     SPRING_PROFILES_ACTIVE: docker
-    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://jaeger:4318/v1/traces}
     TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
   healthcheck: &java-healthcheck
     test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8080/actuator/health"]
@@ -304,6 +304,7 @@ services:
       <<: *java-environment
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
+      CATALOG_DB_URL: ${CATALOG_DB_URL:-jdbc:postgresql://postgres-catalog:5432/catalog_db}
     ports:
       - "8081:8081"
     healthcheck:
@@ -333,6 +334,7 @@ services:
       <<: *java-environment
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
+      ORDER_DB_URL: ${ORDER_DB_URL:-jdbc:postgresql://postgres-order:5433/order_db}
     ports:
       - "8082:8082"
     healthcheck:
@@ -360,6 +362,7 @@ services:
       <<: *java-environment
       PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
+      PAYMENT_DB_URL: ${PAYMENT_DB_URL:-jdbc:postgresql://postgres-payment:5435/payment_db}
       PAYMENT_PROVIDER_BASE_URL: ${PAYMENT_PROVIDER_BASE_URL:-http://host.docker.internal:8090}
     ports:
       - "8084:8084"
@@ -388,6 +391,7 @@ services:
       <<: *java-environment
       NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:?Set NOTIFICATION_DB_USERNAME}
       NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
+      NOTIFICATION_DB_URL: ${NOTIFICATION_DB_URL:-jdbc:postgresql://postgres-notification:5434/notification_db}
     ports:
       - "8083:8083"
     healthcheck:

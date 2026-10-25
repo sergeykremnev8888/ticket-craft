@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/order_db
+    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5433/order_db}
     username: ${ORDER_DB_USERNAME:postgres}
     password: ${ORDER_DB_PASSWORD:postgres}
     hikari:
