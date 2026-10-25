@@ -25,7 +25,10 @@ RUN --mount=type=cache,id=ticketcraft-maven,target=/root/.m2,sharing=locked \
 
 FROM eclipse-temurin:21-jre-jammy AS runtime
 
-RUN groupadd --gid 10001 app \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --create-home app
 
 WORKDIR /app
