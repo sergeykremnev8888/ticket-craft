@@ -6,6 +6,12 @@ x-java-service: &java-service
   environment: &java-environment
     SPRING_PROFILES_ACTIVE: docker
     OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+  healthcheck: &java-healthcheck
+    test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8080/actuator/health"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 60s
 
 services:
 
@@ -138,6 +144,8 @@ services:
       KAFKA_LOG_DIRS: /var/lib/kafka/data
     ports:
       - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
     healthcheck:
       test:
       - CMD-SHELL
@@ -183,7 +191,7 @@ services:
       start_period: 30s
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: provectuslabs/kafka-ui:v0.7.2
     environment:
       KAFKA_CLUSTERS_0_NAME: ticketcraft-kafka
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
@@ -194,7 +202,7 @@ services:
         condition: service_healthy
 
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.18
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
@@ -222,8 +230,6 @@ services:
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
-    extra_hosts:
-      - host.docker.internal:host-gateway
 
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0
@@ -264,6 +270,7 @@ services:
     ports:
       - "9000:8080"
     volumes:
+      - keycloak_data:/opt/keycloak/data
       - ./docker/keycloak/ticketcraft-realm.json:/opt/keycloak/data/import/ticketcraft-realm.json:ro
 
   api-gateway:
@@ -280,9 +287,9 @@ services:
       keycloak:
         condition: service_started
       catalog-service:
-        condition: service_started
+        condition: service_healthy
       order-service:
-        condition: service_started
+        condition: service_healthy
       jaeger:
         condition: service_started
 
@@ -298,6 +305,9 @@ services:
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
     ports:
       - "8081:8081"
+    healthcheck:
+      <<: *java-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8081/actuator/health"]
     depends_on:
       postgres-catalog:
         condition: service_healthy
@@ -324,6 +334,9 @@ services:
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
     ports:
       - "8082:8082"
+    healthcheck:
+      <<: *java-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8082/actuator/health"]
     depends_on:
       postgres-order:
         condition: service_healthy
@@ -349,6 +362,9 @@ services:
       PAYMENT_PROVIDER_BASE_URL: ${PAYMENT_PROVIDER_DOCKER_URL:-http://host.docker.internal:8090}
     ports:
       - "8084:8084"
+    healthcheck:
+      <<: *java-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8084/actuator/health"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -373,6 +389,9 @@ services:
       NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
     ports:
       - "8083:8083"
+    healthcheck:
+      <<: *java-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8083/actuator/health"]
     depends_on:
       postgres-notification:
         condition: service_healthy
@@ -382,6 +401,10 @@ services:
         condition: service_started
 
 volumes:
+  kafka_data:
+    name: ticketcraft_kafka_data
+  keycloak_data:
+    name: ticketcraft_keycloak_data
   postgres_catalog_data:
     name: ticketcraft_pg_catalog_data
   postgres_order_data:
