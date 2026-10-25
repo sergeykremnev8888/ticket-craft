@@ -3,17 +3,9 @@ package ru.ticketcraft.payment.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jdbc.test.autoconfigure.DataJdbcTest;
@@ -21,8 +13,6 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -31,241 +21,100 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Import(PaymentOutboxRepository.class)
 @Testcontainers
 @ActiveProfiles("test")
-@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class PaymentOutboxRepositoryIntegrationTest {
+
+    private static final UUID OUTBOX_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+    private static final String MESSAGE_ID = "payment:test:succeeded";
+
+    private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
+
+    private static final String PAYLOAD = """
+            {
+              "messageId": "payment:test:succeeded",
+              "orderId": 123,
+              "paymentId": "22222222-2222-2222-2222-222222222222",
+              "amount": 1500.00,
+              "createdAt": "2026-01-01T10:00:00Z"
+            }
+            """;
 
     @Container
     @ServiceConnection
     @SuppressWarnings("resource")
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("payment_db").withUsername("postgres").withPassword("postgres");
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
+            "postgres:16-alpine").withDatabaseName("payment_db").withUsername("postgres").withPassword("postgres");
 
     @Autowired
-    private PaymentOutboxRepository outboxRepository;
+    private PaymentOutboxRepository repository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    @BeforeEach
-    void setUp() {
-        jdbcTemplate.update("DELETE FROM payment_outbox");
-    }
-
-    @AfterEach
-    void tearDown() {
-        jdbcTemplate.update("DELETE FROM payment_outbox");
-    }
-
     @Test
-    void shouldNotClaimSameOutboxRecordsByConcurrentWorkers() throws Exception {
-        Instant createdAt = Instant.parse("2026-09-10T10:00:00Z");
-
-        int recordsCount = 20;
-        for (int index = 0; index < recordsCount; index++) {
-            UUID id = UUID.randomUUID();
-
-            boolean inserted = outboxRepository.insertIfAbsent(id, "payment-outbox-message-" + index, 1_000L + index,
-                    PaymentOutboxEventType.PAYMENT_SUCCEEDED.name(), """
-                            {
-                              "messageId": "payment-message",
-                              "orderId": 100,
-                              "paymentId": "11111111-1111-1111-1111-111111111111",
-                              "amount": 150.00,
-                              "occurredAt": "2026-09-10T10:00:00Z"
-                            }
-                            """, createdAt.plusSeconds(index));
-
-            assertThat(inserted).isTrue();
-        }
-
-        String workerOne = "payment-instance-1";
-        String workerTwo = "payment-instance-2";
-
-        Instant claimedAt = Instant.parse("2026-09-10T10:01:00Z");
-
-        Instant claimExpiredBefore = claimedAt.minusSeconds(30);
-
-        CountDownLatch readyLatch = new CountDownLatch(2);
-        CountDownLatch startLatch = new CountDownLatch(1);
-
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-
-        try {
-            Future<List<PaymentOutboxRecord>> firstFuture = executor.submit(() -> {
-                readyLatch.countDown();
-                startLatch.await();
-
-                return outboxRepository.claimBatch(10, workerOne, claimedAt, claimExpiredBefore);
-            });
-
-            Future<List<PaymentOutboxRecord>> secondFuture = executor.submit(() -> {
-                readyLatch.countDown();
-                startLatch.await();
-
-                return outboxRepository.claimBatch(10, workerTwo, claimedAt, claimExpiredBefore);
-            });
-
-            readyLatch.await();
-
-            startLatch.countDown();
-
-            List<PaymentOutboxRecord> firstBatch = firstFuture.get();
-
-            List<PaymentOutboxRecord> secondBatch = secondFuture.get();
-
-            assertThat(firstBatch).hasSize(10);
-            assertThat(secondBatch).hasSize(10);
-
-            Set<UUID> firstIds = extractIds(firstBatch);
-            Set<UUID> secondIds = extractIds(secondBatch);
-
-            assertThat(firstIds).doesNotContainAnyElementsOf(secondIds);
-
-            Set<UUID> allClaimedIds = new HashSet<>(firstIds);
-
-            allClaimedIds.addAll(secondIds);
-
-            assertThat(allClaimedIds).hasSize(recordsCount);
-
-            assertThat(firstBatch).allSatisfy(record -> assertThat(record.claimedBy()).isEqualTo(workerOne));
-
-            assertThat(secondBatch).allSatisfy(record -> assertThat(record.claimedBy()).isEqualTo(workerTwo));
-        } finally {
-            executor.shutdownNow();
-        }
-    }
-
-    @Test
-    void shouldReclaimOutboxRecordWhenClaimLeaseExpired() {
-        UUID outboxId = UUID.fromString("11111111-1111-1111-1111-111111111111");
-
-        Instant createdAt = Instant.parse("2026-09-10T10:00:00Z");
-
-        boolean inserted = outboxRepository.insertIfAbsent(outboxId, "payment:payment-id:succeeded", 100L,
-                PaymentOutboxEventType.PAYMENT_SUCCEEDED.name(), """
-                        {
-                          "messageId": "payment:payment-id:succeeded",
-                          "orderId": 100,
-                          "paymentId": "22222222-2222-2222-2222-222222222222",
-                          "amount": 150.00,
-                          "occurredAt": "2026-09-10T10:00:00Z"
-                        }
-                        """, createdAt);
+    void shouldPersistOutboxEventForDebezium() {
+        boolean inserted = repository.insertIfAbsent(OUTBOX_ID,
+                                                     MESSAGE_ID,
+                                                     123L,
+                                                     PaymentOutboxEventType.PAYMENT_SUCCEEDED.getPersistedValue(),
+                                                     PAYLOAD,
+                                                     CREATED_AT);
 
         assertThat(inserted).isTrue();
 
-        Instant firstClaimAt = Instant.parse("2026-09-10T10:01:00Z");
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT
+                    id,
+                    message_id,
+                    order_id,
+                    event_type,
+                    payload ->> 'messageId' AS payload_message_id
+                FROM payment_outbox
+                WHERE id = ?
+                """, OUTBOX_ID);
 
-        List<PaymentOutboxRecord> firstClaim = outboxRepository.claimBatch(1, "instance-1", firstClaimAt,
-                firstClaimAt.minusSeconds(30));
-
-        assertThat(firstClaim).hasSize(1);
-
-        Instant secondClaimAt = firstClaimAt.plusSeconds(31);
-
-        List<PaymentOutboxRecord> secondClaim = outboxRepository.claimBatch(1, "instance-2", secondClaimAt,
-                secondClaimAt.minusSeconds(30));
-
-        assertThat(secondClaim).hasSize(1);
-
-        PaymentOutboxRecord reclaimedRecord = secondClaim.getFirst();
-
-        assertThat(reclaimedRecord.id()).isEqualTo(outboxId);
-
-        assertThat(reclaimedRecord.claimedBy()).isEqualTo("instance-2");
+        assertThat(row.get("id")).isEqualTo(OUTBOX_ID);
+        assertThat(row.get("message_id")).isEqualTo(MESSAGE_ID);
+        assertThat(row.get("order_id")).isEqualTo(123L);
+        assertThat(row.get("event_type")).isEqualTo("PaymentSucceededEvent");
+        assertThat(row.get("payload_message_id")).isEqualTo(MESSAGE_ID);
     }
 
     @Test
-    void shouldNotClaimOutboxRecordWhenLeaseIsStillActive() {
-        UUID outboxId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    void shouldKeepOriginalEventWhenMessageIdIsRepeated() {
+        boolean firstInserted = repository.insertIfAbsent(OUTBOX_ID,
+                                                          MESSAGE_ID,
+                                                          123L,
+                                                          PaymentOutboxEventType.PAYMENT_SUCCEEDED.getPersistedValue(),
+                                                          PAYLOAD,
+                                                          CREATED_AT);
 
-        Instant createdAt = Instant.parse("2026-09-10T10:00:00Z");
+        boolean duplicateInserted = repository.insertIfAbsent(UUID.randomUUID(),
+                                                              MESSAGE_ID,
+                                                              999L,
+                                                              PaymentOutboxEventType.PAYMENT_FAILED.getPersistedValue(),
+                                                              "{}",
+                                                              CREATED_AT.plusSeconds(1));
 
-        boolean inserted = outboxRepository.insertIfAbsent(outboxId, "payment:payment-id:succeeded", 100L,
-                PaymentOutboxEventType.PAYMENT_SUCCEEDED.name(), """
-                        {
-                          "messageId": "payment:payment-id:succeeded",
-                          "orderId": 100,
-                          "paymentId": "22222222-2222-2222-2222-222222222222",
-                          "amount": 150.00,
-                          "occurredAt": "2026-09-10T10:00:00Z"
-                        }
-                        """, createdAt);
+        assertThat(firstInserted).isTrue();
+        assertThat(duplicateInserted).isFalse();
 
-        assertThat(inserted).isTrue();
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM payment_outbox
+                WHERE message_id = ?
+                """, Long.class, MESSAGE_ID);
 
-        Instant firstClaimAt = Instant.parse("2026-09-10T10:01:00Z");
+        assertThat(count).isEqualTo(1L);
 
-        List<PaymentOutboxRecord> firstClaim = outboxRepository.claimBatch(1, "instance-1", firstClaimAt,
-                firstClaimAt.minusSeconds(30));
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT id, order_id, event_type
+                FROM payment_outbox
+                WHERE message_id = ?
+                """, MESSAGE_ID);
 
-        assertThat(firstClaim).hasSize(1);
-
-        Instant secondClaimAt = firstClaimAt.plusSeconds(10);
-
-        List<PaymentOutboxRecord> secondClaim = outboxRepository.claimBatch(1, "instance-2", secondClaimAt,
-                secondClaimAt.minusSeconds(30));
-
-        assertThat(secondClaim).isEmpty();
-    }
-
-    @Test
-    void shouldRejectStaleClaimAfterReclaimBySameInstance() {
-        UUID outboxId = UUID.randomUUID();
-        String messageId = "stale-claim-" + UUID.randomUUID();
-
-        Instant createdAt = Instant.parse("2026-01-01T10:00:00Z");
-        Instant firstClaimAt = createdAt.plusSeconds(1);
-        Instant secondClaimAt = firstClaimAt.plusSeconds(31);
-
-        String firstClaimId = "instance-A:" + UUID.randomUUID();
-        String secondClaimId = "instance-A:" + UUID.randomUUID();
-
-        boolean inserted = outboxRepository.insertIfAbsent(outboxId,
-                                                           messageId,
-                                                           123L,
-                                                           PaymentOutboxEventType.PAYMENT_SUCCEEDED.getPersistedValue(),
-                                                           "{}",
-                                                           createdAt);
-
-        assertThat(inserted).isTrue();
-
-        List<PaymentOutboxRecord> firstBatch = outboxRepository.claimBatch(1,
-                                                                           firstClaimId,
-                                                                           firstClaimAt,
-                                                                           firstClaimAt.minusSeconds(30));
-
-        assertThat(firstBatch).hasSize(1);
-        assertThat(firstBatch.getFirst().id()).isEqualTo(outboxId);
-
-        List<PaymentOutboxRecord> secondBatch = outboxRepository.claimBatch(1,
-                                                                            secondClaimId,
-                                                                            secondClaimAt,
-                                                                            secondClaimAt.minusSeconds(30));
-
-        assertThat(secondBatch).hasSize(1);
-        assertThat(secondBatch.getFirst().claimedBy()).isEqualTo(secondClaimId);
-
-        int staleMark = outboxRepository.markPublished(outboxId, firstClaimId, secondClaimAt.plusSeconds(1));
-
-        assertThat(staleMark).isZero();
-
-        int staleRelease = outboxRepository.releaseClaim(outboxId, firstClaimId);
-
-        assertThat(staleRelease).isZero();
-
-        int currentMark = outboxRepository.markPublished(outboxId, secondClaimId, secondClaimAt.plusSeconds(2));
-
-        assertThat(currentMark).isEqualTo(1);
-    }
-
-    private Set<UUID> extractIds(List<PaymentOutboxRecord> records) {
-        Set<UUID> ids = new HashSet<>();
-
-        for (PaymentOutboxRecord record : records) {
-            ids.add(record.id());
-        }
-
-        return ids;
+        assertThat(row.get("id")).isEqualTo(OUTBOX_ID);
+        assertThat(row.get("order_id")).isEqualTo(123L);
+        assertThat(row.get("event_type")).isEqualTo("PaymentSucceededEvent");
     }
 }
