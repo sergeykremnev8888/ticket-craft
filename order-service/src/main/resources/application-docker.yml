@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-order:5432/order_db
+    username: ${ORDER_DB_USERNAME}
+    password: ${ORDER_DB_PASSWORD}
+
+  kafka:
+    bootstrap-servers: kafka:29092
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:9000/realms/ticketcraft
+          jwk-set-uri: http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs
+          audiences:
+            - ticketcraft-api
+
+ticketcraft:
+  security:
+    metrics-public: true

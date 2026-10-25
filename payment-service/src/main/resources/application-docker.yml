@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-payment:5432/payment_db
+    username: ${PAYMENT_DB_USERNAME}
+    password: ${PAYMENT_DB_PASSWORD}
+
+  kafka:
+    bootstrap-servers: kafka:29092
+
+ticketcraft:
+  payment:
+    provider:
+      base-url: ${PAYMENT_PROVIDER_BASE_URL:http://host.docker.internal:8090}

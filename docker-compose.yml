@@ -1,3 +1,10 @@
+x-java-service: &java-service
+  profiles:
+    - apps
+  environment: &java-environment
+    SPRING_PROFILES_ACTIVE: docker
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+
 services:
 
   postgres-catalog:
@@ -271,6 +278,121 @@ services:
       - "9000:8080"
     volumes:
       - ./docker/keycloak/ticketcraft-realm.json:/opt/keycloak/data/import/ticketcraft-realm.json:ro
+
+  api-gateway:
+    <<: *java-service
+    image: ticketcraft/api-gateway:local
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      catalog-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      jaeger:
+        condition: service_started
+
+  catalog-service:
+    <<: *java-service
+    image: ticketcraft/catalog-service:local
+    build:
+      context: .
+      dockerfile: catalog-service/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      <<: *java-environment
+      CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
+    depends_on:
+      postgres-catalog:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-connect:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      jaeger:
+        condition: service_started
+
+  order-service:
+    <<: *java-service
+    image: ticketcraft/order-service:local
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      <<: *java-environment
+      ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
+    depends_on:
+      postgres-order:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-connect:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      jaeger:
+        condition: service_started
+
+  payment-service:
+    <<: *java-service
+    image: ticketcraft/payment-service:local
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      <<: *java-environment
+      PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
+      PAYMENT_PROVIDER_BASE_URL: ${PAYMENT_PROVIDER_DOCKER_URL:-http://host.docker.internal:8090}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-connect:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+
+  notification-service:
+    <<: *java-service
+    image: ticketcraft/notification-service:local
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    ports:
+      - "8083:8083"
+    environment:
+      <<: *java-environment
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:?Set NOTIFICATION_DB_USERNAME}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
+    depends_on:
+      postgres-notification:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
 
 volumes:
   pg_catalog_data:

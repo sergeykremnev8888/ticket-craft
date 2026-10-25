@@ -1,0 +1,26 @@
+spring:
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:9000/realms/ticketcraft
+          jwk-set-uri: http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs
+          audiences:
+            - ticketcraft-api
+
+ticketcraft:
+  gateway:
+    catalog-uri: http://catalog-service:8081
+    order-uri: http://order-service:8082
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://jaeger:4318/v1/traces}
