@@ -21,8 +21,8 @@ spring:
       properties:
         '[max.poll.interval.ms]': ${PAYMENT_KAFKA_MAX_POLL_INTERVAL_MS:300000}
         '[spring.json.type.mapping]': >-
-          PaymentRequested:ru.ticketcraft.dto.PaymentRequestedEvent,
-          RefundPayment:ru.ticketcraft.dto.RefundPaymentCommand
+          PaymentRequested:ru.ticketcraft.common.dto.PaymentRequestedEvent,
+          RefundPayment:ru.ticketcraft.common.dto.RefundPaymentCommand
     producer:
       acks: all
       '[enable.idempotence]': true

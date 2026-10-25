@@ -25,7 +25,8 @@ import org.springframework.kafka.support.serializer.DelegatingByTypeSerializer;
 import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 
-import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderEvent;
+
 
 @Configuration
 @EnableConfigurationProperties({ KafkaRetryProperties.class, KafkaConsumerProperties.class })

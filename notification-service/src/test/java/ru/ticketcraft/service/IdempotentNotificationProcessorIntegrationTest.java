@@ -19,7 +19,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderEvent;
 import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
 import ru.ticketcraft.repository.ProcessedEventRepository;
 

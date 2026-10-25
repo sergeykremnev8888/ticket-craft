@@ -14,7 +14,7 @@ import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 
-import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderEvent;
 
 @ExtendWith(MockitoExtension.class)
 class KafkaConsumerConfigTest {

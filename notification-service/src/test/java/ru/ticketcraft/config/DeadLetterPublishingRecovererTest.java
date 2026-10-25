@@ -18,7 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 
-import ru.ticketcraft.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderEvent;
+
 
 @ExtendWith(MockitoExtension.class)
 class DeadLetterPublishingRecovererTest {

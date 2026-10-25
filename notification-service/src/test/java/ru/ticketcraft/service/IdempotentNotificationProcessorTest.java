@@ -20,8 +20,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import ru.ticketcraft.dto.OrderEvent;
-import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.common.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderState;
 import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
 import ru.ticketcraft.repository.ProcessedEventRepository;
 

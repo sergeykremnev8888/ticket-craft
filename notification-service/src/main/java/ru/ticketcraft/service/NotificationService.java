@@ -4,8 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import ru.ticketcraft.dto.OrderEvent;
-import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.common.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderState;
 
 @Service
 public class NotificationService {

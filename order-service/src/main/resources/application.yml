@@ -19,14 +19,14 @@ spring:
       enable-auto-commit: false
       properties:
        '[spring.json.type.mapping]': >-
-        TicketReserved:ru.ticketcraft.dto.TicketReservedEvent,
-        TicketReservationFailed:ru.ticketcraft.dto.TicketReservationFailedEvent,
-        TicketConfirmed:ru.ticketcraft.dto.TicketConfirmedEvent,
-        TicketConfirmationFailed:ru.ticketcraft.dto.TicketConfirmationFailedEvent,
-        TicketReleased:ru.ticketcraft.dto.TicketReleasedEvent,
-        PaymentSucceededEvent:ru.ticketcraft.dto.PaymentSucceededEvent,
-        PaymentFailedEvent:ru.ticketcraft.dto.PaymentFailedEvent,
-        PaymentRefundedEvent:ru.ticketcraft.dto.PaymentRefundedEvent
+        TicketReserved:ru.ticketcraft.common.dto.TicketReservedEvent,
+        TicketReservationFailed:ru.ticketcraft.common.dto.TicketReservationFailedEvent,
+        TicketConfirmed:ru.ticketcraft.common.dto.TicketConfirmedEvent,
+        TicketConfirmationFailed:ru.ticketcraft.common.dto.TicketConfirmationFailedEvent,
+        TicketReleased:ru.ticketcraft.common.dto.TicketReleasedEvent,
+        PaymentSucceededEvent:ru.ticketcraft.common.dto.PaymentSucceededEvent,
+        PaymentFailedEvent:ru.ticketcraft.common.dto.PaymentFailedEvent,
+        PaymentRefundedEvent:ru.ticketcraft.common.dto.PaymentRefundedEvent
     producer:
       acks: all
       '[enable.idempotence]': true

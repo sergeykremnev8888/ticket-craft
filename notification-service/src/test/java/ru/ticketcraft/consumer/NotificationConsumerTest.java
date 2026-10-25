@@ -16,8 +16,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.kafka.support.Acknowledgment;
 
-import ru.ticketcraft.dto.OrderEvent;
-import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.common.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderState;
 import ru.ticketcraft.service.IdempotentNotificationProcessor;
 
 class NotificationConsumerTest {

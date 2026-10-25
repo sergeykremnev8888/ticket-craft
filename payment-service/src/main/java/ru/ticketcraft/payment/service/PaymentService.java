@@ -5,11 +5,11 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import ru.ticketcraft.common.dto.PaymentFailedEvent;
 import ru.ticketcraft.common.dto.PaymentRefundedEvent;
+import ru.ticketcraft.common.dto.PaymentRequestedEvent;
+import ru.ticketcraft.common.dto.PaymentSucceededEvent;
 import ru.ticketcraft.common.dto.RefundPaymentCommand;
-import ru.ticketcraft.dto.PaymentFailedEvent;
-import ru.ticketcraft.dto.PaymentRequestedEvent;
-import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;

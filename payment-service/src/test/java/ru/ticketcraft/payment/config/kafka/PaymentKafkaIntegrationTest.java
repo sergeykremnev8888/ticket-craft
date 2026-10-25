@@ -59,11 +59,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import ru.ticketcraft.common.dto.PaymentFailedEvent;
+import ru.ticketcraft.common.dto.PaymentRequestedEvent;
+import ru.ticketcraft.common.dto.PaymentSucceededEvent;
 import ru.ticketcraft.common.dto.RefundPaymentCommand;
 import ru.ticketcraft.common.dto.TicketConfirmationFailureReason;
-import ru.ticketcraft.dto.PaymentFailedEvent;
-import ru.ticketcraft.dto.PaymentRequestedEvent;
-import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;
@@ -77,8 +77,8 @@ import tools.jackson.databind.json.JsonMapper;
         "spring.kafka.consumer.group-id=payment-test-group", "spring.kafka.consumer.auto-offset-reset=earliest",
         "spring.kafka.consumer.enable-auto-commit=false",
 
-        "spring.kafka.consumer.properties.spring.json.trusted.packages=ru.ticketcraft.dto",
-        "spring.kafka.consumer.properties.spring.json.value.default.type=ru.ticketcraft.dto.PaymentRequestedEvent",
+        "spring.kafka.consumer.properties.spring.json.trusted.packages=ru.ticketcraft.common.dto",
+        "spring.kafka.consumer.properties.spring.json.value.default.type=ru.ticketcraft.common.dto.PaymentRequestedEvent",
 
         "spring.kafka.listener.ack-mode=manual", "spring.kafka.listener.auto-startup=true",
 

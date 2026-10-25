@@ -6,7 +6,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
 
-import ru.ticketcraft.dto.PaymentRequestedEvent;
+import ru.ticketcraft.common.dto.PaymentRequestedEvent;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.service.PaymentService;
 

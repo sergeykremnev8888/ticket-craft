@@ -17,13 +17,13 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Ticket t
-               SET t.status = ru.ticketcraft.dto.TicketStatus.RESERVED,
+               SET t.status = ru.ticketcraft.common.dto.TicketStatus.RESERVED,
                    t.reservationId = :reservationId,
                    t.reservedUntil = :reservedUntil,
                    t.version = t.version + 1,
                    t.updatedAt = CURRENT_TIMESTAMP
              WHERE t.id = :ticketId
-               AND t.status = ru.ticketcraft.dto.TicketStatus.AVAILABLE
+               AND t.status = ru.ticketcraft.common.dto.TicketStatus.AVAILABLE
             """)
     int reserveTicket(
             @Param("ticketId") UUID ticketId,
@@ -33,12 +33,12 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Ticket t
-               SET t.status = ru.ticketcraft.dto.TicketStatus.SOLD,
+               SET t.status = ru.ticketcraft.common.dto.TicketStatus.SOLD,
                    t.reservedUntil = NULL,
                    t.version = t.version + 1,
                    t.updatedAt = CURRENT_TIMESTAMP
              WHERE t.id = :ticketId
-               AND t.status = ru.ticketcraft.dto.TicketStatus.RESERVED
+               AND t.status = ru.ticketcraft.common.dto.TicketStatus.RESERVED
                AND t.reservationId = :reservationId
                AND t.reservedUntil > :now
             """)
@@ -50,12 +50,12 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Ticket t
-               SET t.status = ru.ticketcraft.dto.TicketStatus.AVAILABLE,
+               SET t.status = ru.ticketcraft.common.dto.TicketStatus.AVAILABLE,
                    t.reservationId = NULL,
                    t.reservedUntil = NULL,
                    t.version = t.version + 1,
                    t.updatedAt = CURRENT_TIMESTAMP
-             WHERE t.status = ru.ticketcraft.dto.TicketStatus.RESERVED
+             WHERE t.status = ru.ticketcraft.common.dto.TicketStatus.RESERVED
                AND t.reservedUntil <= :now
             """)
     int releaseExpiredReservations(
@@ -64,13 +64,13 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Ticket t
-               SET t.status = ru.ticketcraft.dto.TicketStatus.AVAILABLE,
+               SET t.status = ru.ticketcraft.common.dto.TicketStatus.AVAILABLE,
                    t.reservationId = NULL,
                    t.reservedUntil = NULL,
                    t.version = t.version + 1,
                    t.updatedAt = CURRENT_TIMESTAMP
              WHERE t.id = :ticketId
-               AND t.status = ru.ticketcraft.dto.TicketStatus.RESERVED
+               AND t.status = ru.ticketcraft.common.dto.TicketStatus.RESERVED
                AND t.reservationId = :reservationId
             """)
     int releaseTicket(

@@ -52,8 +52,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import ru.ticketcraft.dto.OrderEvent;
-import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.common.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderState;
 import ru.ticketcraft.service.IdempotentNotificationProcessor;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -64,8 +64,8 @@ import tools.jackson.databind.json.JsonMapper;
         "spring.kafka.consumer.auto-offset-reset=earliest",
         "spring.kafka.consumer.enable-auto-commit=false",
 
-        "spring.kafka.consumer.properties.spring.json.trusted.packages=ru.ticketcraft.dto",
-        "spring.kafka.consumer.properties.spring.json.value.default.type=ru.ticketcraft.dto.OrderEvent",
+        "spring.kafka.consumer.properties.spring.json.trusted.packages=ru.ticketcraft.common.dto",
+        "spring.kafka.consumer.properties.spring.json.value.default.type=ru.ticketcraft.common.dto.OrderEvent",
 
         "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer",
         "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JacksonJsonSerializer",

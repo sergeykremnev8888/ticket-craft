@@ -33,9 +33,9 @@ spring:
       enable-auto-commit: false
       properties:
         '[spring.json.type.mapping]': >-
-          ReserveTicket:ru.ticketcraft.dto.ReserveTicketCommand,
-          ConfirmTicket:ru.ticketcraft.dto.ConfirmTicketCommand,
-          ReleaseTicket:ru.ticketcraft.dto.ReleaseTicketCommand
+          ReserveTicket:ru.ticketcraft.common.dto.ReserveTicketCommand,
+          ConfirmTicket:ru.ticketcraft.common.dto.ConfirmTicketCommand,
+          ReleaseTicket:ru.ticketcraft.common.dto.ReleaseTicketCommand
     producer:
       acks: all
       '[enable.idempotence]': true
