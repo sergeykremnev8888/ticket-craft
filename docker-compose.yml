@@ -1,3 +1,5 @@
+name: ticket-craft
+
 x-java-service: &java-service
   profiles:
     - apps
@@ -9,7 +11,10 @@ services:
 
   postgres-catalog:
     image: postgres:16-alpine
-    container_name: postgres-catalog
+    environment:
+      POSTGRES_DB: catalog_db
+      POSTGRES_USER: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
+      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
     command:
       - postgres
       - -c
@@ -18,25 +23,24 @@ services:
       - max_replication_slots=4
       - -c
       - max_wal_senders=4
-    environment:
-      POSTGRES_DB: ${CATALOG_DB_NAME}
-      POSTGRES_USER: ${CATALOG_DB_USERNAME}
-      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD}
     ports:
-    - 5432:5432
+      - "5432:5432"
     volumes:
-    - pg_catalog_data:/var/lib/postgresql/data
+      - postgres_catalog_data:/var/lib/postgresql/data
     healthcheck:
       test:
-      - CMD-SHELL
-      - pg_isready -U catalog_user -d catalog_db
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
       interval: 10s
       timeout: 5s
       retries: 5
 
   postgres-order:
     image: postgres:16-alpine
-    container_name: postgres-order
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
     command:
       - postgres
       - -c
@@ -45,25 +49,24 @@ services:
       - max_replication_slots=4
       - -c
       - max_wal_senders=4
-    environment:
-      POSTGRES_DB: ${ORDER_DB_NAME}
-      POSTGRES_USER: ${ORDER_DB_USERNAME}
-      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD}
     ports:
-    - 5433:5432
+      - "5433:5432"
     volumes:
-    - pg_order_data:/var/lib/postgresql/data
+      - postgres_order_data:/var/lib/postgresql/data
     healthcheck:
       test:
-      - CMD-SHELL
-      - pg_isready -U order_user -d order_db
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
       interval: 10s
       timeout: 5s
       retries: 5
 
   postgres-payment:
     image: postgres:16-alpine
-    container_name: postgres-payment
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
     command:
       - postgres
       - -c
@@ -72,48 +75,42 @@ services:
       - max_replication_slots=4
       - -c
       - max_wal_senders=4
-    environment:
-      POSTGRES_DB: ${PAYMENT_DB_NAME}
-      POSTGRES_USER: ${PAYMENT_DB_USERNAME}
-      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
     ports:
-    - 5435:5432
+      - "5435:5432"
     volumes:
-    - pg_payment_data:/var/lib/postgresql/data
+      - postgres_payment_data:/var/lib/postgresql/data
     healthcheck:
       test:
-      - CMD-SHELL
-      - pg_isready -U payment_user -d payment_db
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
       interval: 10s
       timeout: 5s
       retries: 5
 
   postgres-notification:
     image: postgres:16-alpine
-    container_name: postgres-notification
     environment:
-      POSTGRES_DB: ${NOTIFICATION_DB_NAME}
-      POSTGRES_USER: ${NOTIFICATION_DB_USERNAME}
-      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: ${NOTIFICATION_DB_USERNAME:?Set NOTIFICATION_DB_USERNAME}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
     ports:
-    - 5434:5432
+      - "5434:5432"
     volumes:
-    - pg_notification_data:/var/lib/postgresql/data
+      - postgres_notification_data:/var/lib/postgresql/data
     healthcheck:
       test:
-      - CMD-SHELL
-      - pg_isready -U notification_user -d notification_db
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7.4-alpine
-    container_name: ticketcraft-redis
     ports:
-    - 6379:6379
+      - "6379:6379"
     volumes:
-    - redis_data:/data
+      - redis_data:/data
     healthcheck:
       test:
       - CMD
@@ -125,9 +122,6 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
-    container_name: kafka
-    ports:
-    - 9092:9092
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -142,6 +136,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "9092:9092"
     healthcheck:
       test:
       - CMD-SHELL
@@ -152,9 +148,6 @@ services:
 
   kafka-connect:
     image: quay.io/debezium/connect:3.3.2.Final
-    container_name: ticketcraft-kafka-connect
-    ports:
-      - 8085:8083
     environment:
       BOOTSTRAP_SERVERS: kafka:29092
       GROUP_ID: ticketcraft-connect
@@ -175,11 +168,11 @@ services:
 
       KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
       VALUE_CONVERTER: org.apache.kafka.connect.storage.StringConverter
-
+    ports:
+      - 8085:8083
     depends_on:
       kafka:
         condition: service_healthy
-
     healthcheck:
       test:
         - CMD-SHELL
@@ -191,28 +184,26 @@ services:
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    ports:
-    - 8070:8080
     environment:
       KAFKA_CLUSTERS_0_NAME: ticketcraft-kafka
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "8070:8080"
     depends_on:
       kafka:
         condition: service_healthy
 
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: pgadmin
-    ports:
-    - 5050:80
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
     volumes:
-    - pgadmin_data:/var/lib/pgadmin
-    - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
     depends_on:
       postgres-catalog:
         condition: service_healthy
@@ -223,21 +214,19 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
-    container_name: ticketcraft-prometheus
     command:
-    - --config.file=/etc/prometheus/prometheus.yml
-    - --storage.tsdb.retention.time=1d
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=1d
     ports:
-    - 9090:9090
+      - "9090:9090"
     volumes:
-    - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    - prometheus_data:/prometheus
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
     extra_hosts:
-    - host.docker.internal:host-gateway
+      - host.docker.internal:host-gateway
 
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0
-    container_name: ticketcraft-jaeger
     command:
       - --config=/etc/jaeger/jaeger.yml
     ports:
@@ -250,30 +239,28 @@ services:
 
   grafana:
     image: grafana/grafana:12.1.0
-    container_name: ticketcraft-grafana
-    ports:
-    - 3000:3000
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: 'false'
+    ports:
+      - "3000:3000"
     volumes:
-    - grafana_data:/var/lib/grafana
-    - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-    - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
-    - prometheus
-    - jaeger
+      - prometheus
+      - jaeger
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.3
-    container_name: ticketcraft-keycloak
-    command:
-      - start-dev
-      - --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    command:
+      - start-dev
+      - --import-realm
     ports:
       - "9000:8080"
     volumes:
@@ -305,12 +292,12 @@ services:
     build:
       context: .
       dockerfile: catalog-service/Dockerfile
-    ports:
-      - "8081:8081"
     environment:
       <<: *java-environment
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
+    ports:
+      - "8081:8081"
     depends_on:
       postgres-catalog:
         condition: service_healthy
@@ -331,12 +318,12 @@ services:
     build:
       context: .
       dockerfile: order-service/Dockerfile
-    ports:
-      - "8082:8082"
     environment:
       <<: *java-environment
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
+    ports:
+      - "8082:8082"
     depends_on:
       postgres-order:
         condition: service_healthy
@@ -355,13 +342,13 @@ services:
     build:
       context: .
       dockerfile: payment-service/Dockerfile
-    ports:
-      - "8084:8084"
     environment:
       <<: *java-environment
       PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
       PAYMENT_PROVIDER_BASE_URL: ${PAYMENT_PROVIDER_DOCKER_URL:-http://host.docker.internal:8090}
+    ports:
+      - "8084:8084"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -380,12 +367,12 @@ services:
     build:
       context: .
       dockerfile: notification-service/Dockerfile
-    ports:
-      - "8083:8083"
     environment:
       <<: *java-environment
       NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:?Set NOTIFICATION_DB_USERNAME}
       NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
+    ports:
+      - "8083:8083"
     depends_on:
       postgres-notification:
         condition: service_healthy
@@ -395,13 +382,13 @@ services:
         condition: service_started
 
 volumes:
-  pg_catalog_data:
+  postgres_catalog_data:
     name: ticketcraft_pg_catalog_data
-  pg_order_data:
+  postgres_order_data:
     name: ticketcraft_pg_order_data
-  pg_payment_data:
+  postgres_payment_data:
     name: ticketcraft_pg_payment_data
-  pg_notification_data:
+  postgres_notification_data:
     name: ticketcraft_pg_notification_data
   redis_data:
     name: ticketcraft_redis_data
