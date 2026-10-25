@@ -1,0 +1,15 @@
+package ru.ticketcraft.order.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "ticketcraft.kafka.topics")
+public record KafkaTopicsProperties(
+        String orderEvents,
+        String ticketReservationCommands,
+        String ticketReservationResults,
+        String ticketReservationResultsDlt,
+        String paymentRequests,
+        String paymentCommands,
+        String paymentResults,
+        String paymentResultsDlt) {
+}

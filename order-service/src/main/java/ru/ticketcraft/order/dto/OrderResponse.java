@@ -1,0 +1,17 @@
+package ru.ticketcraft.order.dto;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
+
+import ru.ticketcraft.common.dto.OrderState;
+
+public record OrderResponse(
+        Long id,
+        Long userId,
+        UUID eventId,
+        UUID ticketId,
+        BigDecimal totalPrice,
+        OrderState status,
+        Instant createdAt) {
+}
