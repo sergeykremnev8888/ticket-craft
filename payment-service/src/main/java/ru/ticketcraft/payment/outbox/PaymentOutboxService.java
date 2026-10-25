@@ -5,8 +5,8 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import ru.ticketcraft.common.dto.PaymentRefundedEvent;
 import ru.ticketcraft.dto.PaymentFailedEvent;
-import ru.ticketcraft.dto.PaymentRefundedEvent;
 import ru.ticketcraft.dto.PaymentSucceededEvent;
 import tools.jackson.databind.ObjectMapper;
 

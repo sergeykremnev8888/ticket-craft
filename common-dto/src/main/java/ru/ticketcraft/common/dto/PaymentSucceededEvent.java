@@ -1,34 +1,35 @@
-package ru.ticketcraft.dto;
+package ru.ticketcraft.common.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * Команда на выполнение оплаты заказа.
+ * Результат успешной оплаты заказа.
  *
- * Событие публикуется order-service и потребляется payment-service.
+ * Событие публикуется payment-service.
  */
-public record PaymentRequestedEvent(
+public record PaymentSucceededEvent(
         String messageId,
         Long orderId,
-        Long userId,
+        UUID paymentId,
         BigDecimal amount,
         Instant createdAt) {
 
     @JsonCreator
-    public PaymentRequestedEvent(
+    public PaymentSucceededEvent(
             @JsonProperty("messageId") String messageId,
             @JsonProperty("orderId") Long orderId,
-            @JsonProperty("userId") Long userId,
+            @JsonProperty("paymentId") UUID paymentId,
             @JsonProperty("amount") BigDecimal amount,
             @JsonProperty("createdAt") Instant createdAt) {
 
         this.messageId = messageId;
         this.orderId = orderId;
-        this.userId = userId;
+        this.paymentId = paymentId;
         this.amount = amount;
         this.createdAt = createdAt;
     }

@@ -6,9 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-import ru.ticketcraft.dto.PaymentFailedEvent;
-import ru.ticketcraft.dto.PaymentRefundedEvent;
-import ru.ticketcraft.dto.PaymentSucceededEvent;
+import ru.ticketcraft.common.dto.PaymentFailedEvent;
+import ru.ticketcraft.common.dto.PaymentRefundedEvent;
+import ru.ticketcraft.common.dto.PaymentSucceededEvent;
 import ru.ticketcraft.service.PaymentResultProcessor;
 
 @Component

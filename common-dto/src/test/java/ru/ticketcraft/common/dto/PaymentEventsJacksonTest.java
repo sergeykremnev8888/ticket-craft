@@ -1,4 +1,4 @@
-package ru.ticketcraft.dto;
+package ru.ticketcraft.common.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -8,6 +8,9 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import ru.ticketcraft.common.dto.PaymentFailedEvent;
+import ru.ticketcraft.common.dto.PaymentRequestedEvent;
+import ru.ticketcraft.common.dto.PaymentSucceededEvent;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 

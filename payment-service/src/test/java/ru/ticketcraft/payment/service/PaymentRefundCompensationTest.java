@@ -20,9 +20,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import ru.ticketcraft.dto.PaymentRefundedEvent;
-import ru.ticketcraft.dto.RefundPaymentCommand;
-import ru.ticketcraft.dto.TicketConfirmationFailureReason;
+import ru.ticketcraft.common.dto.PaymentRefundedEvent;
+import ru.ticketcraft.common.dto.RefundPaymentCommand;
+import ru.ticketcraft.common.dto.TicketConfirmationFailureReason;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;

@@ -10,16 +10,16 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.ticketcraft.catalog.config.ReservationProperties;
 import ru.ticketcraft.catalog.model.Ticket;
 import ru.ticketcraft.catalog.repository.TicketRepository;
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.ReleaseTicketCommand;
-import ru.ticketcraft.dto.ReserveTicketCommand;
-import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
-import ru.ticketcraft.dto.TicketConfirmationFailureReason;
-import ru.ticketcraft.dto.TicketConfirmedEvent;
-import ru.ticketcraft.dto.TicketReleasedEvent;
-import ru.ticketcraft.dto.TicketReservationFailedEvent;
-import ru.ticketcraft.dto.TicketReservedEvent;
-import ru.ticketcraft.dto.TicketStatus;
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.ReleaseTicketCommand;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.TicketConfirmationFailedEvent;
+import ru.ticketcraft.common.dto.TicketConfirmationFailureReason;
+import ru.ticketcraft.common.dto.TicketConfirmedEvent;
+import ru.ticketcraft.common.dto.TicketReleasedEvent;
+import ru.ticketcraft.common.dto.TicketReservationFailedEvent;
+import ru.ticketcraft.common.dto.TicketReservedEvent;
+import ru.ticketcraft.common.dto.TicketStatus;
 
 @Service
 public class TicketReservationService {

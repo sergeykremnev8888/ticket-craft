@@ -20,10 +20,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.OrderEvent;
+import ru.ticketcraft.common.dto.OrderState;
 import ru.ticketcraft.config.KafkaTopicsProperties;
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.OrderEvent;
-import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.repository.OutboxEventRepository;
 import tools.jackson.core.JacksonException;

@@ -21,8 +21,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import ru.ticketcraft.dto.OrderState;
-import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.OrderState;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
 import ru.ticketcraft.exception.OrderNotFoundException;
 import ru.ticketcraft.idempotency.CanonicalOrderRequest;
 import ru.ticketcraft.model.IdempotencyKey;

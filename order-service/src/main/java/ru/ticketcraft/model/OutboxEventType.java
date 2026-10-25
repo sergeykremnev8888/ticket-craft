@@ -1,11 +1,11 @@
 package ru.ticketcraft.model;
 
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.OrderEvent;
-import ru.ticketcraft.dto.PaymentRequestedEvent;
-import ru.ticketcraft.dto.RefundPaymentCommand;
-import ru.ticketcraft.dto.ReleaseTicketCommand;
-import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.OrderEvent;
+import ru.ticketcraft.common.dto.PaymentRequestedEvent;
+import ru.ticketcraft.common.dto.RefundPaymentCommand;
+import ru.ticketcraft.common.dto.ReleaseTicketCommand;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
 
 public enum OutboxEventType {
 

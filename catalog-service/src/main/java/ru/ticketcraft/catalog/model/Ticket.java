@@ -20,7 +20,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
-import ru.ticketcraft.dto.TicketStatus;
+import ru.ticketcraft.common.dto.TicketStatus;
 
 @Entity
 @Table(name = "tickets", uniqueConstraints = {

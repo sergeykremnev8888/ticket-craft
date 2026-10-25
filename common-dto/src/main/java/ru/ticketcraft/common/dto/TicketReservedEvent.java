@@ -1,4 +1,4 @@
-package ru.ticketcraft.dto;
+package ru.ticketcraft.common.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;

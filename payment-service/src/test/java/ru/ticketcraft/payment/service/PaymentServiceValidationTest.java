@@ -13,9 +13,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import ru.ticketcraft.common.dto.RefundPaymentCommand;
+import ru.ticketcraft.common.dto.TicketConfirmationFailureReason;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
-import ru.ticketcraft.dto.RefundPaymentCommand;
-import ru.ticketcraft.dto.TicketConfirmationFailureReason;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 
 @ExtendWith(MockitoExtension.class)

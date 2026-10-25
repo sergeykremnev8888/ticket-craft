@@ -14,9 +14,9 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import ru.ticketcraft.common.dto.RefundPaymentCommand;
+import ru.ticketcraft.common.dto.TicketConfirmationFailureReason;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
-import ru.ticketcraft.dto.RefundPaymentCommand;
-import ru.ticketcraft.dto.TicketConfirmationFailureReason;
 
 class PaymentCommandValidatorTest {
 

@@ -1,4 +1,4 @@
-package ru.ticketcraft.dto;
+package ru.ticketcraft.common.dto;
 
 /**
  * Жизненный цикл заказа в системе TicketCraft.

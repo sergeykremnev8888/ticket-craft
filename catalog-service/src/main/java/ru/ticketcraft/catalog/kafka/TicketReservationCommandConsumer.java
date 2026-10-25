@@ -5,9 +5,9 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import ru.ticketcraft.catalog.service.TicketReservationService;
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.ReleaseTicketCommand;
-import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.ReleaseTicketCommand;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
 
 @Component
 public class TicketReservationCommandConsumer {

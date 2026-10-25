@@ -5,8 +5,8 @@ import java.math.RoundingMode;
 
 import org.springframework.stereotype.Component;
 
+import ru.ticketcraft.common.dto.RefundPaymentCommand;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
-import ru.ticketcraft.dto.RefundPaymentCommand;
 
 @Component
 public class PaymentCommandValidator {

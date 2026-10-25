@@ -6,8 +6,8 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import ru.ticketcraft.dto.OrderState;
-import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.OrderState;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
 import ru.ticketcraft.exception.OrderNotFoundException;
 import ru.ticketcraft.idempotency.CanonicalOrderRequest;
 import ru.ticketcraft.model.IdempotencyKey;

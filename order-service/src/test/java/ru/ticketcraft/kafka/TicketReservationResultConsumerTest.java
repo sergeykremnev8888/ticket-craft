@@ -14,10 +14,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import ru.ticketcraft.dto.TicketConfirmedEvent;
-import ru.ticketcraft.dto.TicketReleasedEvent;
-import ru.ticketcraft.dto.TicketReservationFailedEvent;
-import ru.ticketcraft.dto.TicketReservedEvent;
+import ru.ticketcraft.common.dto.TicketConfirmedEvent;
+import ru.ticketcraft.common.dto.TicketReleasedEvent;
+import ru.ticketcraft.common.dto.TicketReservationFailedEvent;
+import ru.ticketcraft.common.dto.TicketReservedEvent;
 import ru.ticketcraft.service.TicketReservationResultProcessor;
 
 @ExtendWith(MockitoExtension.class)

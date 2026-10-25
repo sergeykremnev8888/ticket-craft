@@ -28,8 +28,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import ru.ticketcraft.dto.OrderState;
-import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.OrderState;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
 import ru.ticketcraft.exception.OrderConflictException;
 import ru.ticketcraft.model.IdempotencyKey;
 import ru.ticketcraft.model.Order;

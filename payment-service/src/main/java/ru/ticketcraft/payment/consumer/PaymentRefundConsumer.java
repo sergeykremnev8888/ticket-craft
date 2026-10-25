@@ -6,7 +6,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
 
-import ru.ticketcraft.dto.RefundPaymentCommand;
+import ru.ticketcraft.common.dto.RefundPaymentCommand;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.service.PaymentService;
 

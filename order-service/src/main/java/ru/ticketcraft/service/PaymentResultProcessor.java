@@ -5,12 +5,12 @@ import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.OrderState;
-import ru.ticketcraft.dto.PaymentFailedEvent;
-import ru.ticketcraft.dto.PaymentRefundedEvent;
-import ru.ticketcraft.dto.PaymentSucceededEvent;
-import ru.ticketcraft.dto.ReleaseTicketCommand;
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.OrderState;
+import ru.ticketcraft.common.dto.PaymentFailedEvent;
+import ru.ticketcraft.common.dto.PaymentRefundedEvent;
+import ru.ticketcraft.common.dto.PaymentSucceededEvent;
+import ru.ticketcraft.common.dto.ReleaseTicketCommand;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.observability.ConsumerDuplicateMetrics;
 import ru.ticketcraft.observability.OrderSagaMetrics;

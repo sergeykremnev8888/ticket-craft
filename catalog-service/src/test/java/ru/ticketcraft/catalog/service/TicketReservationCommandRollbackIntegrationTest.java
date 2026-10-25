@@ -26,9 +26,9 @@ import ru.ticketcraft.catalog.repository.EventRepository;
 import ru.ticketcraft.catalog.repository.TicketRepository;
 import ru.ticketcraft.catalog.service.OutboxService;
 import ru.ticketcraft.catalog.service.TicketReservationService;
-import ru.ticketcraft.dto.ReserveTicketCommand;
-import ru.ticketcraft.dto.TicketReservedEvent;
-import ru.ticketcraft.dto.TicketStatus;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.TicketReservedEvent;
+import ru.ticketcraft.common.dto.TicketStatus;
 
 @Testcontainers
 @SpringBootTest(properties = {

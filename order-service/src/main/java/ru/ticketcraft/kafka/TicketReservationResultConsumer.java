@@ -6,11 +6,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
-import ru.ticketcraft.dto.TicketConfirmedEvent;
-import ru.ticketcraft.dto.TicketReleasedEvent;
-import ru.ticketcraft.dto.TicketReservationFailedEvent;
-import ru.ticketcraft.dto.TicketReservedEvent;
+import ru.ticketcraft.common.dto.TicketConfirmationFailedEvent;
+import ru.ticketcraft.common.dto.TicketConfirmedEvent;
+import ru.ticketcraft.common.dto.TicketReleasedEvent;
+import ru.ticketcraft.common.dto.TicketReservationFailedEvent;
+import ru.ticketcraft.common.dto.TicketReservedEvent;
 import ru.ticketcraft.service.TicketReservationResultProcessor;
 
 @Component

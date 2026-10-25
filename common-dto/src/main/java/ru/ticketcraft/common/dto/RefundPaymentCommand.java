@@ -1,4 +1,4 @@
-package ru.ticketcraft.dto;
+package ru.ticketcraft.common.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -7,33 +7,28 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-/**
- * Результат неуспешной оплаты заказа.
- *
- * Событие публикуется payment-service.
- */
-public record PaymentFailedEvent(
+public record RefundPaymentCommand(
         String messageId,
         Long orderId,
         UUID paymentId,
         BigDecimal amount,
-        String reason,
-        Instant createdAt) {
+        TicketConfirmationFailureReason reason,
+        Instant occurredAt) {
 
     @JsonCreator
-    public PaymentFailedEvent(
+    public RefundPaymentCommand(
             @JsonProperty("messageId") String messageId,
             @JsonProperty("orderId") Long orderId,
             @JsonProperty("paymentId") UUID paymentId,
             @JsonProperty("amount") BigDecimal amount,
-            @JsonProperty("reason") String reason,
-            @JsonProperty("createdAt") Instant createdAt) {
+            @JsonProperty("reason") TicketConfirmationFailureReason reason,
+            @JsonProperty("occurredAt") Instant occurredAt) {
 
         this.messageId = messageId;
         this.orderId = orderId;
         this.paymentId = paymentId;
         this.amount = amount;
         this.reason = reason;
-        this.createdAt = createdAt;
+        this.occurredAt = occurredAt;
     }
 }

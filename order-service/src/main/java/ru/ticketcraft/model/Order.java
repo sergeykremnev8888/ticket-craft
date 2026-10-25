@@ -8,7 +8,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
-import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.common.dto.OrderState;
 
 @Table("orders") // Аннотация из Spring Data Relational
 public class Order {

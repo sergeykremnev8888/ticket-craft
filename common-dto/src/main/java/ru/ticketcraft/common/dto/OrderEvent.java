@@ -1,4 +1,4 @@
-package ru.ticketcraft.dto;
+package ru.ticketcraft.common.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import ru.ticketcraft.common.dto.OrderState;
 
 /**
  * Событие изменения статуса заказа билетов для передачи через Apache Kafka.

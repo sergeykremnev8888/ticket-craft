@@ -15,15 +15,15 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import ru.ticketcraft.dto.PaymentFailedEvent;
-import ru.ticketcraft.dto.PaymentRefundedEvent;
-import ru.ticketcraft.dto.PaymentSucceededEvent;
-import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
-import ru.ticketcraft.dto.TicketConfirmationFailureReason;
-import ru.ticketcraft.dto.TicketConfirmedEvent;
-import ru.ticketcraft.dto.TicketReleasedEvent;
-import ru.ticketcraft.dto.TicketReservationFailedEvent;
-import ru.ticketcraft.dto.TicketReservedEvent;
+import ru.ticketcraft.common.dto.PaymentFailedEvent;
+import ru.ticketcraft.common.dto.PaymentRefundedEvent;
+import ru.ticketcraft.common.dto.PaymentSucceededEvent;
+import ru.ticketcraft.common.dto.TicketConfirmationFailedEvent;
+import ru.ticketcraft.common.dto.TicketConfirmationFailureReason;
+import ru.ticketcraft.common.dto.TicketConfirmedEvent;
+import ru.ticketcraft.common.dto.TicketReleasedEvent;
+import ru.ticketcraft.common.dto.TicketReservationFailedEvent;
+import ru.ticketcraft.common.dto.TicketReservedEvent;
 
 class OrderResultEventValidatorTest {
 

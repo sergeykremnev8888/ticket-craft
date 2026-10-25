@@ -17,7 +17,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.repository.IdempotencyKeyRepository;
 import ru.ticketcraft.repository.OrderRepository;

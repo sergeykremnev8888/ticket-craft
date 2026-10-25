@@ -22,9 +22,9 @@ import ru.ticketcraft.catalog.model.Ticket;
 import ru.ticketcraft.catalog.repository.EventRepository;
 import ru.ticketcraft.catalog.repository.TicketRepository;
 import ru.ticketcraft.catalog.service.TicketReservationService;
-import ru.ticketcraft.dto.ReserveTicketCommand;
-import ru.ticketcraft.dto.TicketReservationFailedEvent;
-import ru.ticketcraft.dto.TicketStatus;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.TicketReservationFailedEvent;
+import ru.ticketcraft.common.dto.TicketStatus;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers

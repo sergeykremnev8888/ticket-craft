@@ -59,11 +59,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import ru.ticketcraft.common.dto.RefundPaymentCommand;
+import ru.ticketcraft.common.dto.TicketConfirmationFailureReason;
 import ru.ticketcraft.dto.PaymentFailedEvent;
 import ru.ticketcraft.dto.PaymentRequestedEvent;
 import ru.ticketcraft.dto.PaymentSucceededEvent;
-import ru.ticketcraft.dto.RefundPaymentCommand;
-import ru.ticketcraft.dto.TicketConfirmationFailureReason;
 import ru.ticketcraft.payment.gateway.PaymentGateway;
 import ru.ticketcraft.payment.gateway.PaymentResult;
 import ru.ticketcraft.payment.model.Payment;

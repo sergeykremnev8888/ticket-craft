@@ -9,7 +9,7 @@ import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 
-import ru.ticketcraft.dto.OrderState;
+import ru.ticketcraft.common.dto.OrderState;
 import ru.ticketcraft.model.Order;
 
 public interface OrderRepository extends CrudRepository<Order, Long> {

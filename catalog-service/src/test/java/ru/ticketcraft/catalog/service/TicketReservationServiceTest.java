@@ -27,14 +27,14 @@ import ru.ticketcraft.catalog.model.Ticket;
 import ru.ticketcraft.catalog.repository.TicketRepository;
 import ru.ticketcraft.catalog.service.OutboxService;
 import ru.ticketcraft.catalog.service.TicketReservationService;
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.ReserveTicketCommand;
-import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
-import ru.ticketcraft.dto.TicketConfirmationFailureReason;
-import ru.ticketcraft.dto.TicketConfirmedEvent;
-import ru.ticketcraft.dto.TicketReservationFailedEvent;
-import ru.ticketcraft.dto.TicketReservedEvent;
-import ru.ticketcraft.dto.TicketStatus;
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.TicketConfirmationFailedEvent;
+import ru.ticketcraft.common.dto.TicketConfirmationFailureReason;
+import ru.ticketcraft.common.dto.TicketConfirmedEvent;
+import ru.ticketcraft.common.dto.TicketReservationFailedEvent;
+import ru.ticketcraft.common.dto.TicketReservedEvent;
+import ru.ticketcraft.common.dto.TicketStatus;
 
 @ExtendWith(MockitoExtension.class)
 class TicketReservationServiceTest {

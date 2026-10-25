@@ -15,9 +15,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import ru.ticketcraft.catalog.kafka.TicketReservationCommandConsumer;
 import ru.ticketcraft.catalog.service.TicketReservationService;
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.ReleaseTicketCommand;
-import ru.ticketcraft.dto.ReserveTicketCommand;
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.ReleaseTicketCommand;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
 
 @ExtendWith(MockitoExtension.class)
 class TicketReservationCommandConsumerTest {

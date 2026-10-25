@@ -5,13 +5,13 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.OrderEvent;
+import ru.ticketcraft.common.dto.PaymentRequestedEvent;
+import ru.ticketcraft.common.dto.RefundPaymentCommand;
+import ru.ticketcraft.common.dto.ReleaseTicketCommand;
+import ru.ticketcraft.common.dto.ReserveTicketCommand;
 import ru.ticketcraft.config.KafkaTopicsProperties;
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.OrderEvent;
-import ru.ticketcraft.dto.PaymentRequestedEvent;
-import ru.ticketcraft.dto.RefundPaymentCommand;
-import ru.ticketcraft.dto.ReleaseTicketCommand;
-import ru.ticketcraft.dto.ReserveTicketCommand;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.model.OutboxEventType;
 import ru.ticketcraft.repository.OutboxEventRepository;

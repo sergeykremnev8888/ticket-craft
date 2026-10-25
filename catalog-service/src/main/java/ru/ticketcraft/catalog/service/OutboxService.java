@@ -8,11 +8,11 @@ import org.springframework.stereotype.Service;
 import ru.ticketcraft.catalog.config.KafkaTopicsProperties;
 import ru.ticketcraft.catalog.model.OutboxEventType;
 import ru.ticketcraft.catalog.repository.OutboxEventRepository;
-import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
-import ru.ticketcraft.dto.TicketConfirmedEvent;
-import ru.ticketcraft.dto.TicketReleasedEvent;
-import ru.ticketcraft.dto.TicketReservationFailedEvent;
-import ru.ticketcraft.dto.TicketReservedEvent;
+import ru.ticketcraft.common.dto.TicketConfirmationFailedEvent;
+import ru.ticketcraft.common.dto.TicketConfirmedEvent;
+import ru.ticketcraft.common.dto.TicketReleasedEvent;
+import ru.ticketcraft.common.dto.TicketReservationFailedEvent;
+import ru.ticketcraft.common.dto.TicketReservedEvent;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 

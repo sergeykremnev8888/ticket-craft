@@ -22,7 +22,7 @@ import ru.ticketcraft.catalog.model.Ticket;
 import ru.ticketcraft.catalog.repository.EventRepository;
 import ru.ticketcraft.catalog.repository.TicketRepository;
 import ru.ticketcraft.catalog.service.TicketReservationExpirationService;
-import ru.ticketcraft.dto.TicketStatus;
+import ru.ticketcraft.common.dto.TicketStatus;
 
 @Testcontainers
 @SpringBootTest(properties = {

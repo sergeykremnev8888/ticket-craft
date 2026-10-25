@@ -27,8 +27,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import ru.ticketcraft.common.dto.OrderState;
 import ru.ticketcraft.controller.OrderController;
-import ru.ticketcraft.dto.OrderState;
 import ru.ticketcraft.exception.OrderNotFoundException;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.service.OrderService;

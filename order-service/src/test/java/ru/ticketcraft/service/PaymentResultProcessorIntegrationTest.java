@@ -19,11 +19,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import ru.ticketcraft.dto.ConfirmTicketCommand;
-import ru.ticketcraft.dto.OrderState;
-import ru.ticketcraft.dto.PaymentFailedEvent;
-import ru.ticketcraft.dto.PaymentSucceededEvent;
-import ru.ticketcraft.dto.ReleaseTicketCommand;
+import ru.ticketcraft.common.dto.ConfirmTicketCommand;
+import ru.ticketcraft.common.dto.OrderState;
+import ru.ticketcraft.common.dto.PaymentFailedEvent;
+import ru.ticketcraft.common.dto.PaymentSucceededEvent;
+import ru.ticketcraft.common.dto.ReleaseTicketCommand;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.model.OutboxEvent;
 import ru.ticketcraft.repository.OrderRepository;
