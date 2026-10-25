@@ -265,8 +265,80 @@ docker compose restart prometheus grafana
 docker compose --profile apps stop
 ```
 
-В текущем Compose Kafka и Keycloak не имеют постоянных volumes. Используйте `stop`/`start` или `up -d` для обычной работы.
-`docker compose down` удаляет контейнеры и может привести к потере Kafka topics, offsets и конфигураций Connect, а также изменений Keycloak. Сохранённые PostgreSQL-базы после этого не делают CDC автоматически восстанавливаемым. Не используйте `down -v` для обычного перезапуска: эта команда дополнительно удаляет volumes с данными.
+Kafka хранит данные в `ticketcraft_kafka_data`, Keycloak — в `ticketcraft_keycloak_data`. Они сохраняются при пересоздании контейнеров и `docker compose down` без `-v`.
+Для обычной работы можно использовать `stop`/`start` или `up -d`. Не используйте `down -v` для обычного перезапуска: эта команда удаляет volumes с данными.
+
+Пять Java-приложений имеют healthcheck на `/actuator/health`. Gateway при запуске ожидает `healthy` у Catalog и Order. Это проверка состояния приложения и включённых Actuator-индикаторов; она не проверяет регистрацию CDC-коннекторов и успешность покупки. Статус `unhealthy` сам по себе не перезапускает контейнер.
+
+### Переход с Compose без volumes Kafka и Keycloak
+
+Этот раздел нужен один раз при обновлении старого окружения. Для нового окружения выполните обычный первый запуск выше.
+**До первого `up` с новым Compose сохраните текущую БД Keycloak**, если в ней есть нужные пользователи, клиенты или изменения realm.
+Новый Kafka volume намеренно запускается пустым: перенос старой истории Kafka в этом обновлении не выполняется.
+
+Остановите приложения и инфраструктуру без удаления контейнеров:
+
+```powershell
+docker compose --profile apps stop
+```
+
+Скопируйте БД из остановленного Keycloak (версия образа остаётся `26.7.3`):
+
+```powershell
+$keycloakContainer = docker compose ps -a -q keycloak
+if ($LASTEXITCODE -ne 0 -or -not $keycloakContainer) {
+    throw "Existing Keycloak container not found; do not recreate it before backup"
+}
+
+$keycloakBackup = Join-Path ([System.IO.Path]::GetTempPath()) ("ticketcraft-keycloak-" + [guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Path $keycloakBackup | Out-Null
+docker cp "${keycloakContainer}:/opt/keycloak/data/h2/." $keycloakBackup
+if ($LASTEXITCODE -ne 0) { throw "Keycloak backup failed" }
+
+# Создайте volume и перенесите в него копию. Существующий h2 не перезаписывается.
+docker volume create ticketcraft_keycloak_data
+if ($LASTEXITCODE -ne 0) { throw "Cannot create Keycloak volume" }
+
+docker run --rm --user 0 --entrypoint sh `
+    --mount "type=bind,source=$keycloakBackup,target=/backup,readonly" `
+    --mount "type=volume,source=ticketcraft_keycloak_data,target=/restore" `
+    postgres:16-alpine -ec 'test ! -e /restore/h2; mkdir /restore/h2; cp -a /backup/. /restore/h2/; chown -R 1000:0 /restore'
+if ($LASTEXITCODE -ne 0) { throw "Keycloak restore failed; do not start the updated environment" }
+```
+
+Временный контейнер PostgreSQL здесь используется только для копирования файлов; сервер БД в нём не запускается. UID/GID `1000:0` соответствуют образу Keycloak `26.7.3`.
+Копия содержит данные аутентификации: сохраните путь `$keycloakBackup` и не публикуйте её. Если первая попытка переноса не завершилась успешно, не повторяйте команды поверх частично заполненного volume без проверки.
+
+Если сохранять старый Keycloak не нужно, пропустите копирование: новый volume будет инициализирован через существующий `--import-realm`. Пользовательские изменения прежнего realm при этом не переносятся.
+
+После сохранения Keycloak обновите образы и запустите окружение:
+
+```powershell
+docker compose --profile apps config --quiet
+docker compose pull kafka-ui pgadmin
+docker compose --profile apps build
+docker compose --profile apps up -d
+docker compose --profile apps ps
+```
+
+Дождитесь `healthy` у пяти приложений. При ошибке проверьте логи соответствующего сервиса.
+
+После запуска пустой Kafka заново выполните регистрацию трёх коннекторов из шага 4 и проверьте `RUNNING` у connector/task. Не отправляйте новые заказы до готовности CDC.
+Потеря истории Kafka включает бизнес-топики, consumer offsets и внутренние топики Kafka Connect. PostgreSQL volumes и существующие replication slots сохраняются. Это **не процедура восстановления старых Saga**: зависшие заказы, недоставленные сообщения и согласованность slots/offsets требуют отдельного разбора. Не удаляйте slots и не сбрасывайте offsets автоматически.
+
+Проверьте вход в Keycloak, каталог, пять Prometheus targets `UP`, а затем создайте новый заказ на доступный билет с новым `Idempotency-Key` и дождитесь `CONFIRMED`.
+Проверьте сохранение данных без очередного сброса Kafka:
+
+```powershell
+docker compose up -d --no-deps --force-recreate kafka
+# Дождитесь healthy у Kafka; Connect после переподключения должен вернуть RUNNING.
+docker compose up -d --no-deps --force-recreate keycloak
+```
+
+Повторно проверьте коннекторы, вход в Keycloak и чтение ранее созданного заказа. Входящие JWT могут потребовать обновления после перезапуска Keycloak.
+
+Версии UI закреплены: Kafka UI `v0.7.2`, pgAdmin `9.18`. Перед обновлением pgAdmin из ранее скачанного `latest` проверьте его текущую версию в Help → About: если она новее `9.18`, не понижайте версию поверх существующего pgAdmin volume; закрепите уже используемую версию вместо этого.
+
 
 ### Адреса
 
