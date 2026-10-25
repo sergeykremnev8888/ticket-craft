@@ -21,7 +21,6 @@ import ru.ticketcraft.model.IdempotencyKey;
 import ru.ticketcraft.model.IdempotencyStatus;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.model.OutboxEvent;
-import ru.ticketcraft.model.OutboxStatus;
 import ru.ticketcraft.repository.IdempotencyKeyRepository;
 import ru.ticketcraft.repository.OrderRepository;
 import ru.ticketcraft.repository.OrderSagaRepository;
@@ -77,87 +76,61 @@ class OrderServiceOutboxIntegrationTest {
 
     @Test
     void shouldCreateOrderSagaAndReserveTicketCommandInSameTransaction() throws Exception {
-
         Order order = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, TICKET_ID);
 
         /*
          * Order.
          */
         assertNotNull(order.getId());
-
         assertEquals(USER_ID, order.getUserId());
-
         assertEquals(null, order.getEventId());
-
         assertEquals(TICKET_ID, order.getTicketId());
-
         assertEquals(null, order.getTotalPrice());
-
         assertEquals(OrderState.CREATED, order.getStatus());
 
         /*
          * Order persisted.
          */
         Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
-
         assertEquals(order.getId(), persistedOrder.getId());
-
         assertEquals(OrderState.CREATED, persistedOrder.getStatus());
 
         /*
          * Saga.
          */
         OrderSaga saga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertNotNull(saga.getId());
-
         assertEquals(order.getId(), saga.getOrderId());
-
         assertEquals(OrderSagaStatus.WAITING_FOR_RESERVATION, saga.getStatus());
 
         /*
          * Idempotency.
          */
         IdempotencyKey idempotencyKey = idempotencyKeyRepository.findById(IDEMPOTENCY_KEY).orElseThrow();
-
         assertEquals(IdempotencyStatus.COMPLETED, idempotencyKey.getStatus());
-
         assertEquals(order.getId(), idempotencyKey.getOrderId());
 
         /*
          * Outbox.
          */
         List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
-
         assertEquals(1, outboxEvents.size());
 
         OutboxEvent outboxEvent = outboxEvents.get(0);
-
         assertNotNull(outboxEvent.getId());
-
         assertEquals("ORDER", outboxEvent.getAggregateType());
-
         assertEquals(order.getId().toString(), outboxEvent.getAggregateId());
-
         assertEquals("ReserveTicket", outboxEvent.getEventType());
-
         assertEquals("ticket-reservation-commands", outboxEvent.getTopic());
-
-        assertEquals(OutboxStatus.PENDING, outboxEvent.getStatus());
-
         assertNotNull(outboxEvent.getPayload());
 
         /*
          * Payload.
          */
         ReserveTicketCommand command = objectMapper.readValue(outboxEvent.getPayload(), ReserveTicketCommand.class);
-
         assertEquals(order.getId(), command.orderId());
-
         assertEquals(TICKET_ID, command.ticketId());
-
         assertEquals(USER_ID, command.userId());
-
         assertNotNull(command.reservationId());
 
         /*
@@ -174,7 +147,6 @@ class OrderServiceOutboxIntegrationTest {
     }
 
     private List<OutboxEvent> toList(Iterable<OutboxEvent> events) {
-
         return java.util.stream.StreamSupport.stream(events.spliterator(), false).toList();
     }
 }

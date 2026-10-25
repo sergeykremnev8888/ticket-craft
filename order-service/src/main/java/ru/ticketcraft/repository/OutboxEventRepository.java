@@ -21,7 +21,6 @@ public interface OutboxEventRepository extends CrudRepository<OutboxEvent, UUID>
                 event_type,
                 topic,
                 payload,
-                status,
                 created_at
             )
             VALUES (
@@ -31,7 +30,6 @@ public interface OutboxEventRepository extends CrudRepository<OutboxEvent, UUID>
                 :eventType,
                 :topic,
                 :payload,
-                'PENDING',
                 :createdAt
             )
             """)

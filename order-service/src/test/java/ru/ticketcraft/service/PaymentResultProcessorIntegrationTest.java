@@ -26,7 +26,6 @@ import ru.ticketcraft.dto.PaymentSucceededEvent;
 import ru.ticketcraft.dto.ReleaseTicketCommand;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.model.OutboxEvent;
-import ru.ticketcraft.model.OutboxStatus;
 import ru.ticketcraft.repository.OrderRepository;
 import ru.ticketcraft.repository.OrderSagaRepository;
 import ru.ticketcraft.repository.OutboxEventRepository;
@@ -79,7 +78,6 @@ class PaymentResultProcessorIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-
         outboxEventRepository.deleteAll();
 
         jdbcTemplate.update("DELETE FROM processed_events");
@@ -91,7 +89,6 @@ class PaymentResultProcessorIntegrationTest {
 
     @Test
     void shouldRequestTicketConfirmationWhenPaymentSucceeded() throws Exception {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT);
@@ -114,43 +111,28 @@ class PaymentResultProcessorIntegrationTest {
         assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.PAYMENT_PENDING);
 
         OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
-
         assertThat(processedEventCount(messageId)).isEqualTo(1);
 
         List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
-
         assertThat(outboxEvents).hasSize(1);
 
         OutboxEvent outboxEvent = outboxEvents.getFirst();
-
         assertThat(outboxEvent.getAggregateType()).isEqualTo("ORDER");
-
         assertThat(outboxEvent.getAggregateId()).isEqualTo(order.getId().toString());
-
         assertThat(outboxEvent.getEventType()).isEqualTo("ConfirmTicket");
-
         assertThat(outboxEvent.getTopic()).isEqualTo("ticket-reservation-commands");
 
-        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxStatus.PENDING);
-
         ConfirmTicketCommand command = objectMapper.readValue(outboxEvent.getPayload(), ConfirmTicketCommand.class);
-
         assertThat(command.messageId()).isEqualTo("saga:" + RESERVATION_ID + ":confirm-ticket");
-
         assertThat(command.orderId()).isEqualTo(order.getId());
-
         assertThat(command.reservationId()).isEqualTo(RESERVATION_ID);
-
         assertThat(command.ticketId()).isEqualTo(TICKET_ID);
-
         assertThat(command.occurredAt()).isNotNull();
     }
 
     @Test
     void shouldIgnoreDuplicatePaymentSucceededEvent() throws Exception {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT);
@@ -164,30 +146,23 @@ class PaymentResultProcessorIntegrationTest {
         processor.process(event);
 
         Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
-
         assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.PAYMENT_PENDING);
 
         OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.WAITING_FOR_TICKET_CONFIRMATION);
-
         assertThat(processedEventCount(messageId)).isEqualTo(1);
 
         List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
-
         assertThat(outboxEvents).hasSize(1);
-
         assertThat(outboxEvents.getFirst().getEventType()).isEqualTo("ConfirmTicket");
 
         ConfirmTicketCommand command = objectMapper.readValue(outboxEvents.getFirst().getPayload(),
                 ConfirmTicketCommand.class);
-
         assertThat(command.messageId()).isEqualTo("saga:" + RESERVATION_ID + ":confirm-ticket");
     }
 
     @Test
     void shouldStartReservationCompensationWhenPaymentFailed() throws Exception {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT);
@@ -200,39 +175,28 @@ class PaymentResultProcessorIntegrationTest {
         processor.process(event);
 
         Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
-
         assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.PAYMENT_FAILED);
 
         OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPENSATING_RESERVATION);
-
         assertThat(processedEventCount(messageId)).isEqualTo(1);
 
         List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
-
         assertThat(outboxEvents).hasSize(1);
 
         OutboxEvent outboxEvent = outboxEvents.getFirst();
-
         assertThat(outboxEvent.getEventType()).isEqualTo("ReleaseTicket");
-
         assertThat(outboxEvent.getTopic()).isEqualTo("ticket-reservation-commands");
 
         ReleaseTicketCommand command = objectMapper.readValue(outboxEvent.getPayload(), ReleaseTicketCommand.class);
-
         assertThat(command.messageId()).isEqualTo("saga:" + RESERVATION_ID + ":release-ticket");
-
         assertThat(command.orderId()).isEqualTo(order.getId());
-
         assertThat(command.reservationId()).isEqualTo(RESERVATION_ID);
-
         assertThat(command.ticketId()).isEqualTo(TICKET_ID);
     }
 
     @Test
     void shouldIgnoreDuplicatePaymentFailedEvent() throws Exception {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT);
@@ -247,18 +211,14 @@ class PaymentResultProcessorIntegrationTest {
 
         assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderState.PAYMENT_FAILED);
-
         assertThat(orderSagaRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderSagaStatus.COMPENSATING_RESERVATION);
-
         assertThat(processedEventCount(messageId)).isEqualTo(1);
-
         assertThat(outboxEventRepository.count()).isEqualTo(1);
     }
 
     @Test
     void shouldRollbackWhenPaymentAmountDoesNotMatchOrder() {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSaga(order.getId(), OrderSagaStatus.WAITING_FOR_PAYMENT);
@@ -270,21 +230,16 @@ class PaymentResultProcessorIntegrationTest {
 
         assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Payment amount mismatch");
-
         assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderState.PAYMENT_PENDING);
-
         assertThat(orderSagaRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderSagaStatus.WAITING_FOR_PAYMENT);
-
         assertThat(processedEventCount(messageId)).isZero();
-
         assertThat(outboxEventRepository.count()).isZero();
     }
 
     @Test
     void shouldRollbackWhenSagaTransitionFails() {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         /*
@@ -297,30 +252,22 @@ class PaymentResultProcessorIntegrationTest {
 
         PaymentSucceededEvent event = new PaymentSucceededEvent(messageId, order.getId(), PAYMENT_ID, PRICE,
                 Instant.now());
-
         assertThatThrownBy(() -> processor.process(event)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Failed to transition saga");
-
         assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderState.PAYMENT_PENDING);
-
         assertThat(orderSagaRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(OrderSagaStatus.COMPLETED);
-
         assertThat(processedEventCount(messageId)).isZero();
-
         assertThat(outboxEventRepository.count()).isZero();
     }
 
     private Order createOrder(OrderState state) {
-
         Order order = new Order(null, USER_ID, EVENT_ID, TICKET_ID, PRICE, state, Instant.now());
-
         return orderRepository.save(order);
     }
 
     private OrderSaga createSaga(Long orderId, OrderSagaStatus status) {
-
         Instant now = Instant.now();
 
         int inserted = orderSagaRepository.insertIfAbsent(RESERVATION_ID, orderId, status.name(), now, now);
@@ -331,7 +278,6 @@ class PaymentResultProcessorIntegrationTest {
     }
 
     private int processedEventCount(String messageId) {
-
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM processed_events
@@ -342,7 +288,6 @@ class PaymentResultProcessorIntegrationTest {
     }
 
     private List<OutboxEvent> toList(Iterable<OutboxEvent> events) {
-
         return StreamSupport.stream(events.spliterator(), false).toList();
     }
 }

@@ -25,7 +25,6 @@ import ru.ticketcraft.dto.TicketConfirmationFailedEvent;
 import ru.ticketcraft.dto.TicketConfirmationFailureReason;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.model.OutboxEvent;
-import ru.ticketcraft.model.OutboxStatus;
 import ru.ticketcraft.repository.OrderRepository;
 import ru.ticketcraft.repository.OrderSagaRepository;
 import ru.ticketcraft.repository.OutboxEventRepository;
@@ -81,7 +80,6 @@ class PaymentCompensationIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-
         outboxEventRepository.deleteAll();
 
         jdbcTemplate.update("DELETE FROM processed_events");
@@ -93,7 +91,6 @@ class PaymentCompensationIntegrationTest {
 
     @Test
     void shouldStartPaymentCompensationWhenTicketConfirmationFails() throws Exception {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSagaWaitingForTicketConfirmation(order.getId());
@@ -115,11 +112,8 @@ class PaymentCompensationIntegrationTest {
         assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.PAYMENT_PENDING);
 
         OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPENSATING_PAYMENT);
-
         assertThat(persistedSaga.getPaymentId()).isEqualTo(PAYMENT_ID);
-
         assertThat(processedEventCount(messageId)).isEqualTo(1);
 
         List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
@@ -127,35 +121,22 @@ class PaymentCompensationIntegrationTest {
         assertThat(outboxEvents).hasSize(1);
 
         OutboxEvent outboxEvent = outboxEvents.getFirst();
-
         assertThat(outboxEvent.getAggregateType()).isEqualTo("ORDER");
-
         assertThat(outboxEvent.getAggregateId()).isEqualTo(order.getId().toString());
-
         assertThat(outboxEvent.getEventType()).isEqualTo("RefundPayment");
-
         assertThat(outboxEvent.getTopic()).isEqualTo("payment-commands");
 
-        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxStatus.PENDING);
-
         RefundPaymentCommand command = objectMapper.readValue(outboxEvent.getPayload(), RefundPaymentCommand.class);
-
         assertThat(command.messageId()).isEqualTo("saga:" + RESERVATION_ID + ":refund-payment");
-
         assertThat(command.orderId()).isEqualTo(order.getId());
-
         assertThat(command.paymentId()).isEqualTo(PAYMENT_ID);
-
         assertThat(command.amount()).isEqualByComparingTo(PRICE);
-
         assertThat(command.reason()).isEqualTo(TicketConfirmationFailureReason.RESERVATION_EXPIRED);
-
         assertThat(command.occurredAt()).isNotNull();
     }
 
     @Test
     void shouldIgnoreDuplicateTicketConfirmationFailedEvent() throws Exception {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSagaWaitingForTicketConfirmation(order.getId());
@@ -169,9 +150,7 @@ class PaymentCompensationIntegrationTest {
         ticketReservationResultProcessor.process(event);
 
         OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPENSATING_PAYMENT);
-
         assertThat(processedEventCount(messageId)).isEqualTo(1);
 
         /*
@@ -188,7 +167,6 @@ class PaymentCompensationIntegrationTest {
 
     @Test
     void shouldCompleteCompensationWhenPaymentRefunded() throws Exception {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSagaWaitingForTicketConfirmation(order.getId());
@@ -221,20 +199,16 @@ class PaymentCompensationIntegrationTest {
         paymentResultProcessor.process(refundedEvent);
 
         Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
-
         assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.CANCELED);
 
         OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.FAILED);
-
         assertThat(persistedSaga.getPaymentId()).isEqualTo(PAYMENT_ID);
 
         /*
          * Оба входящих события обработаны ровно один раз.
          */
         assertThat(processedEventCount(confirmationFailureMessageId)).isEqualTo(1);
-
         assertThat(processedEventCount(refundedMessageId)).isEqualTo(1);
 
         /*
@@ -244,15 +218,12 @@ class PaymentCompensationIntegrationTest {
          * domain command.
          */
         List<OutboxEvent> outboxEvents = toList(outboxEventRepository.findAll());
-
         assertThat(outboxEvents).hasSize(1);
-
         assertThat(outboxEvents.getFirst().getEventType()).isEqualTo("RefundPayment");
     }
 
     @Test
     void shouldIgnoreDuplicatePaymentRefundedEvent() {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSagaCompensatingPayment(order.getId());
@@ -266,21 +237,16 @@ class PaymentCompensationIntegrationTest {
         paymentResultProcessor.process(event);
 
         Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
-
         assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.CANCELED);
 
         OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.FAILED);
-
         assertThat(processedEventCount(messageId)).isEqualTo(1);
-
         assertThat(outboxEventRepository.count()).isZero();
     }
 
     @Test
     void shouldRollbackRefundResultWhenPaymentIdDoesNotMatchSaga() {
-
         Order order = createOrder(OrderState.PAYMENT_PENDING);
 
         createSagaCompensatingPayment(order.getId());
@@ -301,23 +267,18 @@ class PaymentCompensationIntegrationTest {
         assertThat(processedEventCount(messageId)).isZero();
 
         Order persistedOrder = orderRepository.findById(order.getId()).orElseThrow();
-
         assertThat(persistedOrder.getStatus()).isEqualTo(OrderState.PAYMENT_PENDING);
 
         OrderSaga persistedSaga = orderSagaRepository.findByOrderId(order.getId()).orElseThrow();
-
         assertThat(persistedSaga.getStatus()).isEqualTo(OrderSagaStatus.COMPENSATING_PAYMENT);
     }
 
     private Order createOrder(OrderState state) {
-
         Order order = new Order(null, USER_ID, EVENT_ID, TICKET_ID, PRICE, state, Instant.now());
-
         return orderRepository.save(order);
     }
 
     private OrderSaga createSagaWaitingForTicketConfirmation(Long orderId) {
-
         Instant now = Instant.now();
 
         int inserted = orderSagaRepository.insertIfAbsent(RESERVATION_ID, orderId,
@@ -335,7 +296,6 @@ class PaymentCompensationIntegrationTest {
     }
 
     private OrderSaga createSagaCompensatingPayment(Long orderId) {
-
         createSagaWaitingForTicketConfirmation(orderId);
 
         int transitioned = orderSagaRepository.transition(orderId,
@@ -348,7 +308,6 @@ class PaymentCompensationIntegrationTest {
     }
 
     private int processedEventCount(String messageId) {
-
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM processed_events
@@ -359,7 +318,6 @@ class PaymentCompensationIntegrationTest {
     }
 
     private List<OutboxEvent> toList(Iterable<OutboxEvent> events) {
-
         return StreamSupport.stream(events.spliterator(), false).toList();
     }
 }

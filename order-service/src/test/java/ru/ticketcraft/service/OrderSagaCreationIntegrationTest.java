@@ -20,7 +20,6 @@ import ru.ticketcraft.model.IdempotencyKey;
 import ru.ticketcraft.model.IdempotencyStatus;
 import ru.ticketcraft.model.Order;
 import ru.ticketcraft.model.OutboxEvent;
-import ru.ticketcraft.model.OutboxStatus;
 import ru.ticketcraft.repository.IdempotencyKeyRepository;
 import ru.ticketcraft.repository.OrderRepository;
 import ru.ticketcraft.repository.OrderSagaRepository;
@@ -79,9 +78,7 @@ class OrderSagaCreationIntegrationTest {
 
     @Test
     void shouldCreateOrderSagaAndReservationCommandAtomically() throws Exception {
-
         Order result = orderService.createOrder(IDEMPOTENCY_KEY, USER_ID, TICKET_ID);
-
         assertThat(result.getId()).isNotNull();
         assertThat(result.getUserId()).isEqualTo(USER_ID);
         assertThat(result.getEventId()).isNull();
@@ -100,20 +97,15 @@ class OrderSagaCreationIntegrationTest {
          * 2. Saga создана для этого order.
          */
         OrderSaga saga = orderSagaRepository.findByOrderId(result.getId()).orElseThrow();
-
         assertThat(saga.getId()).isNotNull();
-
         assertThat(saga.getOrderId()).isEqualTo(result.getId());
-
         assertThat(saga.getStatus()).isEqualTo(OrderSagaStatus.WAITING_FOR_RESERVATION);
 
         /*
          * 3. HTTP idempotency завершена.
          */
         IdempotencyKey idempotencyKey = idempotencyKeyRepository.findById(IDEMPOTENCY_KEY).orElseThrow();
-
         assertThat(idempotencyKey.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
-
         assertThat(idempotencyKey.getOrderId()).isEqualTo(result.getId());
 
         /*
@@ -124,26 +116,17 @@ class OrderSagaCreationIntegrationTest {
         assertThat(outboxEvents).hasSize(1);
 
         OutboxEvent outboxEvent = outboxEvents.get(0);
-
         assertThat(outboxEvent.getAggregateType()).isEqualTo("ORDER");
-
         assertThat(outboxEvent.getAggregateId()).isEqualTo(result.getId().toString());
-
         assertThat(outboxEvent.getEventType()).isEqualTo("ReserveTicket");
-
         assertThat(outboxEvent.getTopic()).isEqualTo("ticket-reservation-commands");
-
-        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxStatus.PENDING);
 
         /*
          * 5. Проверяем сам payload.
          */
         ReserveTicketCommand command = objectMapper.readValue(outboxEvent.getPayload(), ReserveTicketCommand.class);
-
         assertThat(command.orderId()).isEqualTo(result.getId());
-
         assertThat(command.ticketId()).isEqualTo(TICKET_ID);
-
         assertThat(command.userId()).isEqualTo(USER_ID);
 
         /*
@@ -152,7 +135,6 @@ class OrderSagaCreationIntegrationTest {
          * order_sagas.id == reservationId в Kafka command.
          */
         assertThat(command.reservationId()).isEqualTo(saga.getId());
-
         assertThat(command.messageId()).isEqualTo("saga:" + saga.getId() + ":reserve-ticket");
     }
 

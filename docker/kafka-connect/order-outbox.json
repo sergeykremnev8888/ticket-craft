@@ -19,9 +19,7 @@
 
   "table.include.list": "public\\.outbox_events",
 
-  "snapshot.mode": "initial",
-  "snapshot.select.statement.overrides": "public.outbox_events",
-  "snapshot.select.statement.overrides.public.outbox_events": "SELECT * FROM public.outbox_events WHERE status = 'PENDING' ORDER BY created_at, id",
+  "snapshot.mode": "no_data",
 
   "tombstones.on.delete": "false",
   "include.schema.changes": "false",
