@@ -1,18 +1,29 @@
 spring:
   application:
     name: order-service
+
   profiles:
     default: local
+
   flyway:
     enabled: true
     locations: classpath:db/migration
+
   sql:
     init:
       mode: never
+
   kafka:
     consumer:
       auto-offset-reset: earliest
       enable-auto-commit: false
+      properties:
+       '[spring.json.type.mapping]': >-
+        TicketReserved:ru.ticketcraft.dto.TicketReservedEvent,
+        TicketReservationFailed:ru.ticketcraft.dto.TicketReservationFailedEvent,
+        TicketConfirmed:ru.ticketcraft.dto.TicketConfirmedEvent,
+        TicketConfirmationFailed:ru.ticketcraft.dto.TicketConfirmationFailedEvent,
+        TicketReleased:ru.ticketcraft.dto.TicketReleasedEvent
     producer:
       acks: all
       '[enable.idempotence]': true

@@ -100,7 +100,7 @@ ticketcraft:
       ticket-reservation-results: ticket-reservation-results
   outbox:
     publisher:
-      enabled: true
+      enabled: false
       batch-size: 100
       fixed-delay: 1s
       lock-duration: 30s
