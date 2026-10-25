@@ -75,6 +75,7 @@ ticketcraft:
       charge-status-path: ${PAYMENT_PROVIDER_CHARGE_STATUS_PATH:/api/v1/payments/charges/status}
       refund-status-path: ${PAYMENT_PROVIDER_REFUND_STATUS_PATH:/api/v1/payments/refunds/status}
   outbox:
+    enabled: false
     batch-size: ${PAYMENT_OUTBOX_BATCH_SIZE:100}
     claim-lease: ${PAYMENT_OUTBOX_CLAIM_LEASE:30s}
     publish-delay: ${PAYMENT_OUTBOX_PUBLISH_DELAY:1s}

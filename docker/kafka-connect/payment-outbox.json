@@ -1,0 +1,48 @@
+{
+  "name": "payment-outbox",
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "postgres-payment",
+  "database.port": "5432",
+  "database.user": "SET_AT_REGISTRATION",
+  "database.password": "SET_AT_REGISTRATION",
+  "database.dbname": "payment_db",
+
+  "topic.prefix": "ticketcraft.payment",
+
+  "plugin.name": "pgoutput",
+  "slot.name": "ticketcraft_payment_outbox",
+  "slot.drop.on.stop": "false",
+  "publication.name": "ticketcraft_payment_outbox_publication",
+  "publication.autocreate.mode": "filtered",
+
+  "table.include.list": "public\\.payment_outbox",
+  "snapshot.mode": "no_data",
+
+  "tombstones.on.delete": "false",
+  "include.schema.changes": "false",
+
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "header.converter": "org.apache.kafka.connect.storage.SimpleHeaderConverter",
+
+  "predicates": "isOutbox",
+  "predicates.isOutbox.type": "org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
+  "predicates.isOutbox.pattern": "ticketcraft\\.payment\\.public\\.payment_outbox",
+
+  "transforms": "outbox",
+  "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+  "transforms.outbox.predicate": "isOutbox",
+
+  "transforms.outbox.table.field.event.id": "id",
+  "transforms.outbox.table.field.event.key": "order_id",
+  "transforms.outbox.table.field.event.payload": "payload",
+  "transforms.outbox.table.expand.json.payload": "false",
+  "transforms.outbox.table.fields.additional.placement": "event_type:header:__TypeId__",
+
+  "transforms.outbox.route.by.field": "event_type",
+  "transforms.outbox.route.topic.replacement": "payment-results",
+
+  "errors.tolerance": "none"
+}

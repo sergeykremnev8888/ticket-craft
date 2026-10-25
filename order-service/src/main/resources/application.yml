@@ -23,7 +23,10 @@ spring:
         TicketReservationFailed:ru.ticketcraft.dto.TicketReservationFailedEvent,
         TicketConfirmed:ru.ticketcraft.dto.TicketConfirmedEvent,
         TicketConfirmationFailed:ru.ticketcraft.dto.TicketConfirmationFailedEvent,
-        TicketReleased:ru.ticketcraft.dto.TicketReleasedEvent
+        TicketReleased:ru.ticketcraft.dto.TicketReleasedEvent,
+        PaymentSucceededEvent:ru.ticketcraft.dto.PaymentSucceededEvent,
+        PaymentFailedEvent:ru.ticketcraft.dto.PaymentFailedEvent,
+        PaymentRefundedEvent:ru.ticketcraft.dto.PaymentRefundedEvent
     producer:
       acks: all
       '[enable.idempotence]': true
