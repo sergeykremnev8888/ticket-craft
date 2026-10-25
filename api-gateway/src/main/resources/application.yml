@@ -101,9 +101,9 @@ resilience4j:
         timeoutDuration: 4s
 
 ticketcraft:
-  catalog-uri: ${GATEWAY_CATALOG_URI:http://localhost:8081}
-  order-uri: ${GATEWAY_ORDER_URI:http://localhost:8082}
   gateway:
+    catalog-uri: ${GATEWAY_CATALOG_URI:http://localhost:8081}
+    order-uri: ${GATEWAY_ORDER_URI:http://localhost:8082}
     rate-limiter:
       timeout: 500ms
       warn-interval: 30s

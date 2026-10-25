@@ -280,6 +280,14 @@ services:
     build:
       context: .
       dockerfile: api-gateway/Dockerfile
+    environment:
+      <<: *java-environment
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:-http://localhost:9000/realms/ticketcraft}
+      JWT_JWK_SET_URI: ${JWT_JWK_SET_URI:-http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ticketcraft-api}
+      GATEWAY_CATALOG_URI: ${GATEWAY_CATALOG_URI:-http://catalog-service:8081}
+      GATEWAY_ORDER_URI: ${GATEWAY_ORDER_URI:-http://order-service:8082}
     ports:
       - "8080:8080"
     depends_on:
@@ -305,6 +313,11 @@ services:
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
       CATALOG_DB_URL: ${CATALOG_DB_URL:-jdbc:postgresql://postgres-catalog:5432/catalog_db}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:-http://localhost:9000/realms/ticketcraft}
+      JWT_JWK_SET_URI: ${JWT_JWK_SET_URI:-http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ticketcraft-api}
     ports:
       - "8081:8081"
     healthcheck:
@@ -334,7 +347,11 @@ services:
       <<: *java-environment
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
-      ORDER_DB_URL: ${ORDER_DB_URL:-jdbc:postgresql://postgres-order:5433/order_db}
+      ORDER_DB_URL: ${ORDER_DB_URL:-jdbc:postgresql://postgres-order:5432/order_db}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:-http://localhost:9000/realms/ticketcraft}
+      JWT_JWK_SET_URI: ${JWT_JWK_SET_URI:-http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ticketcraft-api}
     ports:
       - "8082:8082"
     healthcheck:
@@ -362,8 +379,9 @@ services:
       <<: *java-environment
       PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
-      PAYMENT_DB_URL: ${PAYMENT_DB_URL:-jdbc:postgresql://postgres-payment:5435/payment_db}
+      PAYMENT_DB_URL: ${PAYMENT_DB_URL:-jdbc:postgresql://postgres-payment:5432/payment_db}
       PAYMENT_PROVIDER_BASE_URL: ${PAYMENT_PROVIDER_BASE_URL:-http://host.docker.internal:8090}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
     ports:
       - "8084:8084"
     healthcheck:
@@ -391,7 +409,8 @@ services:
       <<: *java-environment
       NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:?Set NOTIFICATION_DB_USERNAME}
       NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
-      NOTIFICATION_DB_URL: ${NOTIFICATION_DB_URL:-jdbc:postgresql://postgres-notification:5434/notification_db}
+      NOTIFICATION_DB_URL: ${NOTIFICATION_DB_URL:-jdbc:postgresql://postgres-notification:5432/notification_db}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
     ports:
       - "8083:8083"
     healthcheck:
