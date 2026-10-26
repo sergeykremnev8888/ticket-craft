@@ -4,6 +4,9 @@ set -euo pipefail
 : "${CONNECTOR_CONFIG:?Set CONNECTOR_CONFIG}"
 : "${DB_USERNAME:?Set DB_USERNAME}"
 : "${DB_PASSWORD:?Set DB_PASSWORD}"
+: "${DB_HOST:?Set DB_HOST}"
+: "${DB_PORT:?Set DB_PORT}"
+: "${DB_NAME:?Set DB_NAME}"
 
 CONNECT_URL="${CONNECT_URL:-http://kafka-connect:8083}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-60}"
@@ -29,6 +32,9 @@ connector_url="${CONNECT_URL%/}/connectors/$encoded_name"
 
 # Подставляем credentials, сохраняя остальные поля JSON.
 jq 'del(.name)
+    | .["database.hostname"] = env.DB_HOST
+    | .["database.port"] = env.DB_PORT
+    | .["database.dbname"] = env.DB_NAME
     | .["database.user"] = env.DB_USERNAME
     | .["database.password"] = env.DB_PASSWORD' \
   "$CONNECTOR_CONFIG" > "$payload"

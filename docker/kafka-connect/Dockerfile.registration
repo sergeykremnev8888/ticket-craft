@@ -4,6 +4,8 @@ RUN apk add --no-cache bash curl jq
 
 COPY register-connector.sh /usr/local/bin/register-connector.sh
 
-RUN sed -i 's/\r$//' /usr/local/bin/register-connector.sh
+RUN sed -i 's/\r$//' /usr/local/bin/register-connector.sh \
+    && test -s /usr/local/bin/register-connector.sh \
+    && bash -n /usr/local/bin/register-connector.sh
 
 ENTRYPOINT ["bash", "/usr/local/bin/register-connector.sh"]

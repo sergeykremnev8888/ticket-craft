@@ -5,7 +5,7 @@ services:
   postgres-catalog:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: catalog_db
+      POSTGRES_DB: ${CATALOG_DB_NAME:-catalog_db}
       POSTGRES_USER: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
       POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
     command:
@@ -31,7 +31,7 @@ services:
   postgres-order:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: order_db
+      POSTGRES_DB: ${ORDER_DB_NAME:-order_db}
       POSTGRES_USER: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
       POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
     command:
@@ -57,7 +57,7 @@ services:
   postgres-payment:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: payment_db
+      POSTGRES_DB: ${PAYMENT_DB_NAME:-payment_db}
       POSTGRES_USER: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
       POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
     command:
@@ -217,6 +217,8 @@ services:
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0

@@ -70,7 +70,7 @@ services:
       <<: *java-environment
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
-      CATALOG_DB_URL: ${CATALOG_DB_URL:-jdbc:postgresql://postgres-catalog:5432/catalog_db}
+      CATALOG_DB_URL: jdbc:postgresql://${CATALOG_DB_HOST:-postgres-catalog}:${CATALOG_DB_PORT:-5432}/${CATALOG_DB_NAME:-catalog_db}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       JWT_ISSUER_URI: ${JWT_ISSUER_URI:-http://localhost:9000/realms/ticketcraft}
@@ -105,7 +105,7 @@ services:
       <<: *java-environment
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
-      ORDER_DB_URL: ${ORDER_DB_URL:-jdbc:postgresql://postgres-order:5432/order_db}
+      ORDER_DB_URL: jdbc:postgresql://${ORDER_DB_HOST:-postgres-order}:${ORDER_DB_PORT:-5432}/${ORDER_DB_NAME:-order_db}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       JWT_ISSUER_URI: ${JWT_ISSUER_URI:-http://localhost:9000/realms/ticketcraft}
       JWT_JWK_SET_URI: ${JWT_JWK_SET_URI:-http://keycloak:8080/realms/ticketcraft/protocol/openid-connect/certs}
@@ -137,7 +137,7 @@ services:
       <<: *java-environment
       PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
-      PAYMENT_DB_URL: ${PAYMENT_DB_URL:-jdbc:postgresql://postgres-payment:5432/payment_db}
+      PAYMENT_DB_URL: jdbc:postgresql://${PAYMENT_DB_HOST:-postgres-payment}:${PAYMENT_DB_PORT:-5432}/${PAYMENT_DB_NAME:-payment_db}
       PAYMENT_PROVIDER_BASE_URL: ${PAYMENT_PROVIDER_BASE_URL:-http://host.docker.internal:8090}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
     ports:
@@ -186,6 +186,9 @@ services:
     <<: *connect-registration
     environment:
       CONNECTOR_CONFIG: /bootstrap/catalog-outbox.json
+      DB_HOST: ${CATALOG_DB_HOST:-postgres-catalog}
+      DB_PORT: ${CATALOG_DB_PORT:-5432}
+      DB_NAME: ${CATALOG_DB_NAME:-catalog_db}
       DB_USERNAME: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
       DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
     depends_on:
@@ -198,6 +201,9 @@ services:
     <<: *connect-registration
     environment:
       CONNECTOR_CONFIG: /bootstrap/order-outbox.json
+      DB_HOST: ${ORDER_DB_HOST:-postgres-order}
+      DB_PORT: ${ORDER_DB_PORT:-5432}
+      DB_NAME: ${ORDER_DB_NAME:-order_db}
       DB_USERNAME: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
       DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
     depends_on:
@@ -210,6 +216,9 @@ services:
     <<: *connect-registration
     environment:
       CONNECTOR_CONFIG: /bootstrap/payment-outbox.json
+      DB_HOST: ${PAYMENT_DB_HOST:-postgres-payment}
+      DB_PORT: ${PAYMENT_DB_PORT:-5432}
+      DB_NAME: ${PAYMENT_DB_NAME:-payment_db}
       DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
       DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
     depends_on:
