@@ -1,0 +1,285 @@
+name: ticket-craft
+
+services:
+
+  postgres-catalog:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: catalog_db
+      POSTGRES_USER: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
+      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_catalog_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-order:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_order_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-payment:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_payment_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-notification:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: ${NOTIFICATION_DB_USERNAME:?Set NOTIFICATION_DB_USERNAME}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_notification_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - nc -z localhost 29092 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka-connect:
+    image: quay.io/debezium/connect:3.3.2.Final
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: ticketcraft-connect
+
+      CONFIG_STORAGE_TOPIC: ticketcraft-connect-configs
+      OFFSET_STORAGE_TOPIC: ticketcraft-connect-offsets
+      STATUS_STORAGE_TOPIC: ticketcraft-connect-status
+
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+
+      CONNECT_OFFSET_STORAGE_PARTITIONS: "1"
+      CONNECT_STATUS_STORAGE_PARTITIONS: "1"
+
+      REST_HOST_NAME: 0.0.0.0
+      ADVERTISED_HOST_NAME: kafka-connect
+
+      KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+    ports:
+      - "8085:8083"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl --fail --silent http://localhost:8083/connectors > /dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    environment:
+      KAFKA_CLUSTERS_0_NAME: ticketcraft-kafka
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "8070:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  pgadmin:
+    image: dpage/pgadmin4:9.18
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres-catalog:
+        condition: service_healthy
+      postgres-order:
+        condition: service_healthy
+      postgres-payment:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=1d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0
+    command:
+      - --config=/etc/jaeger/jaeger.yml
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./observability/jaeger/jaeger.yml:/etc/jaeger/jaeger.yml:ro
+      - jaeger_data:/tmp
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - jaeger
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.3
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    command:
+      - start-dev
+      - --import-realm
+    ports:
+      - "9000:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./docker/keycloak/ticketcraft-realm.json:/opt/keycloak/data/import/ticketcraft-realm.json:ro
+
+volumes:
+  postgres_catalog_data:
+    name: ticketcraft_pg_catalog_data
+  postgres_order_data:
+    name: ticketcraft_pg_order_data
+  postgres_payment_data:
+    name: ticketcraft_pg_payment_data
+  postgres_notification_data:
+    name: ticketcraft_pg_notification_data
+  redis_data:
+    name: ticketcraft_redis_data
+  pgadmin_data:
+    name: ticketcraft_pgadmin_data
+  prometheus_data:
+    name: ticketcraft_prometheus_data
+  jaeger_data:
+    name: ticketcraft_jaeger_data
+  grafana_data:
+    name: ticketcraft_grafana_data
+  kafka_data:
+    name: ticketcraft_kafka_data
+  keycloak_data:
+    name: ticketcraft_keycloak_data
