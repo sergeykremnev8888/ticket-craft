@@ -9,14 +9,14 @@ INSERT INTO events (
 )
 VALUES (
     '11111111-1111-1111-1111-111111111111',
-    'TicketCraft E2E Event',
-    'Manual E2E test event',
+    'TicketCraft Demo Event',
+    'Demo event for manual purchase testing',
     CURRENT_TIMESTAMP + INTERVAL '30 days',
     'TicketCraft Arena',
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 INSERT INTO tickets (
     id,
@@ -30,10 +30,18 @@ INSERT INTO tickets (
     created_at,
     updated_at
 )
-VALUES (
-    '22222222-2222-2222-2222-222222222222',
-    '11111111-1111-1111-1111-111111111111',
-    'A-01',
+SELECT
+    CASE
+        WHEN n = 1 THEN
+            '22222222-2222-2222-2222-222222222222'::uuid
+        ELSE
+            (
+                '22222222-2222-2222-2222-'
+                || LPAD(n::text, 12, '0')
+            )::uuid
+    END,
+    '11111111-1111-1111-1111-111111111111'::uuid,
+    'A-' || LPAD(n::text, 2, '0'),
     1500.00,
     'AVAILABLE',
     NULL,
@@ -41,5 +49,5 @@ VALUES (
     0,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
-)
-ON CONFLICT (id) DO NOTHING;
+FROM generate_series(1, 10) AS seats(n)
+ON CONFLICT DO NOTHING;

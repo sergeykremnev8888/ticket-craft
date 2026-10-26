@@ -59,6 +59,8 @@ services:
         condition: service_completed_successfully
       register-payment-outbox:
         condition: service_completed_successfully
+      catalog-demo-data:
+        condition: service_completed_successfully
 
   catalog-service:
     <<: *java-service
@@ -225,4 +227,34 @@ services:
       kafka-connect:
         condition: service_healthy
       payment-service:
+        condition: service_healthy
+
+  catalog-demo-data:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGHOST: ${CATALOG_DB_HOST:-postgres-catalog}
+      PGPORT: ${CATALOG_DB_PORT:-5432}
+      PGDATABASE: ${CATALOG_DB_NAME:-catalog_db}
+      PGUSER: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
+      PGPASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
+      PGCONNECT_TIMEOUT: "5"
+    entrypoint: ["bash", "-ec"]
+    command:
+      - |
+        if [ ! -s /seed/seed.sql ]; then
+          echo "Demo seed SQL is missing or empty" >&2
+          exit 1
+        fi
+
+        exec psql \
+          --no-psqlrc \
+          --no-password \
+          --set=ON_ERROR_STOP=1 \
+          --single-transaction \
+          --file=/seed/seed.sql
+    volumes:
+      - ./catalog-service/src/main/resources/db/local/seed.sql:/seed/seed.sql:ro
+    depends_on:
+      catalog-service:
         condition: service_healthy
