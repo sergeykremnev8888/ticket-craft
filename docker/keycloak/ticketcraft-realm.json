@@ -97,7 +97,7 @@
 
   "users": [
     {
-      "username": "e2e-user",
+      "username": "dev-user",
       "enabled": true,
       "emailVerified": true,
       "firstName": "E2E",
@@ -110,7 +110,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "e2e-password",
+          "value": "dev-user",
           "temporary": false
         }
       ]
