@@ -14,6 +14,17 @@ x-java-service: &java-service
     retries: 12
     start_period: 60s
 
+x-connect-registration: &connect-registration
+  image: ticketcraft/connect-registration:local
+  build:
+    context: ./docker/kafka-connect
+    dockerfile: Dockerfile.registration
+  profiles:
+    - apps
+  restart: "no"
+  volumes:
+    - ./docker/kafka-connect:/bootstrap:ro
+
 services:
 
   postgres-catalog:
@@ -301,6 +312,12 @@ services:
         condition: service_healthy
       jaeger:
         condition: service_started
+      register-catalog-outbox:
+        condition: service_completed_successfully
+      register-order-outbox:
+        condition: service_completed_successfully
+      register-payment-outbox:
+        condition: service_completed_successfully
 
   catalog-service:
     <<: *java-service
@@ -423,6 +440,42 @@ services:
         condition: service_healthy
       jaeger:
         condition: service_started
+
+  register-catalog-outbox:
+    <<: *connect-registration
+    environment:
+      CONNECTOR_CONFIG: /bootstrap/catalog-outbox.json
+      DB_USERNAME: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
+      DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD}
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+      catalog-service:
+        condition: service_healthy
+
+  register-order-outbox:
+    <<: *connect-registration
+    environment:
+      CONNECTOR_CONFIG: /bootstrap/order-outbox.json
+      DB_USERNAME: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
+      DB_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+
+  register-payment-outbox:
+    <<: *connect-registration
+    environment:
+      CONNECTOR_CONFIG: /bootstrap/payment-outbox.json
+      DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
+      DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD}
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
 
 volumes:
   postgres_catalog_data:
