@@ -97,7 +97,7 @@
 
   "users": [
     {
-      "username": "dev-user",
+      "username": "${KEYCLOAK_DEMO_USERNAME}",
       "enabled": true,
       "emailVerified": true,
       "firstName": "E2E",
@@ -110,7 +110,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "dev-user",
+          "value": "${KEYCLOAK_DEMO_PASSWORD}",
           "temporary": false
         }
       ]

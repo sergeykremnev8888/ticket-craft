@@ -291,6 +291,8 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KEYCLOAK_DEMO_USERNAME: ${KEYCLOAK_DEMO_USERNAME:?Set KEYCLOAK_DEMO_USERNAME}
+      KEYCLOAK_DEMO_PASSWORD: ${KEYCLOAK_DEMO_PASSWORD:?Set KEYCLOAK_DEMO_PASSWORD}
     command:
       - start-dev
       - --import-realm
