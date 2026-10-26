@@ -1,26 +1,55 @@
 # Common DTO
 
-Общий Maven-модуль с контрактами сообщений для взаимодействия сервисов Ticket Craft через Kafka. **Не является самостоятельным HTTP-сервисом** и не запускается как приложение.
+Общая Maven-библиотека контрактов взаимодействия сервисов Ticket Craft.
+Содержит модели команд, результатов и состояний,
+используемые при обмене сообщениями.
 
 [← Обзор проекта](../README.md)
 
-## Контракты
+## Назначение
 
-- Резервирование: `ReserveTicketCommand`, `TicketReservedEvent`, `TicketReservationFailedEvent`.
-- Подтверждение и освобождение: `ConfirmTicketCommand`, `TicketConfirmedEvent`, `TicketConfirmationFailedEvent`, `ReleaseTicketCommand`, `TicketReleasedEvent`.
-- Платежи: `PaymentRequestedEvent`, `PaymentSucceededEvent`, `PaymentFailedEvent`, `RefundPaymentCommand`, `PaymentRefundedEvent`.
-- Заказы и состояния: `OrderEvent`, `OrderState`, `TicketStatus`, `TicketConfirmationFailureReason`.
+Модуль предоставляет сервисам общие структуры данных
+для процессов резервирования билетов, оплаты и оформления заказов.
 
-Файлы: `src/main/java/ru/ticketcraft/dto/`.
+Исходные файлы расположены в
+[src/main/java/ru/ticketcraft/common/dto](src/main/java/ru/ticketcraft/common/dto).
+
+## Технологии
+
+Java 21, Maven.
 
 ## Использование
 
-Модуль подключается Maven-зависимостью в сервисах и собирается вместе с остальными модулями из корневого `pom.xml`.
+Библиотека подключается как Maven-зависимость
+и собирается вместе с остальными модулями из корневого `pom.xml`.
+
+Она не является самостоятельным приложением:
+HTTP API, порта и отдельного Docker-контейнера нет.
+
+При запуске проекта через Docker Compose
+дополнительных действий не требуется.
+
+## Сборка и тесты
+
+Команды выполняются из корня репозитория.
+Нужен JDK 21.
+
+Проверка модуля:
 
 ```powershell
 .\mvnw.cmd -pl common-dto -am test
 ```
 
-## Ограничения подхода
+Сборка и установка в локальный Maven-репозиторий:
 
-Общий JAR упрощает учебный проект, но создаёт **связанность версий** producer и consumer. Изменение структуры события может быть несовместимым с сообщениями, уже лежащими в Kafka. В частности, изменение `TicketReservedEvent` требует согласованных версий Catalog и Order и отдельного плана обработки сообщений старого формата. Безопасный rolling deployment разных версий контрактов не гарантируется.
+```powershell
+.\mvnw.cmd -pl common-dto -am install
+```
+
+## Ограничения
+
+Общая библиотека создаёт связанность версий сервисов.
+
+При изменении контрактов необходимо учитывать совместимость
+производителей и потребителей, а также сообщений,
+уже сохранённых в Kafka.
