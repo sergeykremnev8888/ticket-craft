@@ -191,21 +191,59 @@ services:
   pgadmin:
     image: dpage/pgadmin4:9.18
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?Set PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?Set PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_SERVER_JSON_FILE: /generated/servers.json
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
     ports:
       - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
-      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - pgadmin_config:/generated:ro
     depends_on:
+      pgadmin-config:
+        condition: service_completed_successfully
       postgres-catalog:
         condition: service_healthy
       postgres-order:
         condition: service_healthy
       postgres-payment:
         condition: service_healthy
+      postgres-notification:
+        condition: service_healthy
+
+  pgadmin-config:
+    image: ticketcraft/connect-registration:local
+    build:
+      context: ./docker/kafka-connect
+      dockerfile: Dockerfile.registration
+    restart: "no"
+    entrypoint: ["bash", "/scripts/render-servers.sh"]
+    environment:
+      CATALOG_DB_HOST: ${CATALOG_DB_HOST:-postgres-catalog}
+      CATALOG_DB_PORT: ${CATALOG_DB_PORT:-5432}
+      CATALOG_DB_NAME: ${CATALOG_DB_NAME:-catalog_db}
+      CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:?Set CATALOG_DB_USERNAME}
+
+      ORDER_DB_HOST: ${ORDER_DB_HOST:-postgres-order}
+      ORDER_DB_PORT: ${ORDER_DB_PORT:-5432}
+      ORDER_DB_NAME: ${ORDER_DB_NAME:-order_db}
+      ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:?Set ORDER_DB_USERNAME}
+
+      PAYMENT_DB_HOST: ${PAYMENT_DB_HOST:-postgres-payment}
+      PAYMENT_DB_PORT: ${PAYMENT_DB_PORT:-5432}
+      PAYMENT_DB_NAME: ${PAYMENT_DB_NAME:-payment_db}
+      PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:?Set PAYMENT_DB_USERNAME}
+
+      NOTIFICATION_DB_HOST: postgres-notification
+      NOTIFICATION_DB_PORT: "5432"
+      NOTIFICATION_DB_NAME: notification_db
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:?Set NOTIFICATION_DB_USERNAME}
+    volumes:
+      - ./pgadmin-servers.json:/templates/pgadmin-servers.json:ro
+      - ./docker/pgadmin/render-servers.sh:/scripts/render-servers.sh:ro
+      - pgadmin_config:/output
 
   prometheus:
     image: prom/prometheus:v3.5.0
@@ -285,3 +323,5 @@ volumes:
     name: ticketcraft_kafka_data
   keycloak_data:
     name: ticketcraft_keycloak_data
+  pgadmin_config:
+    name: ticketcraft_pgadmin_config

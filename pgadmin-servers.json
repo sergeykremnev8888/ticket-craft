@@ -1,39 +1,39 @@
 {
   "Servers": {
     "1": {
-      "Name": "Catalog DB (catalog_db)",
+      "Name": "Catalog DB (${CATALOG_DB_NAME})",
       "Group": "TicketCraft Servers",
-      "Host": "postgres-catalog",
-      "Port": 5432,
-      "MaintenanceDB": "catalog_db",
-      "Username": "catalog_user",
+      "Host": "${CATALOG_DB_HOST}",
+      "Port": "${CATALOG_DB_PORT}",
+      "MaintenanceDB": "${CATALOG_DB_NAME}",
+      "Username": "${CATALOG_DB_USERNAME}",
       "SSLMode": "prefer"
     },
     "2": {
-      "Name": "Order DB (order_db)",
+      "Name": "Order DB (${ORDER_DB_NAME})",
       "Group": "TicketCraft Servers",
-      "Host": "postgres-order",
-      "Port": 5432,
-      "MaintenanceDB": "order_db",
-      "Username": "order_user",
+      "Host": "${ORDER_DB_HOST}",
+      "Port": "${ORDER_DB_PORT}",
+      "MaintenanceDB": "${ORDER_DB_NAME}",
+      "Username": "${ORDER_DB_USERNAME}",
       "SSLMode": "prefer"
     },
     "3": {
-      "Name": "Payment DB (payment_db)",
+      "Name": "Payment DB (${PAYMENT_DB_NAME})",
       "Group": "TicketCraft Servers",
-      "Host": "postgres-payment",
-      "Port": 5432,
-      "MaintenanceDB": "payment_db",
-      "Username": "payment_user",
+      "Host": "${PAYMENT_DB_HOST}",
+      "Port": "${PAYMENT_DB_PORT}",
+      "MaintenanceDB": "${PAYMENT_DB_NAME}",
+      "Username": "${PAYMENT_DB_USERNAME}",
       "SSLMode": "prefer"
     },
     "4": {
-      "Name": "Notification DB (notification_db)",
+      "Name": "Notification DB (${NOTIFICATION_DB_NAME})",
       "Group": "TicketCraft Servers",
-      "Host": "postgres-notification",
-      "Port": 5432,
-      "MaintenanceDB": "notification_db",
-      "Username": "notification_user",
+      "Host": "${NOTIFICATION_DB_HOST}",
+      "Port": "${NOTIFICATION_DB_PORT}",
+      "MaintenanceDB": "${NOTIFICATION_DB_NAME}",
+      "Username": "${NOTIFICATION_DB_USERNAME}",
       "SSLMode": "prefer"
     }
   }
