@@ -102,6 +102,10 @@ resilience4j:
 
 ticketcraft:
   gateway:
+    concurrency:
+      limits:
+        catalog-service-route: ${GATEWAY_CATALOG_MAX_CONCURRENT:64}
+        order-service-route: ${GATEWAY_ORDER_MAX_CONCURRENT:32}
     request-limits:
       max-body-size: ${GATEWAY_MAX_BODY_SIZE:64KB}
       body-read-timeout: ${GATEWAY_BODY_READ_TIMEOUT:5s}
