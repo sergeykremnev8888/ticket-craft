@@ -1,11 +1,13 @@
 package ru.ticketcraft.gateway.security;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
@@ -13,6 +15,8 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
+
+import reactor.core.publisher.Mono;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -39,7 +43,14 @@ public class GatewaySecurityConfig {
                             .pathMatchers(HttpMethod.POST, "/api/v1/orders").authenticated()
                             .pathMatchers(HttpMethod.GET, "/api/v1/orders/**").authenticated()
 
-                            .pathMatchers("/fallback/**").permitAll()
+                            .pathMatchers("/fallback/**")
+                            .access((authentication, context) ->
+                                    Mono.just(new AuthorizationDecision(
+                                            context.getExchange().getAttribute(
+                                                    ServerWebExchangeUtils
+                                                            .CIRCUITBREAKER_EXECUTION_EXCEPTION_ATTR
+                                            ) != null
+                                    )))
 
                             .pathMatchers(HttpMethod.GET,
                                     "/actuator/health",

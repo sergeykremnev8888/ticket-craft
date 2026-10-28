@@ -65,8 +65,7 @@ class RedisRateLimiterIntegrationTest {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.data.redis.host", REDIS::getHost);
-        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+        registry.add("spring.data.redis.url", () -> "redis://" + REDIS.getHost() + ":" + REDIS.getMappedPort(6379));
 
         registry.add("ticketcraft.gateway.order-uri", () -> "http://127.0.0.1:" + DOWNSTREAM.port());
 
