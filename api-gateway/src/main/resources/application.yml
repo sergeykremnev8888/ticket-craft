@@ -102,6 +102,9 @@ resilience4j:
 
 ticketcraft:
   gateway:
+    request-limits:
+      max-body-size: ${GATEWAY_MAX_BODY_SIZE:64KB}
+      body-read-timeout: ${GATEWAY_BODY_READ_TIMEOUT:5s}
     security:
       metrics-public: false
     catalog-uri: ${GATEWAY_CATALOG_URI:http://localhost:8081}
