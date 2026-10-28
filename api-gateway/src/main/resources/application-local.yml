@@ -15,3 +15,8 @@ resilience4j:
     instances:
       catalogDebugCircuitBreaker:
         timeoutDuration: 4s
+
+ticketcraft:
+  gateway:
+    security:
+      metrics-public: true

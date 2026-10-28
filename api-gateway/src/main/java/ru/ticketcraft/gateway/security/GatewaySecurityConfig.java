@@ -1,5 +1,6 @@
 package ru.ticketcraft.gateway.security;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.context.annotation.Bean;
@@ -23,11 +24,16 @@ import reactor.core.publisher.Mono;
 @EnableConfigurationProperties(GatewayCorsProperties.class)
 public class GatewaySecurityConfig {
 
+    private static final String METRICS_READ_AUTHORITY = "SCOPE_metrics.read";
+
     @Bean
     SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
                                                   Environment environment,
                                                   GatewayAuthenticationEntryPoint authenticationEntryPoint,
-                                                  GatewayAccessDeniedHandler accessDeniedHandler) {
+                                                  GatewayAccessDeniedHandler accessDeniedHandler,
+
+                                                  @Value("${ticketcraft.gateway.security.metrics-public:false}")
+                                                  boolean metricsPublic) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(Customizer.withDefaults())
@@ -52,11 +58,17 @@ public class GatewaySecurityConfig {
                                             ) != null
                                     )))
 
-                            .pathMatchers(HttpMethod.GET,
-                                    "/actuator/health",
-                                    "/actuator/prometheus").permitAll()
+                            .pathMatchers(HttpMethod.GET, "/actuator/health").permitAll();
 
-                            .anyExchange().denyAll();
+                       if (metricsPublic) {
+                           exchange.pathMatchers(HttpMethod.GET, "/actuator/prometheus")
+                                   .permitAll();
+                       } else {
+                           exchange.pathMatchers(HttpMethod.GET, "/actuator/prometheus")
+                                   .hasAuthority(METRICS_READ_AUTHORITY);
+                       }
+
+                            exchange.anyExchange().denyAll();
                 })
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)

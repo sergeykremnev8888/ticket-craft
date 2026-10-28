@@ -102,6 +102,8 @@ resilience4j:
 
 ticketcraft:
   gateway:
+    security:
+      metrics-public: false
     catalog-uri: ${GATEWAY_CATALOG_URI:http://localhost:8081}
     order-uri: ${GATEWAY_ORDER_URI:http://localhost:8082}
     rate-limiter:

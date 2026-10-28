@@ -13,6 +13,8 @@ spring:
 
 ticketcraft:
   gateway:
+    security:
+      metrics-public: true
     catalog-uri: ${GATEWAY_CATALOG_URI:http://catalog-service:8081}
     order-uri: ${GATEWAY_ORDER_URI:http://order-service:8082}
 

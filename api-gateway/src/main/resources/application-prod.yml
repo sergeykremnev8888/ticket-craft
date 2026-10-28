@@ -13,6 +13,8 @@ spring:
 
 ticketcraft:
   gateway:
+    security:
+      metrics-public: false
     catalog-uri: ${GATEWAY_CATALOG_URI}
     order-uri: ${GATEWAY_ORDER_URI}
     cors:
