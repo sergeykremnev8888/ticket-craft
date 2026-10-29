@@ -12,7 +12,7 @@ Order Service управляет процессом покупки. Взаимо
 
 ```mermaid
 flowchart TD
-    Client["Postman / HTTP-клиент"] -->|REST| Gateway["API Gateway"]
+    Client["Клиент"] -->|REST| Gateway["API Gateway"]
     Client -->|Авторизация| Keycloak["Keycloak"]
     Gateway -. Проверка JWT .-> Keycloak
     Gateway -->|REST| Catalog["Catalog Service"]
@@ -62,14 +62,15 @@ flowchart TD
 
 ### Стек технологий
 
-- **Java 21**, **Spring Boot 4.1.1**, Maven Wrapper.
+- Java 21.
+- Spring Boot 4.1.1.
 - Spring MVC, Spring Cloud Gateway / WebFlux.
 - Spring Security, OAuth2 / OpenID Connect, JWT, Keycloak.
 - PostgreSQL 16, Spring Data JPA / JDBC, Flyway.
 - Apache Kafka, Spring Kafka, Kafka Connect, Debezium.
 - Redis, Resilience4j.
-- Spring Boot Actuator, Micrometer, OpenTelemetry, Prometheus, Grafana, Jaeger.
-- JUnit, Mockito, Testcontainers, Embedded Kafka.
+- Micrometer, OpenTelemetry, Prometheus, Grafana, Jaeger.
+- JUnit, Mockito, Testcontainers.
 - Docker и Docker Compose.
 
 ## Системные требования
@@ -292,9 +293,6 @@ curl.exe -i http://localhost:8080/api/v1/catalog/events/11111111-1111-1111-1111-
 
 Учётные данные Grafana и pgAdmin задаются в `.env`.
 Администратор Keycloak для локального окружения — `admin` / `admin`.
-
-Swagger UI / OpenAPI в текущей версии не подключены.
-Основные запросы приведены выше, подробности — в README сервисов.
 
 Порты PostgreSQL на компьютере:
 каталог — `5432`, заказы — `5433`, уведомления — `5434`, платежи — `5435`.
