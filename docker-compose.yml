@@ -40,6 +40,8 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-ticketcraft-api}
       GATEWAY_CATALOG_URI: ${GATEWAY_CATALOG_URI:-http://catalog-service:8081}
       GATEWAY_ORDER_URI: ${GATEWAY_ORDER_URI:-http://order-service:8082}
+      GATEWAY_HTTP_POOL_MAX_CONNECTIONS: ${GATEWAY_HTTP_POOL_MAX_CONNECTIONS:-64}
+      GATEWAY_HTTP_POOL_ACQUIRE_TIMEOUT_MS: ${GATEWAY_HTTP_POOL_ACQUIRE_TIMEOUT_MS:-500}
     ports:
       - "8080:8080"
     stop_grace_period: 45s

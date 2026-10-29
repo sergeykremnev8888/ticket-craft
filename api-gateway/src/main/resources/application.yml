@@ -16,6 +16,15 @@ spring:
           httpclient:
             connect-timeout: 2000
             response-timeout: 5s
+            pool:
+              type: fixed
+              name: gateway
+              max-connections: ${GATEWAY_HTTP_POOL_MAX_CONNECTIONS:64}
+              acquire-timeout: ${GATEWAY_HTTP_POOL_ACQUIRE_TIMEOUT_MS:500}
+              max-idle-time: 30s
+              max-life-time: 5m
+              eviction-interval: 10s
+              metrics: true
 
           routes:
             - id: order-service-route
