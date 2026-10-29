@@ -42,6 +42,10 @@ services:
       GATEWAY_ORDER_URI: ${GATEWAY_ORDER_URI:-http://order-service:8082}
     ports:
       - "8080:8080"
+    stop_grace_period: 45s
+    healthcheck:
+      <<: *java-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8080/actuator/health/readiness"]
     depends_on:
       redis:
         condition: service_healthy

@@ -1,7 +1,11 @@
 server:
   port: 8080
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
   application:
     name: api-gateway
 
@@ -142,9 +146,18 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
+
   endpoint:
     health:
-      show-details: when-authorized
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState
+
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}

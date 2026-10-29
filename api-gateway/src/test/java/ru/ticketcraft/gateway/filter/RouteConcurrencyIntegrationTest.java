@@ -23,6 +23,7 @@ import org.springframework.cloud.gateway.filter.ratelimit.RateLimiter.Response;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -41,6 +42,7 @@ import ru.ticketcraft.gateway.ratelimiter.ResilientRateLimiter;
                     "ticketcraft.gateway.request-limits.max-body-size=8B",
                     "resilience4j.timelimiter.instances.catalogCircuitBreaker.timeoutDuration=30s"
                 })
+@ActiveProfiles("test")
 @AutoConfigureWebTestClient
 class RouteConcurrencyIntegrationTest {
 

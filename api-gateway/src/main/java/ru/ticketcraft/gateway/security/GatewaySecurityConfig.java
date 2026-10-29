@@ -58,7 +58,11 @@ public class GatewaySecurityConfig {
                                             ) != null
                                     )))
 
-                            .pathMatchers(HttpMethod.GET, "/actuator/health").permitAll();
+                            .pathMatchers(HttpMethod.GET,
+                                          "/actuator/health",
+                                          "/actuator/health/liveness",
+                                          "/actuator/health/readiness")
+                            .permitAll();
 
                        if (metricsPublic) {
                            exchange.pathMatchers(HttpMethod.GET, "/actuator/prometheus")
