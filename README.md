@@ -394,8 +394,9 @@ docker compose -f docker-compose.infra.yml up -d --build
 Для первой проверки полного сценария используйте основной запуск через
 `docker compose up -d --build`.
 
-## Документация модулей
+## Документация
 
+- [Функциональные и нефункциональные требования](docs/specification.md)
 - [API Gateway](api-gateway/README.md)
 - [Catalog Service](catalog-service/README.md)
 - [Order Service](order-service/README.md)
