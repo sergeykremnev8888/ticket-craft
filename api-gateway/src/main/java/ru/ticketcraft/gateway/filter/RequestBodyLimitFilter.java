@@ -5,6 +5,8 @@ import java.util.concurrent.TimeoutException;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.route.Route;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferLimitException;
@@ -16,6 +18,7 @@ import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Signal;
@@ -35,10 +38,14 @@ public class RequestBodyLimitFilter implements GlobalFilter {
 
     private final GatewayRequestLimitsProperties properties;
     private final GatewayProblemWriter problemWriter;
+    private final MeterRegistry meterRegistry;
 
-    public RequestBodyLimitFilter(GatewayRequestLimitsProperties properties, GatewayProblemWriter problemWriter) {
+    public RequestBodyLimitFilter(GatewayRequestLimitsProperties properties,
+                                  GatewayProblemWriter problemWriter,
+                                  MeterRegistry meterRegistry) {
         this.properties = properties;
         this.problemWriter = problemWriter;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -102,10 +109,11 @@ public class RequestBodyLimitFilter implements GlobalFilter {
         }
 
         if (error instanceof TimeoutException) {
-            return problemWriter.write(exchange,
-                                       HttpStatus.REQUEST_TIMEOUT,
-                                       "REQUEST_BODY_TIMEOUT",
-                                       "Request body was not received in time.");
+            return rejectBody(exchange,
+                              HttpStatus.REQUEST_TIMEOUT,
+                              "REQUEST_BODY_TIMEOUT",
+                              "Request body was not received in time.",
+                              "timeout");
         }
 
         return Mono.error(error);
@@ -122,10 +130,26 @@ public class RequestBodyLimitFilter implements GlobalFilter {
     }
 
     private Mono<Void> rejectTooLarge(ServerWebExchange exchange) {
-        return problemWriter.write(exchange,
-                                   HttpStatus.valueOf(413),
-                                   "REQUEST_BODY_TOO_LARGE",
-                                   "Request body exceeds the configured size limit.");
+        return rejectBody(exchange,
+                          HttpStatus.CONTENT_TOO_LARGE,
+                          "REQUEST_BODY_TOO_LARGE",
+                          "Request body exceeds the configured size limit.",
+                          "too_large");
     }
 
+    private Mono<Void> rejectBody(ServerWebExchange exchange,
+                                  HttpStatus status,
+                                  String code,
+                                  String detail,
+                                  String reason) {
+        return Mono.defer(() -> {
+            Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+            String routeId = route == null ? "unmatched" : route.getId();
+
+            meterRegistry.counter("ticketcraft.gateway.request.body.rejected", "route", routeId, "reason", reason)
+                         .increment();
+
+            return problemWriter.write(exchange, status, code, detail);
+        });
+    }
 }

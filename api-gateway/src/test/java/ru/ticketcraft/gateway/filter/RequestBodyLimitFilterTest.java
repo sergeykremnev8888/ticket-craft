@@ -23,6 +23,7 @@ import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.util.unit.DataSize;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -33,16 +34,18 @@ class RequestBodyLimitFilterTest {
 
     private GatewayProblemWriter writer;
     private RequestBodyLimitFilter filter;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
         writer = mock(GatewayProblemWriter.class);
-
         when(writer.write(any(), any(), anyString(), anyString())).thenReturn(Mono.empty());
+
+        meterRegistry = new SimpleMeterRegistry();
 
         GatewayRequestLimitsProperties properties = new GatewayRequestLimitsProperties(DataSize.ofBytes(8),
                 Duration.ofSeconds(2));
-        filter = new RequestBodyLimitFilter(properties, writer);
+        filter = new RequestBodyLimitFilter(properties, writer, meterRegistry);
     }
 
     @Test
@@ -122,19 +125,32 @@ class RequestBodyLimitFilterTest {
                     .verifyComplete();
 
         verify(writer).write(eq(exchange), eq(HttpStatus.REQUEST_TIMEOUT), eq("REQUEST_BODY_TIMEOUT"), anyString());
-    }
 
+        assertBodyRejection("timeout");
+    }
     @Test
     void shouldNotConvertDownstreamTimeoutIntoBodyTimeout() {
-        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/api/v1/orders")
-                                                                                         .body("{}"));
+        MockServerWebExchange exchange = 
+                MockServerWebExchange.from(MockServerHttpRequest.post("/api/v1/orders").body("{}"));
 
         StepVerifier.create(filter.filter(exchange, ignored -> Mono.error(new TimeoutException())))
                     .expectError(TimeoutException.class)
                     .verify();
+
+        assertEquals(0, meterRegistry.find("ticketcraft.gateway.request.body.rejected").counters().size());
     }
 
     private DataBuffer buffer(String value) {
         return DefaultDataBufferFactory.sharedInstance.wrap(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void assertBodyRejection(String reason) {
+        assertEquals(1.0,
+                     meterRegistry.get("ticketcraft.gateway.request.body.rejected")
+                                  .tag("route", "unmatched")
+                                  .tag("reason", reason)
+                                  .counter()
+                                  .count(),
+                     0.0);
     }
 }

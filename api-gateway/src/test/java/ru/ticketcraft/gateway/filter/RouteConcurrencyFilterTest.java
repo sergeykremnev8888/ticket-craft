@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import ru.ticketcraft.gateway.config.GatewayConcurrencyProperties;
@@ -28,16 +29,18 @@ class RouteConcurrencyFilterTest {
 
     private GatewayProblemWriter writer;
     private RouteConcurrencyFilter filter;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
         writer = mock(GatewayProblemWriter.class);
-
         when(writer.write(any(), any(), anyString(), anyString())).thenReturn(Mono.empty());
+
+        meterRegistry = new SimpleMeterRegistry();
 
         GatewayConcurrencyProperties properties = 
                 new GatewayConcurrencyProperties(Map.of("catalog", 1, "order", 1));
-        filter = new RouteConcurrencyFilter(properties, writer);
+        filter = new RouteConcurrencyFilter(properties, writer, meterRegistry);
     }
 
     @Test
@@ -48,6 +51,8 @@ class RouteConcurrencyFilterTest {
         Mono<Void> pending = filter.filter(exchange("catalog"), ignored -> Mono.never());
 
         StepVerifier.create(pending).then(() -> {
+            assertEquals(1.0, activeRequests("catalog"), 0.0);
+
             StepVerifier.create(filter.filter(rejected, ignored -> {
                 downstreamCalls.incrementAndGet();
                 return Mono.empty();
@@ -61,10 +66,25 @@ class RouteConcurrencyFilterTest {
                                  anyString());
 
             assertEquals("1", rejected.getResponse().getHeaders().getFirst("Retry-After"));
+
+            assertEquals(1.0,
+                         meterRegistry.get("ticketcraft.gateway.concurrency.rejected")
+                                      .tag("route", "catalog")
+                                      .counter()
+                                      .count(),
+                         0.0);
+
+            // Отклонённый запрос не занимает разрешение.
+            assertEquals(1.0, activeRequests("catalog"), 0.0);
         }).thenCancel().verify();
 
-        // После отмены первого запроса разрешение снова доступно.
+        // Отмена первого запроса освобождает разрешение.
+        assertEquals(0.0, activeRequests("catalog"), 0.0);
+
+        // Следующий запрос снова проходит.
         assertRequestAllowed("catalog");
+
+        assertEquals(0.0, activeRequests("catalog"), 0.0);
     }
 
     @Test
@@ -130,5 +150,12 @@ class RouteConcurrencyFilterTest {
         exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR, route);
 
         return exchange;
+    }
+
+    private double activeRequests(String routeId) {
+        return meterRegistry.get("ticketcraft.gateway.concurrency.active")
+                            .tag("route", routeId)
+                            .gauge()
+                            .value();
     }
 }

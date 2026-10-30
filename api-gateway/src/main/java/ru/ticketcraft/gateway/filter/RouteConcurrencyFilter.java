@@ -14,6 +14,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import reactor.core.publisher.Mono;
 import ru.ticketcraft.gateway.config.GatewayConcurrencyProperties;
 import ru.ticketcraft.gateway.exception.GatewayProblemWriter;
@@ -28,15 +31,34 @@ import ru.ticketcraft.gateway.exception.GatewayProblemWriter;
 public class RouteConcurrencyFilter implements GlobalFilter {
 
     private final Map<String, Semaphore> semaphores;
+    private final Map<String, Counter> rejectionCounters;
     private final GatewayProblemWriter problemWriter;
 
-    public RouteConcurrencyFilter(GatewayConcurrencyProperties properties, GatewayProblemWriter problemWriter) {
-        this.semaphores = properties.limits()
-                                    .entrySet()
-                                    .stream()
-                                    .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
-                                                                          entry -> new Semaphore(entry.getValue())));
+    public RouteConcurrencyFilter(GatewayConcurrencyProperties properties,
+                                  GatewayProblemWriter problemWriter,
+                                  MeterRegistry meterRegistry) {
         this.problemWriter = problemWriter;
+
+        this.semaphores = 
+                properties.limits().entrySet().stream()
+                          .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
+                                                                entry -> new Semaphore(entry.getValue())));
+
+        this.rejectionCounters = 
+                properties.limits().keySet().stream()
+                          .collect(Collectors.toUnmodifiableMap(routeId -> routeId,
+                                                                routeId -> Counter.builder("ticketcraft.gateway.concurrency.rejected")
+                                                                                  .description("Requests rejected by route concurrency limit")
+                                                                                  .tag("route", routeId)
+                                                                                  .register(meterRegistry)));
+
+        properties.limits()
+                  .forEach((routeId, limit) -> Gauge.builder("ticketcraft.gateway.concurrency.active",
+                                                             semaphores.get(routeId),
+                                                             semaphore -> limit - semaphore.availablePermits())
+                                                    .description("Requests holding a route concurrency permit")
+                                                    .tag("route", routeId)
+                                                    .register(meterRegistry));
     }
 
     @Override
@@ -51,6 +73,7 @@ public class RouteConcurrencyFilter implements GlobalFilter {
         return Mono.using(semaphore::tryAcquire, 
                           acquired -> {
                               if (!acquired) {
+                                  rejectionCounters.get(route.getId()).increment();
                                   return rejectOverloaded(exchange);
                               }
                               return chain.filter(exchange);
