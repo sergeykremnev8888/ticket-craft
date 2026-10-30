@@ -1,16 +1,21 @@
 package ru.ticketcraft.gateway.security;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
@@ -36,10 +41,12 @@ import reactor.core.publisher.Mono;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+                properties = "ticketcraft.gateway.security.metrics-public=false")
 @ActiveProfiles("test")
 @AutoConfigureWebTestClient
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Execution(ExecutionMode.SAME_THREAD)
 class GatewayJwtValidationIntegrationTest {
 
     private static final String METRICS_PATH = "/actuator/prometheus";
@@ -56,18 +63,23 @@ class GatewayJwtValidationIntegrationTest {
             new JWKSet(PRIMARY_KEY.toPublicJWK()).toString());
 
     private static final AtomicInteger JWK_REQUESTS = new AtomicInteger();
+    private static final AtomicBoolean JWK_AVAILABLE = new AtomicBoolean(true);
 
-    private static final DisposableServer JWK_SERVER = 
+    private static final DisposableServer JWK_SERVER =
             HttpServer.create()
                       .host("127.0.0.1")
                       .port(0)
-                      .route(routes -> routes.get("/jwks", 
-                                                  (request, response) -> {
-                                                      JWK_REQUESTS.incrementAndGet();
-                                                      return response.status(200)
-                                                                     .header(HttpHeaders.CONTENT_TYPE, "application/json")
-                                                                     .sendString(Mono.just(PUBLISHED_JWKS.get()));
-                                                  }))
+                      .route(routes -> routes.get("/jwks", (request, response) -> {
+                          JWK_REQUESTS.incrementAndGet();
+
+                          if (!JWK_AVAILABLE.get()) {
+                              return response.status(503).sendString(Mono.just("JWK endpoint unavailable"));
+                          }
+
+                          return response.status(200)
+                                         .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                                         .sendString(Mono.just(PUBLISHED_JWKS.get()));
+                      }))
                       .bindNow();
 
     @Autowired
@@ -151,6 +163,72 @@ class GatewayJwtValidationIntegrationTest {
 
         // Старый ключ пока опубликован — его токены тоже принимаются.
         assertAccepted(validToken(PRIMARY_KEY));
+    }
+
+    @Test
+    void shouldAcceptTokenWithCachedKeyWhenJwkEndpointIsUnavailable() throws JOSEException {
+        // Загружаем публичный ключ в настоящий decoder.
+        assertAccepted(validToken(PRIMARY_KEY));
+
+        int requestsBefore = JWK_REQUESTS.get();
+
+        JWK_AVAILABLE.set(false);
+        try {
+            // Создаём новый токен, подписанный тем же ключом.
+            // Проверяется кеш ключей, а не повторное использование одного JWT.
+            assertAccepted(validToken(PRIMARY_KEY));
+
+            assertEquals(requestsBefore,
+                         JWK_REQUESTS.get(),
+                         "Decoder must not request to JWK endpoint for known key");
+        } finally {
+            JWK_AVAILABLE.set(true);
+        }
+    }
+
+    @Test
+    void shouldRejectUnknownKeyDuringJwkOutageAndRecoverAfterRestoration() throws JOSEException {
+        assertAccepted(validToken(PRIMARY_KEY));
+
+        RSAKey newKey = generateKey("outage-" + UUID.randomUUID());
+        String token = validToken(newKey);
+
+        int requestsBefore = JWK_REQUESTS.get();
+
+        JWK_AVAILABLE.set(false);
+        try {
+            client.mutate()
+                  .responseTimeout(Duration.ofSeconds(5))
+                  .build()
+                  .get()
+                  .uri(METRICS_PATH)
+                  .headers(headers -> headers.setBearerAuth(token))
+                  .header("X-Correlation-ID", CORRELATION_ID)
+                  .exchange()
+                  .expectStatus()
+                  .is5xxServerError()
+                  .expectHeader()
+                  .valueEquals("X-Correlation-ID", CORRELATION_ID)
+                  .expectBody();
+
+            assertTrue(JWK_REQUESTS.get() > requestsBefore, "Unknown kid must request a set of public keys");
+
+            // Ошибка обновления не должна лишать нас уже загруженного ключа.
+            assertAccepted(validToken(PRIMARY_KEY));
+        } finally {
+            // Публикуем новый ключ до восстановления доступности.
+            PUBLISHED_JWKS.set(new JWKSet(List.of(PRIMARY_KEY.toPublicJWK(), newKey.toPublicJWK())).toString());
+
+            JWK_AVAILABLE.set(true);
+        }
+
+        int requestsBeforeRecovery = JWK_REQUESTS.get();
+
+        // Тот же токен теперь должен пройти без перезапуска Gateway.
+        assertAccepted(token);
+
+        assertTrue(JWK_REQUESTS.get() > requestsBeforeRecovery,
+                   "When decoder is recovered then it must get keys");
     }
 
     private void assertAccepted(String token) {
