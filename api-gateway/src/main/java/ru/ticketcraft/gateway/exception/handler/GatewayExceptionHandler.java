@@ -15,6 +15,7 @@ import io.netty.channel.ConnectTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutException;
 import reactor.core.publisher.Mono;
 import ru.ticketcraft.gateway.exception.GatewayProblemWriter;
+import ru.ticketcraft.gateway.exception.JwkEndpointUnavailableException;
 
 @Component
 @Order(-2)
@@ -30,6 +31,15 @@ public class GatewayExceptionHandler implements WebExceptionHandler {
     public Mono<Void> handle(ServerWebExchange exchange, Throwable exception) {
         if (exchange.getResponse().isCommitted()) {
             return Mono.error(exception);
+        }
+
+        if (isJwkEndpointUnavailable(exception)) {
+            exchange.getResponse().getHeaders().set("Retry-After", "1");
+
+            return problemWriter.write(exchange,
+                                       HttpStatus.SERVICE_UNAVAILABLE,
+                                       "JWT_KEYS_UNAVAILABLE",
+                                       "JWT verification keys are temporarily unavailable.");
         }
 
         if (isTimeout(exception)) {
@@ -58,6 +68,19 @@ public class GatewayExceptionHandler implements WebExceptionHandler {
         }
 
         return Mono.error(exception);
+    }
+
+    private boolean isJwkEndpointUnavailable(Throwable exception) {
+        Throwable current = exception;
+
+        for (int depth = 0; current != null && depth < 16; depth++) {
+            if (current instanceof JwkEndpointUnavailableException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+
+        return false;
     }
 
     private boolean isTimeout(Throwable exception) {

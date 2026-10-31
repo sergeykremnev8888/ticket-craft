@@ -145,6 +145,8 @@ ticketcraft:
         - X-Correlation-ID
         - Location
       max-age: 1h
+    jwk:
+      request-timeout: ${GATEWAY_JWK_REQUEST_TIMEOUT:2s}
 
 management:
   otlp:

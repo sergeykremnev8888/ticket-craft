@@ -42,7 +42,10 @@ import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-                properties = "ticketcraft.gateway.security.metrics-public=false")
+                properties = {
+                    "ticketcraft.gateway.security.metrics-public=false",
+                    "ticketcraft.gateway.jwk.request-timeout=500ms"
+                })
 @ActiveProfiles("test")
 @AutoConfigureWebTestClient
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
@@ -64,6 +67,7 @@ class GatewayJwtValidationIntegrationTest {
 
     private static final AtomicInteger JWK_REQUESTS = new AtomicInteger();
     private static final AtomicBoolean JWK_AVAILABLE = new AtomicBoolean(true);
+    private static final AtomicReference<Duration> JWK_RESPONSE_DELAY = new AtomicReference<>(Duration.ZERO);
 
     private static final DisposableServer JWK_SERVER =
             HttpServer.create()
@@ -72,13 +76,15 @@ class GatewayJwtValidationIntegrationTest {
                       .route(routes -> routes.get("/jwks", (request, response) -> {
                           JWK_REQUESTS.incrementAndGet();
 
-                          if (!JWK_AVAILABLE.get()) {
-                              return response.status(503).sendString(Mono.just("JWK endpoint unavailable"));
-                          }
-
-                          return response.status(200)
-                                         .header(HttpHeaders.CONTENT_TYPE, "application/json")
-                                         .sendString(Mono.just(PUBLISHED_JWKS.get()));
+                          return Mono.delay(JWK_RESPONSE_DELAY.get()).then(Mono.defer(() -> {
+                              if (!JWK_AVAILABLE.get()) {
+                                  return response.status(503).sendString(Mono.just("JWK endpoint unavailable")).then();
+                              }
+                              return response.status(200)
+                                             .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                                             .sendString(Mono.just(PUBLISHED_JWKS.get()))
+                                             .then();
+                          }));
                       }))
                       .bindNow();
 
@@ -197,19 +203,7 @@ class GatewayJwtValidationIntegrationTest {
 
         JWK_AVAILABLE.set(false);
         try {
-            client.mutate()
-                  .responseTimeout(Duration.ofSeconds(5))
-                  .build()
-                  .get()
-                  .uri(METRICS_PATH)
-                  .headers(headers -> headers.setBearerAuth(token))
-                  .header("X-Correlation-ID", CORRELATION_ID)
-                  .exchange()
-                  .expectStatus()
-                  .is5xxServerError()
-                  .expectHeader()
-                  .valueEquals("X-Correlation-ID", CORRELATION_ID)
-                  .expectBody();
+            assertJwkUnavailable(token);
 
             assertTrue(JWK_REQUESTS.get() > requestsBefore, "Unknown kid must request a set of public keys");
 
@@ -229,6 +223,40 @@ class GatewayJwtValidationIntegrationTest {
 
         assertTrue(JWK_REQUESTS.get() > requestsBeforeRecovery,
                    "When decoder is recovered then it must get keys");
+    }
+
+    @Test
+    void shouldTimeoutJwkRequestAndRecoverWithoutRestart() throws JOSEException {
+        assertAccepted(validToken(PRIMARY_KEY));
+
+        RSAKey newKey = generateKey("slow-jwk-" + UUID.randomUUID());
+        String token = validToken(newKey);
+
+        PUBLISHED_JWKS.set(new JWKSet(List.of(PRIMARY_KEY.toPublicJWK(), newKey.toPublicJWK())).toString());
+
+        int requestsBefore = JWK_REQUESTS.get();
+
+        JWK_RESPONSE_DELAY.set(Duration.ofSeconds(10));
+        try {
+            long startedAt = System.nanoTime();
+
+            assertJwkUnavailable(token);
+
+            Duration elapsed = Duration.ofNanos(System.nanoTime() - startedAt);
+
+            assertTrue(elapsed.compareTo(Duration.ofSeconds(4)) < 0,
+                       "Gateway должен завершить ожидание раньше ответа JWK endpoint");
+
+            assertTrue(JWK_REQUESTS.get() > requestsBefore, "Decoder должен попытаться получить неизвестный ключ");
+
+            // Загруженный ранее ключ продолжает работать.
+            assertAccepted(validToken(PRIMARY_KEY));
+        } finally {
+            JWK_RESPONSE_DELAY.set(Duration.ZERO);
+        }
+
+        // Повторяем тот же токен после восстановления скорости endpoint.
+        assertAccepted(token);
     }
 
     private void assertAccepted(String token) {
@@ -304,5 +332,20 @@ class GatewayJwtValidationIntegrationTest {
 
     private static String issuer() {
         return "http://127.0.0.1:" + JWK_SERVER.port() + "/realms/test";
+    }
+
+    private void assertJwkUnavailable(String token) {
+        client.mutate().responseTimeout(Duration.ofSeconds(5)).build()
+              .get().uri(METRICS_PATH)
+              .headers(headers -> headers.setBearerAuth(token))
+              .header("X-Correlation-ID", CORRELATION_ID)
+              .exchange()
+              .expectStatus().isEqualTo(503)
+              .expectHeader().valueEquals("Retry-After", "1")
+              .expectHeader().valueEquals("X-Correlation-ID", CORRELATION_ID)
+              .expectBody().jsonPath("$.status").isEqualTo(503)
+                           .jsonPath("$.code").isEqualTo("JWT_KEYS_UNAVAILABLE")
+                           .jsonPath("$.instance").isEqualTo(METRICS_PATH)
+                           .jsonPath("$.correlationId").isEqualTo(CORRELATION_ID);
     }
 }
